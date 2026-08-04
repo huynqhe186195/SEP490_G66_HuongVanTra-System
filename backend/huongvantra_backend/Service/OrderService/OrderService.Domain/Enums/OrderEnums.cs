@@ -7,7 +7,24 @@ public enum OrderStatus
     Processing,
     Shipping,
     Completed,
-    Cancelled
+    Cancelled,
+    WaitingMaterials,
+    CancellationRequested
+}
+
+public enum FulfillmentPreference
+{
+    PartialDelivery,
+    CompleteDelivery
+}
+
+public enum BackorderRefundStatus
+{
+    NotRequired,
+    PendingApproval,
+    Approved,
+    Completed,
+    Rejected
 }
 
 public enum OrderChannel
@@ -49,7 +66,8 @@ public enum PaymentStatus
     Pending,
     Success,
     Failed,
-    Deferred
+    Deferred,
+    Refunded
 }
 
 public enum PosCashSessionStatus

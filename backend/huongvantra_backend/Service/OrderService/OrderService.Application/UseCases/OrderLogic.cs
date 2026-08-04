@@ -29,9 +29,11 @@ public class OrderLogic(
     IEmailService _emailService,
     PosCashSessionLogic _posCashSessionLogic,
     StaffShiftGuard _shiftGuard,
-    IOptions<SepayOptions> sepayOptions)
+    IOptions<SepayOptions> sepayOptions,
+    IOptions<BackorderOptions>? backorderOptions = null)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
+    private readonly BackorderOptions _backorder = backorderOptions?.Value ?? new BackorderOptions();
     private const int MaxActivities = 100;
 
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
@@ -565,6 +567,41 @@ public class OrderLogic(
 
         order.Payments = payments;
 
+        var (backorderMinLeadDays, backorderMaxLeadDays) = ResolveBackorderLeadTime(order);
+        InventoryStockHandlingResponse? stockPreview = null;
+        if (order.OrderChannel == OrderChannel.POS && (order.OrderDetails?.Count ?? 0) > 0)
+        {
+            order.FulfillmentPreference = req.FulfillmentPreference;
+            stockPreview = await PreparePosStockHandlingAsync(
+                order,
+                req.AcceptBackorder,
+                previewOnly: true,
+                backorderMinLeadDays,
+                backorderMaxLeadDays,
+                ct);
+            if (stockPreview.BackorderRequired)
+                throw new BackorderConfirmationRequiredException(stockPreview);
+
+            if (string.Equals(stockPreview.StockHandlingMode, "BackorderAccepted", StringComparison.OrdinalIgnoreCase))
+            {
+                var acceptedAt = DateTime.UtcNow;
+                order.BackorderAcceptedAt = acceptedAt;
+                order.BackorderMinLeadDaysSnapshot = backorderMinLeadDays;
+                order.BackorderMaxLeadDaysSnapshot = backorderMaxLeadDays;
+                order.EstimatedReadyFrom = acceptedAt.AddDays(backorderMinLeadDays);
+                order.EstimatedReadyTo = acceptedAt.AddDays(backorderMaxLeadDays);
+                order.FulfillmentPreference = req.FulfillmentPreference;
+                ApplyFulfillmentSnapshot(order, stockPreview, req.FulfillmentPreference);
+
+                if (isPosCompletedOnCreate)
+                    order.OrderStatus = OrderStatus.WaitingMaterials;
+            }
+            else
+            {
+                order.FulfillmentPreference = null;
+            }
+        }
+
         await _orderRepo.AddAsync(order, ct);
 
         if (effectiveIdempotencyKey is not null)
@@ -587,7 +624,21 @@ public class OrderLogic(
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
         {
-            stockHandling = await PreparePosStockHandlingAsync(order, ct);
+            stockHandling = await PreparePosStockHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: false,
+                order.BackorderMinLeadDaysSnapshot ?? backorderMinLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? backorderMaxLeadDays,
+                ct);
+            if (stockHandling.BackorderRequired)
+                throw new BackorderConfirmationRequiredException(stockHandling);
+            if (!stockHandling.HasPendingStockReconciliation)
+                order.OrderStatus = OrderStatus.Completed;
+            ApplyFulfillmentSnapshot(
+                order,
+                stockHandling,
+                order.FulfillmentPreference ?? FulfillmentPreference.PartialDelivery);
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
@@ -666,7 +717,7 @@ public class OrderLogic(
         {
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
-                order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
                 order.CustomerSnapshotName,
                 ct);
         }
@@ -943,7 +994,8 @@ public class OrderLogic(
         EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
-        if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
+        if (order.OrderStatus is OrderStatus.Completed or OrderStatus.Cancelled
+            or OrderStatus.WaitingMaterials or OrderStatus.CancellationRequested)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
         // POS-04 (H4): sửa sản phẩm của đơn COD đang giữ chỗ tồn Kệ (trước Shipping) phải
@@ -1137,8 +1189,17 @@ public class OrderLogic(
         if (!OrderAccessContext.IsContractOrder(order))
             await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
-        if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
+        if (order.OrderStatus is OrderStatus.Completed or OrderStatus.Cancelled
+            or OrderStatus.CancellationRequested)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        if (order.OrderStatus == OrderStatus.WaitingMaterials
+            && payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
+        {
+            throw new OrderValidationException(
+                "Đơn chờ nguyên liệu đã thu tiền. Hãy gửi yêu cầu hủy để Manager duyệt và hoàn tiền có bằng chứng.");
+        }
 
         // POS-04 (quyết định #10): giữ lại trạng thái trước khi hủy để Inventory biết
         // đơn đã Shipping hay chưa — hủy sau Shipping không được cộng lại tồn Kệ.
@@ -1148,7 +1209,6 @@ public class OrderLogic(
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
         order.UpdatedAt = DateTime.UtcNow;
 
-        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
         foreach (var payment in payments)
         {
             if (payment.PaymentStatus != PaymentStatus.Success)
@@ -1177,6 +1237,195 @@ public class OrderLogic(
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
+    }
+
+    public async Task<OrderResponse> RequestBackorderCancellationAsync(
+        Guid id,
+        OrderAccessContext access,
+        string? reason,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
+        if (order.OrderStatus == OrderStatus.CancellationRequested)
+            return MapToResponse(order);
+        if (order.OrderStatus != OrderStatus.WaitingMaterials)
+            throw new OrderValidationException("Chỉ đơn đang chờ nguyên liệu mới được gửi yêu cầu hủy backorder.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new OrderValidationException("Lý do yêu cầu hủy là bắt buộc.");
+        if (reason.Trim().Length > 500)
+            throw new OrderValidationException("Lý do yêu cầu hủy tối đa 500 ký tự.");
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var collectedAmount = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        if (collectedAmount <= 0)
+        {
+            await CancelAsync(id, access, reason, actorId, actorName, ct);
+            return MapToResponse(order);
+        }
+
+        var now = DateTime.UtcNow;
+        order.OrderStatus = OrderStatus.CancellationRequested;
+        order.RefundStatus = BackorderRefundStatus.PendingApproval;
+        order.RefundAmount = collectedAmount;
+        order.CancellationReason = reason.Trim();
+        order.CancellationRequestedAt = now;
+        order.CancellationRequestedBy = actorId;
+        order.CancellationRequestedByName = NormalizeActorName(actorName);
+        order.UpdatedAt = now;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Updated,
+            $"Đã gửi yêu cầu hủy đơn chờ nguyên liệu và hoàn {FormatVnd(collectedAmount)}. Lý do: {reason.Trim()}",
+            actorId,
+            actorName,
+            ct);
+        await _orderRepo.SaveChangesAsync(ct);
+        return MapToResponse(order);
+    }
+
+    public async Task<OrderResponse> ReviewBackorderCancellationAsync(
+        Guid id,
+        ReviewBackorderCancellationRequest request,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        if (!access.CanViewAllOrders)
+            throw new OrderForbiddenException();
+
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        if (request.Approved && order.RefundStatus == BackorderRefundStatus.Approved)
+            return MapToResponse(order);
+        if (!request.Approved && order.RefundStatus == BackorderRefundStatus.Rejected)
+            return MapToResponse(order);
+        if (order.OrderStatus != OrderStatus.CancellationRequested
+            || order.RefundStatus != BackorderRefundStatus.PendingApproval)
+        {
+            throw new OrderValidationException("Yêu cầu hủy không còn ở trạng thái chờ duyệt.");
+        }
+
+        var now = DateTime.UtcNow;
+        if (request.Approved)
+        {
+            order.RefundStatus = BackorderRefundStatus.Approved;
+            order.RefundApprovedAt = now;
+            order.RefundApprovedBy = actorId;
+            order.RefundApprovedByName = NormalizeActorName(actorName);
+        }
+        else
+        {
+            order.OrderStatus = OrderStatus.WaitingMaterials;
+            order.RefundStatus = BackorderRefundStatus.Rejected;
+        }
+        order.UpdatedAt = now;
+
+        var reviewNote = string.IsNullOrWhiteSpace(request.Note)
+            ? string.Empty
+            : $" Ghi chú: {request.Note.Trim()[..Math.Min(request.Note.Trim().Length, 300)]}";
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Updated,
+            request.Approved
+                ? $"Manager đã duyệt yêu cầu hủy và hoàn tiền.{reviewNote}"
+                : $"Manager đã từ chối yêu cầu hủy; đơn quay lại chờ nguyên liệu.{reviewNote}",
+            actorId,
+            actorName,
+            ct);
+        await _orderRepo.SaveChangesAsync(ct);
+        return MapToResponse(order);
+    }
+
+    public async Task<OrderResponse> CompleteBackorderRefundAsync(
+        Guid id,
+        CompleteBackorderRefundRequest request,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        if (!access.CanViewAllOrders)
+            throw new OrderForbiddenException();
+        if (string.IsNullOrWhiteSpace(request.RefundMethod))
+            throw new OrderValidationException("Phương thức hoàn tiền là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.RefundEvidence))
+            throw new OrderValidationException("Bằng chứng hoàn tiền là bắt buộc.");
+        if (request.RefundMethod.Trim().Length > 30)
+            throw new OrderValidationException("Phương thức hoàn tiền tối đa 30 ký tự.");
+        if (request.RefundEvidence.Trim().Length > 1000)
+            throw new OrderValidationException("Bằng chứng hoàn tiền tối đa 1000 ký tự.");
+
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        if (order.OrderStatus == OrderStatus.Cancelled
+            && order.RefundStatus == BackorderRefundStatus.Completed)
+            return MapToResponse(order);
+        if (order.OrderStatus != OrderStatus.CancellationRequested
+            || order.RefundStatus != BackorderRefundStatus.Approved)
+        {
+            throw new OrderValidationException("Yêu cầu hoàn tiền chưa được duyệt hoặc đã được xử lý.");
+        }
+
+        var hasDeliveredImmediateItems = order.FulfillmentPreference == FulfillmentPreference.PartialDelivery
+            && (order.OrderDetails ?? []).Any(detail => detail.ImmediateFulfilledQuantity > 0);
+        if (hasDeliveredImmediateItems && !request.ImmediateItemsReturned)
+        {
+            throw new OrderValidationException(
+                "Đơn đã giao một phần. Phải thu hồi và xác nhận đã nhận lại phần hàng giao ngay trước khi hoàn toàn bộ tiền.");
+        }
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var cashRefund = 0m;
+        foreach (var payment in payments.Where(payment => payment.PaymentStatus == PaymentStatus.Success))
+        {
+            if (payment.PaymentMethod == PaymentMethod.Cash)
+                cashRefund += payment.Amount;
+            payment.PaymentStatus = PaymentStatus.Refunded;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var now = DateTime.UtcNow;
+        order.OrderStatus = OrderStatus.Cancelled;
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.RefundStatus = BackorderRefundStatus.Completed;
+        order.RefundMethod = request.RefundMethod.Trim();
+        order.RefundEvidence = request.RefundEvidence.Trim();
+        order.RefundedAt = now;
+        order.RefundedBy = actorId;
+        order.RefundedByName = NormalizeActorName(actorName);
+        order.UpdatedAt = now;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Cancelled,
+            hasDeliveredImmediateItems
+                ? $"Đã xác nhận thu hồi phần hàng giao ngay, hoàn {FormatVnd(order.RefundAmount ?? 0)} qua {order.RefundMethod}; đã lưu bằng chứng và hủy đơn."
+                : $"Đã hoàn {FormatVnd(order.RefundAmount ?? 0)} qua {order.RefundMethod}; đã lưu bằng chứng và hủy đơn.",
+            actorId,
+            actorName,
+            ct);
+        await _eventPublisher.PublishOrderCancelledAsync(
+            order.Id,
+            order.OrderCode,
+            OrderStatus.WaitingMaterials.ToString(),
+            (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
+            ct);
+        await _orderRepo.SaveChangesAsync(ct);
+
+        if (cashRefund > 0)
+            await _posCashSessionLogic.RecordCashRefundAsync(cashRefund, ct);
+
+        return MapToResponse(order);
     }
 
     public async Task<OrderResponse> CancelPendingTransferAsync(
@@ -1332,7 +1581,8 @@ public class OrderLogic(
             await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
         }
 
-        if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
+        if (order.OrderStatus is OrderStatus.Cancelled or OrderStatus.Completed
+            or OrderStatus.WaitingMaterials or OrderStatus.CancellationRequested)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
@@ -1345,16 +1595,41 @@ public class OrderLogic(
                 "Đơn chuyển khoản chỉ được hoàn tất sau khi backend xác nhận giao dịch.");
         }
 
+        // Re-check stock before recording a delayed QR/bank-transfer confirmation. Stock can
+        // change after the QR was created; a non-consented backorder must not be committed as a
+        // successful payment/completed order and only fail later during the stock mutation.
+        if (hasPendingTransfer
+            && order.OrderChannel == OrderChannel.POS
+            && (order.OrderDetails?.Count ?? 0) > 0)
+        {
+            var (previewMinLeadDays, previewMaxLeadDays) = ResolveBackorderLeadTime(order);
+            var paymentStockPreview = await PreparePosStockHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: true,
+                order.BackorderMinLeadDaysSnapshot ?? previewMinLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? previewMaxLeadDays,
+                ct);
+            if (paymentStockPreview.BackorderRequired)
+            {
+                throw new OrderValidationException(
+                    "Tồn kho đã thay đổi sau khi tạo mã QR. Thanh toán chưa được ghi nhận; cần khách xác nhận chờ hàng trước khi xử lý lại.");
+            }
+        }
+
+        var completionTarget = order.BackorderAcceptedAt.HasValue
+            ? OrderStatus.WaitingMaterials
+            : OrderStatus.Completed;
         var claimed = await _orderRepo.TryTransitionStatusAsync(
             order.Id,
             order.OrderStatus,
-            OrderStatus.Completed,
+            completionTarget,
             ct);
         if (!claimed)
         {
             var current = await _orderRepo.GetByIdAsync(order.Id, ct)
                 ?? throw new OrderNotFoundException(order.Id);
-            if (current.OrderStatus == OrderStatus.Completed)
+            if (current.OrderStatus == completionTarget)
                 return;
             if (current.OrderStatus == OrderStatus.Cancelled)
                 throw new OrderValidationException(
@@ -1363,7 +1638,7 @@ public class OrderLogic(
                 "Trạng thái đơn vừa thay đổi; không thể hoàn tất giao dịch này.");
         }
 
-        order.OrderStatus = OrderStatus.Completed;
+        order.OrderStatus = completionTarget;
         order.UpdatedAt = DateTime.UtcNow;
 
         var newlySucceededCashAmount = 0m;
@@ -1409,8 +1684,12 @@ public class OrderLogic(
 
         await RecordActivityAsync(
             order.Id,
-            OrderActivityType.Completed,
-            "Hoàn tất đơn hàng.",
+            completionTarget == OrderStatus.Completed
+                ? OrderActivityType.Completed
+                : OrderActivityType.Updated,
+            completionTarget == OrderStatus.Completed
+                ? "Hoàn tất đơn hàng."
+                : "Đã xác nhận thanh toán; đơn chuyển sang chờ đủ nguyên liệu.",
             actorId,
             actorName,
             ct);
@@ -1422,7 +1701,23 @@ public class OrderLogic(
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
         {
-            stockHandling = await PreparePosStockHandlingAsync(order, ct);
+            var (minLeadDays, maxLeadDays) = ResolveBackorderLeadTime(order);
+            stockHandling = await PreparePosStockHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: false,
+                order.BackorderMinLeadDaysSnapshot ?? minLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? maxLeadDays,
+                ct);
+            if (stockHandling.BackorderRequired)
+                throw new OrderValidationException(
+                    "Tồn kho đã thay đổi sau khi tạo yêu cầu thanh toán và khách chưa xác nhận chờ hàng.");
+            if (!stockHandling.HasPendingStockReconciliation)
+                order.OrderStatus = OrderStatus.Completed;
+            ApplyFulfillmentSnapshot(
+                order,
+                stockHandling,
+                order.FulfillmentPreference ?? FulfillmentPreference.PartialDelivery);
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
@@ -1448,7 +1743,7 @@ public class OrderLogic(
 
         decimal completedDebt = 0;
         var shouldSendInvoice = false;
-        if (order.CustomerId.HasValue)
+        if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
         {
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
             completedDebt = Math.Max(0, order.FinalAmount - paidAmount);
@@ -1758,11 +2053,32 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
 
-        if (order.InventorySyncStatus == InventorySyncStatus.Synced)
+        if (order.InventorySyncStatus == InventorySyncStatus.Synced
+            && order.OrderStatus != OrderStatus.WaitingMaterials)
             return;
 
         order.InventorySyncStatus = InventorySyncStatus.Synced;
         order.UpdatedAt = DateTime.UtcNow;
+
+        var completedForPickup = false;
+        if (order.OrderStatus == OrderStatus.WaitingMaterials)
+        {
+            completedForPickup = string.IsNullOrWhiteSpace(order.ShippingAddress);
+            order.OrderStatus = completedForPickup
+                ? OrderStatus.Completed
+                : OrderStatus.Processing;
+
+            foreach (var detail in order.OrderDetails ?? [])
+            {
+                detail.BackorderQuantity = 0;
+                if (completedForPickup)
+                {
+                    detail.ImmediateFulfilledQuantity = detail.Quantity;
+                    detail.ReservedFinishedQuantity = 0;
+                }
+                detail.UpdatedAt = DateTime.UtcNow;
+            }
+        }
 
         await RecordActivityAsync(
             order.Id,
@@ -1772,7 +2088,42 @@ public class OrderLogic(
             actorName: "Hệ thống",
             ct);
 
+        if (completedForPickup)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.Completed,
+                "Đã đủ nguyên liệu và hoàn tất đơn nhận tại cửa hàng.",
+                actorId: null,
+                actorName: "Hệ thống",
+                ct);
+
+            if (order.CustomerId.HasValue)
+            {
+                var paidAmount = (order.Payments ?? [])
+                    .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+                    .Sum(payment => payment.Amount);
+                await EnqueueOrderCompletedAsync(
+                    order,
+                    Math.Max(0, order.FinalAmount - paidAmount),
+                    ct);
+            }
+        }
+        else if (order.OrderStatus == OrderStatus.Processing)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.Updated,
+                "Đã đủ nguyên liệu; đơn giao hàng chuyển sang đang xử lý.",
+                actorId: null,
+                actorName: "Hệ thống",
+                ct);
+        }
+
         await _orderRepo.SaveChangesAsync(ct);
+
+        if (completedForPickup && order.CustomerId.HasValue)
+            TrySendInvoiceEmail(order);
     }
 
     public async Task MarkInventoryDeductionCancelledAsync(
@@ -1837,6 +2188,9 @@ public class OrderLogic(
         decimal debtAmount,
         CancellationToken ct)
     {
+        if (!order.CustomerId.HasValue)
+            return Task.CompletedTask;
+
         var debtSettlementJson = (order.Payments ?? [])
             .Select(payment => payment.CodDebtSettlementJson)
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
@@ -1851,7 +2205,7 @@ public class OrderLogic(
 
     private static bool ShouldHandlePosStockSynchronously(Order order) =>
         order.OrderChannel == OrderChannel.POS
-        && order.OrderStatus == OrderStatus.Completed
+        && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials
         && (order.OrderDetails?.Count ?? 0) > 0;
 
     private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
@@ -1859,6 +2213,10 @@ public class OrderLogic(
 
     private async Task<InventoryStockHandlingResponse> PreparePosStockHandlingAsync(
         Order order,
+        bool acceptBackorder,
+        bool previewOnly,
+        int backorderMinLeadDays,
+        int backorderMaxLeadDays,
         CancellationToken ct)
     {
         try
@@ -1873,12 +2231,68 @@ public class OrderLogic(
                         d.SkuId,
                         d.SkuSnapshotName,
                         d.SkuSnapshotCode,
-                        d.Quantity)).ToList()),
+                        d.Quantity)).ToList(),
+                    acceptBackorder,
+                    previewOnly,
+                    backorderMinLeadDays,
+                    backorderMaxLeadDays,
+                    order.FulfillmentPreference?.ToString()),
                 ct);
         }
         catch (InventoryStockHandlingException ex)
         {
             throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    private (int MinLeadDays, int MaxLeadDays) ResolveBackorderLeadTime(Order order)
+    {
+        var windows = (order.OrderDetails ?? [])
+            .Select(detail => _backorder.Resolve(
+                detail.SkuId,
+                detail.SkuSnapshotCode,
+                detail.CategorySnapshotName))
+            .ToList();
+        if (windows.Count == 0)
+        {
+            var fallback = _backorder.Resolve(Guid.Empty, null, null);
+            return (fallback.MinLeadDays, fallback.MaxLeadDays);
+        }
+
+        return (
+            windows.Max(window => window.MinLeadDays),
+            windows.Max(window => window.MaxLeadDays));
+    }
+
+    private static void ApplyFulfillmentSnapshot(
+        Order order,
+        InventoryStockHandlingResponse stockHandling,
+        FulfillmentPreference preference)
+    {
+        var lines = stockHandling.Lines
+            .GroupBy(line => line.SkuId)
+            .ToDictionary(
+                group => group.Key,
+                group => new
+                {
+                    Finished = group.Sum(line => line.FinishedDeductedQuantity),
+                    Pending = group.Sum(line => line.PendingBomQuantity)
+                });
+
+        foreach (var detail in order.OrderDetails ?? [])
+        {
+            if (!lines.TryGetValue(detail.SkuId, out var allocation))
+                continue;
+
+            detail.BackorderQuantity = Math.Min(detail.Quantity, allocation.Pending);
+            var finished = Math.Min(detail.Quantity - detail.BackorderQuantity, allocation.Finished);
+            detail.ImmediateFulfilledQuantity = preference == FulfillmentPreference.PartialDelivery
+                ? finished
+                : 0;
+            detail.ReservedFinishedQuantity = preference == FulfillmentPreference.CompleteDelivery
+                ? finished
+                : 0;
+            detail.UpdatedAt = DateTime.UtcNow;
         }
     }
 
@@ -1924,7 +2338,8 @@ public class OrderLogic(
                 line.SkuName,
                 line.OrderedQuantity,
                 line.FinishedDeductedQuantity,
-                line.PendingBomQuantity)).ToList());
+                line.PendingBomQuantity,
+                line.WarehouseDeductedQuantity)).ToList());
     }
 
     private async Task<List<Payment>> GetPaymentsInternal(Guid orderId, CancellationToken ct)
@@ -2191,7 +2606,8 @@ public class OrderLogic(
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
-            d.Quantity, d.ReturnedQuantity, d.UnitPrice, d.SubTotal, d.IsGift)).ToList(),
+            d.Quantity, d.ReturnedQuantity, d.UnitPrice, d.SubTotal, d.IsGift,
+            d.ImmediateFulfilledQuantity, d.ReservedFinishedQuantity, d.BackorderQuantity)).ToList(),
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
@@ -2207,7 +2623,27 @@ public class OrderLogic(
         o.ContractCodeSnapshot,
         o.ContractDiscountPercentSnapshot,
         o.ContractPaymentTermDaysSnapshot,
-        o.DueDate
+        o.DueDate,
+        o.BackorderAcceptedAt,
+        o.BackorderMinLeadDaysSnapshot,
+        o.BackorderMaxLeadDaysSnapshot,
+        o.EstimatedReadyFrom,
+        o.EstimatedReadyTo,
+        o.FulfillmentPreference?.ToString(),
+        o.RefundStatus.ToString(),
+        o.RefundAmount,
+        o.RefundMethod,
+        o.RefundEvidence,
+        o.CancellationReason,
+        o.CancellationRequestedAt,
+        o.CancellationRequestedBy,
+        o.CancellationRequestedByName,
+        o.RefundApprovedAt,
+        o.RefundApprovedBy,
+        o.RefundApprovedByName,
+        o.RefundedAt,
+        o.RefundedBy,
+        o.RefundedByName
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)
@@ -2241,6 +2677,9 @@ public class OrderLogic(
         var formatted = value < 0 ? "-" + new string(chars.ToArray()) : new string(chars.ToArray());
         return formatted + " ₫";
     }
+
+    private static string? NormalizeActorName(string? actorName) =>
+        string.IsNullOrWhiteSpace(actorName) ? null : actorName.Trim();
 
     private static string GetChannelLabel(OrderChannel channel) => channel switch
     {

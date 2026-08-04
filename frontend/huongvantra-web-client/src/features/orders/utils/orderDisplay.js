@@ -53,6 +53,8 @@ export function getOrderStatusLabel(status) {
   const map = {
     Draft: 'Nháp',
     PendingPayment: 'Chờ thanh toán',
+    WaitingMaterials: 'Chờ nguyên liệu',
+    CancellationRequested: 'Chờ duyệt hủy/hoàn tiền',
     Processing: 'Đang xử lý',
     Shipping: 'Đang giao',
     Completed: 'Hoàn tất',
@@ -142,6 +144,7 @@ export function getPaymentStatusLabel(status) {
     Success: 'Thành công',
     Failed: 'Thất bại',
     Deferred: 'Ghi nợ theo hợp đồng',
+    Refunded: 'Đã hoàn tiền',
   }
   return map[key] || status || '—'
 }
@@ -203,6 +206,16 @@ export function resolveOrderPaymentDisplay(order) {
   const amountCaption =
     collectedAmount > 0 ? 'Đã thu' : isTransfer && paymentStatus === 'pending' ? 'Số tiền cần thu' : 'Số tiền'
   const displayAmount = collectedAmount > 0 ? collectedAmount : expectedAmount
+
+  if (normalizeOrderKey(order?.refundStatus) === 'Completed' || paymentStatus === 'refunded') {
+    return {
+      label: 'Đã hoàn tiền',
+      className: getPaymentStatusClass('Refunded'),
+      detail: order?.refundEvidence ? `Bằng chứng: ${order.refundEvidence}` : null,
+      amountCaption: 'Đã hoàn',
+      displayAmount: Number(order?.refundAmount || expectedAmount),
+    }
+  }
 
   if (orderStatus === 'Cancelled') {
     if (collectedAmount > 0) {
@@ -355,6 +368,12 @@ export function getOrderStatusClass(status) {
   if (key === 'pendingpayment' || key.includes('chothanhtoan')) {
     return 'text-amber-700 bg-amber-100 border border-amber-300'
   }
+  if (key === 'waitingmaterials') {
+    return 'text-violet-700 bg-violet-100 border border-violet-300'
+  }
+  if (key === 'cancellationrequested') {
+    return 'text-rose-700 bg-rose-100 border border-rose-300'
+  }
   return 'border border-slate-200 bg-slate-100 text-slate-600'
 }
 
@@ -363,6 +382,7 @@ export function getPaymentStatusClass(status) {
   if (key === 'Success') return 'bg-emerald-50 text-emerald-700'
   if (key === 'Failed') return 'bg-red-50 text-red-600'
   if (key === 'Deferred') return 'bg-indigo-50 text-indigo-700'
+  if (key === 'Refunded') return 'bg-violet-50 text-violet-700'
   return 'bg-amber-50 text-amber-700'
 }
 
@@ -403,7 +423,13 @@ export function getManualDiscountAmount(order) {
 }
 
 export function canEditOrderMeta(order) {
-  return Boolean(order && !isOrderTerminal(order))
+  const status = normalizeOrderKey(order?.orderStatus)
+  return Boolean(
+    order
+    && !isOrderTerminal(order)
+    && status !== 'WaitingMaterials'
+    && status !== 'CancellationRequested'
+  )
 }
 
 export function getOrderEditBlockedMessage(order) {
@@ -453,7 +479,8 @@ export function canShipOrder(order) {
 
 export function canCompleteOrder(order) {
   const status = normalizeOrderKey(order?.orderStatus)
-  if (status === 'Cancelled' || status === 'Completed') return false
+  if (status === 'Cancelled' || status === 'Completed'
+    || status === 'WaitingMaterials' || status === 'CancellationRequested') return false
   // Đơn hợp đồng bắt buộc qua bước kho xác nhận xuất hàng trước khi ghi nợ.
   if (isContractOrder(order) && status !== 'Shipping') return false
   if (isPendingTransferPayment(order)) return false

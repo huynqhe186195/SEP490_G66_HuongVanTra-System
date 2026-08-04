@@ -14,6 +14,9 @@ public class OrderDetail : BaseEntity
     public decimal UnitPrice { get; set; }
     public decimal SubTotal { get; set; }
     public bool IsGift { get; set; }
+    public int ImmediateFulfilledQuantity { get; set; }
+    public int ReservedFinishedQuantity { get; set; }
+    public int BackorderQuantity { get; set; }
 
     public Order Order { get; set; } = null!;
 }

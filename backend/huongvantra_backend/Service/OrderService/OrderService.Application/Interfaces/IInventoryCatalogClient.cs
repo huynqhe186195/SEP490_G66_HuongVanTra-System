@@ -40,7 +40,12 @@ public record InventoryStockHandlingRequest(
     string OrderCode,
     string OrderStatus,
     decimal TotalAmount,
-    List<InventoryStockHandlingItemRequest> Items);
+    List<InventoryStockHandlingItemRequest> Items,
+    bool AcceptBackorder = false,
+    bool PreviewOnly = false,
+    int BackorderMinLeadDays = 3,
+    int BackorderMaxLeadDays = 5,
+    string? FulfillmentPreference = null);
 
 public record InventoryStockHandlingLineResponse(
     Guid SkuId,
@@ -48,7 +53,8 @@ public record InventoryStockHandlingLineResponse(
     string SkuName,
     int OrderedQuantity,
     int FinishedDeductedQuantity,
-    int PendingBomQuantity);
+    int PendingBomQuantity,
+    int WarehouseDeductedQuantity = 0);
 
 public record InventoryStockHandlingResponse(
     Guid OrderId,
@@ -57,9 +63,25 @@ public record InventoryStockHandlingResponse(
     bool HasPendingStockReconciliation,
     string Message,
     List<Guid> QueueIds,
-    List<InventoryStockHandlingLineResponse> Lines);
+    List<InventoryStockHandlingLineResponse> Lines,
+    bool BackorderRequired = false,
+    string? BackorderMessage = null);
 
 public class InventoryStockHandlingException(string message) : Exception(message);
+public class BackorderConfirmationRequiredException : Exception
+{
+    public BackorderConfirmationRequiredException(string message) : base(message)
+    {
+    }
+
+    public BackorderConfirmationRequiredException(InventoryStockHandlingResponse response)
+        : base(response.BackorderMessage ?? response.Message)
+    {
+        Lines = response.Lines;
+    }
+
+    public IReadOnlyList<InventoryStockHandlingLineResponse> Lines { get; } = [];
+}
 
 public record InventoryReservationReplaceItemRequest(
     Guid SkuId,

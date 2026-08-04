@@ -143,7 +143,8 @@ public record PosStockHandlingLineResponse(
     string SkuName,
     int OrderedQuantity,
     int FinishedDeductedQuantity,
-    int PendingBomQuantity);
+    int PendingBomQuantity,
+    int WarehouseDeductedQuantity = 0);
 
 public record PosStockHandlingResponse(
     Guid OrderId,
@@ -152,7 +153,9 @@ public record PosStockHandlingResponse(
     bool HasPendingStockReconciliation,
     string Message,
     List<Guid> QueueIds,
-    List<PosStockHandlingLineResponse> Lines);
+    List<PosStockHandlingLineResponse> Lines,
+    bool BackorderRequired = false,
+    string? BackorderMessage = null);
 
 /// <summary>
 /// POS-04 (H4): kết quả thay giữ chỗ tồn Kệ Hàng khi sửa đơn COD.

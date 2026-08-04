@@ -96,6 +96,21 @@ function OrderProductsSection({
                       {display.weightLabel}
                     </p>
                   ) : null}
+                  {Number(line.immediateFulfilledQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                      Giao ngay: {line.immediateFulfilledQuantity}
+                    </p>
+                  ) : null}
+                  {Number(line.reservedFinishedQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-blue-700">
+                      Đã giữ: {line.reservedFinishedQuantity}
+                    </p>
+                  ) : null}
+                  {Number(line.backorderQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-violet-700">
+                      Chờ nguyên liệu: {line.backorderQuantity}
+                    </p>
+                  ) : null}
                 </td>
                 <td className={constrained ? 'py-1.5 pr-3' : 'py-3 pr-4'}>{line.quantity}</td>
                 {!constrained ? (

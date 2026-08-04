@@ -49,12 +49,16 @@ public class InventoryLogic(
     private const string StockHandlingModeImmediate = "ImmediateFinishedStockOnly";
     private const string StockHandlingModeFullBomPending = "FullBomPending";
     private const string StockHandlingModePartialBomPending = "PartialFinishedDeductedBomPending";
+    private const string StockHandlingModeCompleteDeliveryBackorder = "CompleteDeliveryBackorder";
     private const string StockHandlingModeLegacy = "LegacyPendingFinishedStock";
     private const string LocationWarehouse = "Warehouse";
     private const string LocationShelf = "Shelf";
     private const string TransactionSupplierReceipt = "SUPPLIER_RECEIPT";
     private const string TransactionShelfReplenishmentOut = "SHELF_REPLENISHMENT_OUT";
     private const string TransactionShelfReplenishmentIn = "SHELF_REPLENISHMENT_IN";
+    private const string TransactionPosWarehouseTransferOut = "POS_WAREHOUSE_TRANSFER_OUT";
+    private const string TransactionPosWarehouseTransferIn = "POS_WAREHOUSE_TRANSFER_IN";
+    private const string TransactionPosBackorderRelease = "POS_BACKORDER_RELEASE";
     private const string TransactionSupplierReturn = "SUPPLIER_RETURN";
     private const string TransactionProductionMaterialExport = "PRODUCTION_MATERIAL_EXPORT";
     private const string TransactionProductionFinishedReceipt = "PRODUCTION_FINISHED_RECEIPT";
@@ -307,8 +311,16 @@ public class InventoryLogic(
                     var shelfBatchQty = await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationShelf, innerCt);
                     counterQty = Math.Min(counterQty, Math.Max(0, shelfBatchQty));
                 }
-                var immediateQty = Math.Min(item.Quantity, counterQty);
-                var pendingQty = Math.Max(0, item.Quantity - immediateQty);
+                var fromShelf = Math.Min(item.Quantity, counterQty);
+                var remaining = item.Quantity - fromShelf;
+                var warehouseQty = Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0);
+                if (!_inventoryOptions.SimulateWarehouse)
+                {
+                    var warehouseBatchQty = await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationWarehouse, innerCt);
+                    warehouseQty = Math.Min(warehouseQty, Math.Max(0, warehouseBatchQty));
+                }
+                var fromWarehouse = Math.Min(remaining, warehouseQty);
+                var pendingQty = remaining - fromWarehouse;
 
                 decisions.Add(new PosStockDecision
                 {
@@ -319,13 +331,15 @@ public class InventoryLogic(
                         ?? NormalizeSnapshotText(stock?.SkuCode)
                         ?? item.SkuId.ToString(),
                     OrderedQuantity = item.Quantity,
-                    FinishedDeductedQuantity = immediateQty,
+                    FinishedDeductedQuantity = fromShelf + fromWarehouse,
+                    WarehouseDeductedQuantity = fromWarehouse,
                     PendingBomQuantity = pendingQty,
                     Stock = stock
                 });
             }
 
             var pendingDecisions = decisions.Where(d => d.PendingBomQuantity > 0).ToList();
+            var shortages = new List<StockShortage>();
             if (pendingDecisions.Count > 0)
             {
                 ProductCatalogSnapshot catalog;
@@ -342,7 +356,46 @@ public class InventoryLogic(
                 }
 
                 ValidatePendingPosCatalog(decisions, catalog);
-                await ResolvePendingBomMaterialSnapshotsAsync(decisions, catalog, innerCt);
+                shortages = await ResolvePendingBomMaterialSnapshotsAsync(decisions, catalog, request.AcceptBackorder, innerCt);
+                if (shortages.Count > 0 && !request.AcceptBackorder)
+                {
+                    var backorderMessage = BuildBackorderMessage(
+                        request.BackorderMinLeadDays,
+                        request.BackorderMaxLeadDays);
+                    return new PosStockHandlingResponse(
+                        request.OrderId, request.OrderCode.Trim(), "BackorderRequired", false,
+                        backorderMessage, [],
+                        decisions.Select(d => new PosStockHandlingLineResponse(
+                            d.SkuId, d.SkuCode, d.SkuName, d.OrderedQuantity,
+                            d.FinishedDeductedQuantity, d.PendingBomQuantity,
+                            d.WarehouseDeductedQuantity)).ToList(),
+                        true, backorderMessage);
+                }
+            }
+
+            if (request.PreviewOnly)
+            {
+                var previewHasPending = pendingDecisions.Count > 0;
+                var previewMode = shortages.Count > 0
+                    ? "BackorderAccepted"
+                    : previewHasPending ? "PreviewPendingBomReconciliation" : "PreviewImmediate";
+                return new PosStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode.Trim(),
+                    previewMode,
+                    previewHasPending,
+                    shortages.Count > 0
+                        ? BuildBackorderMessage(request.BackorderMinLeadDays, request.BackorderMaxLeadDays)
+                        : BuildPosStockHandlingMessage(decisions),
+                    [],
+                    decisions.Select(d => new PosStockHandlingLineResponse(
+                        d.SkuId,
+                        d.SkuCode,
+                        d.SkuName,
+                        d.OrderedQuantity,
+                        d.FinishedDeductedQuantity,
+                        d.PendingBomQuantity,
+                        d.WarehouseDeductedQuantity)).ToList());
             }
 
             var now = DateTime.UtcNow;
@@ -366,8 +419,10 @@ public class InventoryLogic(
                     OrderPaymentStatus = string.IsNullOrWhiteSpace(request.OrderStatus)
                         ? "completed"
                         : request.OrderStatus.Trim().ToLowerInvariant(),
-                    OrderStockStatus = "pending_bom_reconciliation",
-                    QueueStatus = QueueStatus.Waiting,
+                    OrderStockStatus = shortages.Count > 0
+                        ? "waiting_materials"
+                        : "pending_bom_reconciliation",
+                    QueueStatus = shortages.Count > 0 ? QueueStatus.Insufficient : QueueStatus.Waiting,
                     TotalAmount = request.TotalAmount,
                     IsDeducted = false,
                     CreatedAt = now,
@@ -381,9 +436,14 @@ public class InventoryLogic(
                         OrderedQuantity = d.OrderedQuantity,
                         FinishedDeductedQuantity = d.FinishedDeductedQuantity,
                         PendingBomQuantity = d.PendingBomQuantity,
-                        StockHandlingMode = d.FinishedDeductedQuantity > 0
-                            ? StockHandlingModePartialBomPending
-                            : StockHandlingModeFullBomPending,
+                        StockHandlingMode = string.Equals(
+                            request.FulfillmentPreference,
+                            "CompleteDelivery",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? StockHandlingModeCompleteDeliveryBackorder
+                            : d.FinishedDeductedQuantity > 0
+                                ? StockHandlingModePartialBomPending
+                                : StockHandlingModeFullBomPending,
                         MaterialRequirementSnapshotJson = JsonSerializer.Serialize(
                             d.MaterialRequirements,
                             MaterialSnapshotJsonOptions)
@@ -400,13 +460,17 @@ public class InventoryLogic(
             await _skuStockRepo.SaveChangesAsync(innerCt);
 
             var hasPending = pendingDecisions.Count > 0;
-            var mode = hasPending ? "PartialOrFullPendingBomReconciliation" : StockHandlingModeImmediate;
+            var mode = shortages.Count > 0
+                ? "BackorderAccepted"
+                : hasPending ? "PartialOrFullPendingBomReconciliation" : StockHandlingModeImmediate;
             return new PosStockHandlingResponse(
                 request.OrderId,
                 request.OrderCode.Trim(),
                 mode,
                 hasPending,
-                BuildPosStockHandlingMessage(decisions),
+                shortages.Count > 0
+                    ? $"Khách đã xác nhận chờ hàng. {BuildBackorderMessage(request.BackorderMinLeadDays, request.BackorderMaxLeadDays)}"
+                    : BuildPosStockHandlingMessage(decisions),
                 queueIds,
                 decisions.Select(d => new PosStockHandlingLineResponse(
                     d.SkuId,
@@ -414,13 +478,26 @@ public class InventoryLogic(
                     d.SkuName,
                     d.OrderedQuantity,
                     d.FinishedDeductedQuantity,
-                    d.PendingBomQuantity)).ToList());
+                    d.PendingBomQuantity,
+                    d.WarehouseDeductedQuantity)).ToList());
         }, ct);
 
-        await CheckAndNotifyShelfLowStockAsync(
-            response.Lines.Where(l => l.FinishedDeductedQuantity > 0).Select(l => l.SkuId),
-            ct);
+        if (!request.PreviewOnly && !response.BackorderRequired)
+        {
+            await CheckAndNotifyShelfLowStockAsync(
+                response.Lines.Where(l => l.FinishedDeductedQuantity > 0).Select(l => l.SkuId),
+                ct);
+        }
         return response;
+    }
+
+    private static string BuildBackorderMessage(int minLeadDays, int maxLeadDays)
+    {
+        var minDays = Math.Max(1, minLeadDays);
+        var maxDays = Math.Max(minDays, maxLeadDays);
+        return minDays == maxDays
+            ? $"Sản phẩm này tạm thời hết hàng, dự kiến có sau {minDays} ngày."
+            : $"Sản phẩm này tạm thời hết hàng, dự kiến có sau {minDays}-{maxDays} ngày.";
     }
 
     public async Task HandleOrderCancelledAsync(OrderCancelledEvent message, CancellationToken ct = default)
@@ -462,8 +539,24 @@ public class InventoryLogic(
         }
         else
         {
-            // POS-04: hủy trước khi trừ tồn → nhả giữ chỗ Kệ Hàng (idempotent).
-            await ReleaseQueueReservationAsync(queue, ct);
+            if (queue.Items.Any(item =>
+                    (string.Equals(
+                         item.StockHandlingMode,
+                         StockHandlingModeCompleteDeliveryBackorder,
+                         StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(
+                         item.StockHandlingMode,
+                         StockHandlingModePartialBomPending,
+                         StringComparison.OrdinalIgnoreCase))
+                    && item.FinishedDeductedQuantity.GetValueOrDefault() > 0))
+            {
+                await RestoreBackorderFinishedStockAsync(queue, ct);
+            }
+            else
+            {
+                // POS-04: hủy trước khi trừ tồn → nhả giữ chỗ Kệ Hàng (idempotent).
+                await ReleaseQueueReservationAsync(queue, ct);
+            }
         }
 
         queue.QueueStatus = QueueStatus.Cancelled;
@@ -1904,14 +1997,15 @@ public class InventoryLogic(
         return normalized;
     }
 
-    private async Task ResolvePendingBomMaterialSnapshotsAsync(
+    private async Task<List<StockShortage>> ResolvePendingBomMaterialSnapshotsAsync(
         List<PosStockDecision> decisions,
         ProductCatalogSnapshot catalog,
+        bool acceptBackorder,
         CancellationToken ct)
     {
         var pendingDecisions = decisions.Where(d => d.PendingBomQuantity > 0).ToList();
         if (pendingDecisions.Count == 0)
-            return;
+            return [];
 
         var reservations = await BuildMaterialReservationsAsync(null, ct);
         var availableBySku = new Dictionary<Guid, int>();
@@ -2022,6 +2116,37 @@ public class InventoryLogic(
                         required - effectiveAvailable,
                         displaySku,
                         componentSkuCode));
+                    if (acceptBackorder)
+                    {
+                        var shortageRemaining = required;
+                        foreach (var variant in candidateVariants)
+                        {
+                            if (shortageRemaining <= 0) break;
+
+                            var effective = effectiveAvailableBySku.GetValueOrDefault(variant.Id);
+                            var take = Math.Min(effective, shortageRemaining);
+                            if (take <= 0) continue;
+
+                            decision.MaterialRequirements.Add(new MaterialRequirementSnapshot(
+                                materialProduct.Id, variant.Id, variant.SkuCode,
+                                ResolveBomMaterialDisplayName(bomLine, materialProduct),
+                                bomLine.MaterialUnitName ?? materialProduct.BaseUnit, take,
+                                availableBySku.GetValueOrDefault(variant.Id), reservations.GetValueOrDefault(variant.Id)));
+                            effectiveAvailableBySku[variant.Id] = effective - take;
+                            shortageRemaining -= take;
+                        }
+
+                        if (shortageRemaining > 0)
+                        {
+                            var replenishmentVariant = candidateVariants[0];
+                            decision.MaterialRequirements.Add(new MaterialRequirementSnapshot(
+                                materialProduct.Id, replenishmentVariant.Id, replenishmentVariant.SkuCode,
+                                ResolveBomMaterialDisplayName(bomLine, materialProduct),
+                                bomLine.MaterialUnitName ?? materialProduct.BaseUnit, shortageRemaining,
+                                availableBySku.GetValueOrDefault(replenishmentVariant.Id),
+                                reservations.GetValueOrDefault(replenishmentVariant.Id)));
+                        }
+                    }
                     continue;
                 }
 
@@ -2050,8 +2175,7 @@ public class InventoryLogic(
             }
         }
 
-        if (shortages.Count > 0)
-            throw new InsufficientStockException(BuildMaterialShortageMessage(decisions, shortages), shortages);
+        return shortages;
     }
 
     private static void ValidatePendingPosCatalog(
@@ -2103,6 +2227,16 @@ public class InventoryLogic(
         DateTime now,
         CancellationToken ct)
     {
+        var warehouseDecisions = decisions
+            .Where(d => d.WarehouseDeductedQuantity > 0)
+            .OrderBy(d => d.SkuCode ?? d.SkuName)
+            .ToList();
+        if (warehouseDecisions.Count > 0)
+        {
+            await TransferWarehouseFinishedStockToShelfAsync(
+                orderId, orderCode, warehouseDecisions, createdBy, creator, now, ct);
+        }
+
         var immediateDecisions = decisions
             .Where(d => d.FinishedDeductedQuantity > 0)
             .OrderBy(d => d.SkuCode ?? d.SkuName)
@@ -2226,6 +2360,236 @@ public class InventoryLogic(
             await _exportAllocationRepo.AddRangeAsync(allAllocations, ct);
         if (ledgerEntries.Count > 0)
             await _ledgerRepo.AddRangeAsync(ledgerEntries, ct);
+    }
+
+    private async Task TransferWarehouseFinishedStockToShelfAsync(
+        Guid orderId,
+        string orderCode,
+        List<PosStockDecision> decisions,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var exportSlipId = Guid.NewGuid();
+        var importSlipId = Guid.NewGuid();
+        var exportLines = new List<StockExportSlipLine>();
+        var importLines = new List<StockImportSlipLine>();
+        var allocations = new List<StockExportBatchAllocation>();
+        var ledgerEntries = new List<InventoryLedgerEntry>();
+        var transactionGroupId = Guid.NewGuid();
+
+        foreach (var decision in decisions)
+        {
+            var stock = decision.Stock
+                ?? throw new InventoryValidationException($"Khong tim thay ton kho cho SKU {decision.SkuCode ?? decision.SkuId.ToString()}.");
+            var warehouseBefore = _inventoryOptions.SimulateWarehouse
+                ? stock.WarehouseQuantityOnHand
+                : await _batchRepo.SumQuantityOnHandAsync(decision.SkuId, LocationWarehouse, ct);
+            var shelfBefore = _inventoryOptions.SimulateWarehouse
+                ? stock.QuantityOnHand
+                : await _batchRepo.SumQuantityOnHandAsync(decision.SkuId, LocationShelf, ct);
+            if (warehouseBefore < decision.WarehouseDeductedQuantity)
+                throw new InventoryValidationException("Ton Kho thanh pham da thay doi, vui long thu checkout lai.");
+
+            List<StockExportBatchAllocation> lineAllocations = [];
+            if (_inventoryOptions.SimulateWarehouse)
+            {
+                stock.WarehouseQuantityOnHand -= decision.WarehouseDeductedQuantity;
+                stock.QuantityOnHand += decision.WarehouseDeductedQuantity;
+            }
+            else
+            {
+                lineAllocations = await AllocateAndDeductBatchesFifoAsync(
+                    decision.SkuId, decision.WarehouseDeductedQuantity, ct, LocationWarehouse);
+                await CreateShelfBatchesFromAllocationsAsync(
+                    orderCode, orderId, decision.SkuId, decision.SkuCode ?? decision.SkuId.ToString()[..8],
+                    decision.SkuName, lineAllocations, createdBy, ct);
+                stock.WarehouseQuantityOnHand = await _batchRepo.SumQuantityOnHandAsync(decision.SkuId, LocationWarehouse, ct);
+                stock.QuantityOnHand = await _batchRepo.SumQuantityOnHandAsync(decision.SkuId, LocationShelf, ct);
+            }
+            stock.UpdatedAt = now;
+
+            var exportLine = new StockExportSlipLine
+            {
+                Id = Guid.NewGuid(), StockExportSlipId = exportSlipId, SkuId = decision.SkuId,
+                SkuCode = decision.SkuCode ?? decision.SkuId.ToString()[..8], ProductSnapshotName = decision.SkuName,
+                Quantity = decision.WarehouseDeductedQuantity, WarehouseQtyBefore = warehouseBefore,
+                WarehouseQtyAfter = stock.WarehouseQuantityOnHand, StoreQtyBefore = shelfBefore,
+                StoreQtyAfter = stock.QuantityOnHand, Note = $"Tu dong chuyen Kho sang Ke de ban POS cho don {orderCode}", CreatedAt = now,
+            };
+            foreach (var allocation in lineAllocations)
+            {
+                allocation.StockExportSlipId = exportSlipId;
+                allocation.StockExportSlipLineId = exportLine.Id;
+            }
+            exportLines.Add(exportLine);
+            allocations.AddRange(lineAllocations);
+            importLines.Add(new StockImportSlipLine
+            {
+                Id = Guid.NewGuid(), StockImportSlipId = importSlipId, SkuId = decision.SkuId,
+                SkuCode = exportLine.SkuCode, ProductSnapshotName = decision.SkuName, Quantity = decision.WarehouseDeductedQuantity,
+                WarehouseQtyBefore = warehouseBefore, WarehouseQtyAfter = stock.WarehouseQuantityOnHand,
+                StoreQtyBefore = shelfBefore, StoreQtyAfter = stock.QuantityOnHand, DestinationLocation = LocationShelf,
+                Note = exportLine.Note, CreatedAt = now,
+            });
+            ledgerEntries.Add(CreateLedgerEntry(transactionGroupId, decision.SkuId, exportLine.SkuCode, decision.SkuName,
+                LocationWarehouse, warehouseBefore, -decision.WarehouseDeductedQuantity, stock.WarehouseQuantityOnHand,
+                TransactionPosWarehouseTransferOut, LocationWarehouse, LocationShelf, ReferenceOrder, orderId, orderCode,
+                lineAllocations.Count == 1 ? lineAllocations[0].WarehouseBatchId : null,
+                lineAllocations.Count == 1 ? lineAllocations[0].LotCode : null, createdBy, creator, "POS auto transfer", exportLine.Note));
+            ledgerEntries.Add(CreateLedgerEntry(transactionGroupId, decision.SkuId, exportLine.SkuCode, decision.SkuName,
+                LocationShelf, shelfBefore, decision.WarehouseDeductedQuantity, stock.QuantityOnHand,
+                TransactionPosWarehouseTransferIn, LocationWarehouse, LocationShelf, ReferenceOrder, orderId, orderCode,
+                null, null, createdBy, creator, "POS auto transfer", exportLine.Note));
+        }
+
+        var exportCount = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var importCount = await _importSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var firstExport = exportLines[0];
+        await _exportSlipRepo.AddAsync(new StockExportSlip
+        {
+            Id = exportSlipId, ExportCode = $"PX-POS-{now:yyyyMMdd}-{(exportCount + 1):D4}",
+            ExportType = "warehouse_to_shelf_transfer", ReferenceType = "PosOrder", ReferenceId = orderId, ReferenceCode = orderCode,
+            SkuId = exportLines.Count == 1 ? firstExport.SkuId : Guid.Empty, SkuCode = exportLines.Count == 1 ? firstExport.SkuCode : "MULTI",
+            SkuSnapshotName = exportLines.Count == 1 ? firstExport.ProductSnapshotName : $"{exportLines.Count} dong hang POS",
+            Quantity = exportLines.Sum(x => x.Quantity), WarehouseQtyBefore = exportLines.Sum(x => x.WarehouseQtyBefore),
+            WarehouseQtyAfter = exportLines.Sum(x => x.WarehouseQtyAfter), StoreQtyBefore = exportLines.Sum(x => x.StoreQtyBefore),
+            StoreQtyAfter = exportLines.Sum(x => x.StoreQtyAfter), Note = $"Tu dong chuyen Kho sang Ke cho don {orderCode}",
+            CreatedBy = createdBy, CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName), CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now, Lines = exportLines,
+        }, ct);
+        var firstImport = importLines[0];
+        await _importSlipRepo.AddAsync(new StockImportSlip
+        {
+            Id = importSlipId, ImportCode = $"PN-POS-{now:yyyyMMdd}-{(importCount + 1):D4}",
+            ImportType = "warehouse_to_shelf_transfer", ReferenceType = "PosOrder", ReferenceId = orderId, ReferenceCode = orderCode,
+            SkuId = importLines.Count == 1 ? firstImport.SkuId : Guid.Empty, SkuCode = importLines.Count == 1 ? firstImport.SkuCode : "MULTI",
+            ProductSnapshotName = importLines.Count == 1 ? firstImport.ProductSnapshotName : $"{importLines.Count} dong hang POS",
+            Quantity = importLines.Sum(x => x.Quantity), WarehouseQtyBefore = importLines.Sum(x => x.WarehouseQtyBefore),
+            WarehouseQtyAfter = importLines.Sum(x => x.WarehouseQtyAfter), StoreQtyBefore = importLines.Sum(x => x.StoreQtyBefore),
+            StoreQtyAfter = importLines.Sum(x => x.StoreQtyAfter), Note = $"Tu dong chuyen Kho sang Ke cho don {orderCode}",
+            CreatedBy = createdBy, CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName), CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now, Lines = importLines,
+        }, ct);
+        if (allocations.Count > 0) await _exportAllocationRepo.AddRangeAsync(allocations, ct);
+        await _ledgerRepo.AddRangeAsync(ledgerEntries, ct);
+    }
+
+    private async Task RestoreBackorderFinishedStockAsync(
+        StockDeductQueue queue,
+        CancellationToken ct)
+    {
+        var heldBySku = queue.Items
+            .Where(item =>
+                (string.Equals(
+                     item.StockHandlingMode,
+                     StockHandlingModeCompleteDeliveryBackorder,
+                     StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(
+                     item.StockHandlingMode,
+                     StockHandlingModePartialBomPending,
+                     StringComparison.OrdinalIgnoreCase))
+                && item.FinishedDeductedQuantity.GetValueOrDefault() > 0)
+            .GroupBy(item => item.SkuId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Sum(item => item.FinishedDeductedQuantity.GetValueOrDefault()));
+        heldBySku = heldBySku
+            .Where(item => item.Value > 0)
+            .ToDictionary(item => item.Key, item => item.Value);
+        if (heldBySku.Count == 0)
+            return;
+
+        StockExportSlip? saleSlip = null;
+        if (!_inventoryOptions.SimulateWarehouse)
+        {
+            saleSlip = await _exportSlipRepo.GetByReferenceAsync(
+                ReferenceOrder,
+                queue.OrderId,
+                "pos_finished_goods_sale",
+                ct);
+            if (saleSlip == null)
+            {
+                throw new InventoryValidationException(
+                    $"Không tìm thấy phiếu xuất POS để hoàn phần hàng đã giữ của đơn {queue.OrderCode}.");
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var transactionGroupId = Guid.NewGuid();
+        var ledgerEntries = new List<InventoryLedgerEntry>();
+        foreach (var (skuId, quantity) in heldBySku.OrderBy(item => item.Key))
+        {
+            var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(skuId, ct)
+                ?? throw new InventoryValidationException(
+                    $"Không tìm thấy tồn Kệ để hoàn phần hàng đã giữ của đơn {queue.OrderCode}.");
+            var before = stock.QuantityOnHand;
+
+            Guid? batchId = null;
+            string? lotCode = null;
+            if (!_inventoryOptions.SimulateWarehouse)
+            {
+                var slipLine = saleSlip!.Lines.FirstOrDefault(line => line.SkuId == skuId)
+                    ?? throw new InventoryValidationException(
+                        $"Phiếu xuất POS không có dòng SKU {skuId} của đơn {queue.OrderCode}.");
+                var allocations = slipLine.BatchAllocations.ToList();
+                if (allocations.Sum(allocation => allocation.Quantity) != quantity
+                    || allocations.Any(allocation => allocation.BatchItem == null || allocation.Batch == null))
+                {
+                    throw new InventoryValidationException(
+                        $"Dữ liệu lô xuất POS không đủ để hoàn {quantity} sản phẩm đã giữ của đơn {queue.OrderCode}.");
+                }
+
+                foreach (var allocation in allocations)
+                {
+                    allocation.BatchItem!.QuantityOnHand += allocation.Quantity;
+                    allocation.Batch!.Status = "active";
+                    allocation.Batch.UpdatedAt = now;
+                }
+
+                if (allocations.Count == 1)
+                {
+                    batchId = allocations[0].WarehouseBatchId;
+                    lotCode = allocations[0].LotCode;
+                }
+            }
+
+            stock.QuantityOnHand += quantity;
+            stock.UpdatedAt = now;
+            ledgerEntries.Add(CreateLedgerEntry(
+                transactionGroupId,
+                skuId,
+                stock.SkuCode,
+                queue.Items.First(item => item.SkuId == skuId).SkuSnapshotName,
+                LocationShelf,
+                before,
+                quantity,
+                stock.QuantityOnHand,
+                TransactionPosBackorderRelease,
+                null,
+                LocationShelf,
+                ReferenceOrder,
+                queue.OrderId,
+                queue.OrderCode,
+                batchId,
+                lotCode,
+                Guid.Empty,
+                null,
+                $"Hoàn thành phẩm khi hủy backorder {queue.OrderCode}",
+                "Hoàn phần thành phẩm đã giữ hoặc đã thu hồi từ khách khi hủy đơn."));
+        }
+
+        if (!_inventoryOptions.SimulateWarehouse)
+            await _batchRepo.SaveChangesAsync(ct);
+        await _skuStockRepo.SaveChangesAsync(ct);
+        if (ledgerEntries.Count > 0)
+        {
+            await _ledgerRepo.AddRangeAsync(ledgerEntries, ct);
+            await _ledgerRepo.SaveChangesAsync(ct);
+        }
     }
 
     private async Task<List<StockDeductPreviewItemResponse>> BuildPreviewItemsAsync(
@@ -5205,7 +5569,9 @@ public class InventoryLogic(
     private async Task<List<WarehouseBatch>> CreateShelfBatchesFromAllocationsAsync(
         string referenceCode,
         Guid referenceId,
-        StockAdjustmentRequestItem line,
+        Guid skuId,
+        string skuCode,
+        string skuSnapshotName,
         List<StockExportBatchAllocation> allocations,
         Guid createdBy,
         CancellationToken ct)
@@ -5241,9 +5607,9 @@ public class InventoryLogic(
             {
                 Id = Guid.NewGuid(),
                 WarehouseBatchId = batch.Id,
-                SkuId = line.SkuId,
-                SkuCode = line.SkuCode,
-                ProductSnapshotName = line.SkuSnapshotName,
+                SkuId = skuId,
+                SkuCode = skuCode,
+                ProductSnapshotName = skuSnapshotName,
                 QuantityOnHand = allocation.Quantity,
                 InitialQuantity = allocation.Quantity,
                 UnitCost = sourceItem.UnitCost,
@@ -6113,7 +6479,8 @@ public class InventoryLogic(
         line.SkuName,
         line.OrderedQuantity,
         line.FinishedDeductedQuantity,
-        line.PendingBomQuantity);
+        line.PendingBomQuantity,
+        0);
 
     private static string BuildPosStockHandlingMessage(List<PosStockDecision> decisions)
     {
@@ -6163,6 +6530,7 @@ public class InventoryLogic(
         public string SkuName { get; init; } = string.Empty;
         public int OrderedQuantity { get; init; }
         public int FinishedDeductedQuantity { get; init; }
+        public int WarehouseDeductedQuantity { get; init; }
         public int PendingBomQuantity { get; init; }
         public SkuStock? Stock { get; init; }
         public List<MaterialRequirementSnapshot> MaterialRequirements { get; } = [];

@@ -139,6 +139,8 @@ function buildOrderRequestFromPosPayload(
     paidAmount: paidAmount ?? 0,
     transferQrAmount: transferQrAmount ?? 0,
     paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
+    acceptBackorder: Boolean(payload.acceptBackorder),
+    fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
     payments: (payload.payments ?? []).map((allocation) => ({
       paymentMethod: mapPaymentMethod(allocation.paymentMethod),
       amount: Number(allocation.amount ?? 0),
@@ -179,6 +181,10 @@ function mapOrderDetailToPosResult(order) {
     invoiceCode: null,
     createdAt: order.createdAt,
     stockHandlingSummary: order.stockHandlingSummary ?? null,
+    backorderAcceptedAt: order.backorderAcceptedAt ?? null,
+    estimatedReadyFrom: order.estimatedReadyFrom ?? null,
+    estimatedReadyTo: order.estimatedReadyTo ?? null,
+    fulfillmentPreference: order.fulfillmentPreference ?? null,
     items: (order.items ?? []).map((row) => ({
       productId: row.skuId,
       productName: row.skuSnapshotName,
@@ -187,6 +193,9 @@ function mapOrderDetailToPosResult(order) {
       quantity: row.quantity,
       lineTotal: row.subTotal,
       isGift: row.isGift ? 1 : 0,
+      immediateFulfilledQuantity: Number(row.immediateFulfilledQuantity ?? 0),
+      reservedFinishedQuantity: Number(row.reservedFinishedQuantity ?? 0),
+      backorderQuantity: Number(row.backorderQuantity ?? 0),
     })),
   }
 }
@@ -212,6 +221,10 @@ export function mapPosOrderResult(item) {
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     stockHandlingSummary: item.stockHandlingSummary ?? item.StockHandlingSummary ?? null,
+    backorderAcceptedAt: item.backorderAcceptedAt ?? item.BackorderAcceptedAt ?? null,
+    estimatedReadyFrom: item.estimatedReadyFrom ?? item.EstimatedReadyFrom ?? null,
+    estimatedReadyTo: item.estimatedReadyTo ?? item.EstimatedReadyTo ?? null,
+    fulfillmentPreference: item.fulfillmentPreference ?? item.FulfillmentPreference ?? null,
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
       productName: row.productName ?? row.ProductName ?? '',
@@ -219,6 +232,9 @@ export function mapPosOrderResult(item) {
       unitPrice: Number(row.unitPrice ?? row.UnitPrice ?? 0),
       quantity: Number(row.quantity ?? row.Quantity ?? 0),
       lineTotal: Number(row.lineTotal ?? row.LineTotal ?? 0),
+      immediateFulfilledQuantity: Number(row.immediateFulfilledQuantity ?? row.ImmediateFulfilledQuantity ?? 0),
+      reservedFinishedQuantity: Number(row.reservedFinishedQuantity ?? row.ReservedFinishedQuantity ?? 0),
+      backorderQuantity: Number(row.backorderQuantity ?? row.BackorderQuantity ?? 0),
       isGift: row.isGift ?? row.IsGift ?? 0,
     })),
   }

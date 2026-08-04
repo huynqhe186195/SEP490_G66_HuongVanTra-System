@@ -14,6 +14,28 @@ public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSli
                 .ThenInclude(l => l.BatchAllocations)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
+    public Task<StockExportSlip?> GetByReferenceAsync(
+        string referenceType,
+        Guid referenceId,
+        string exportType,
+        CancellationToken ct = default) =>
+        _db.StockExportSlips
+            .Include(s => s.BatchAllocations)
+                .ThenInclude(allocation => allocation.Batch)
+            .Include(s => s.BatchAllocations)
+                .ThenInclude(allocation => allocation.BatchItem)
+            .Include(s => s.Lines)
+                .ThenInclude(line => line.BatchAllocations)
+                    .ThenInclude(allocation => allocation.Batch)
+            .Include(s => s.Lines)
+                .ThenInclude(line => line.BatchAllocations)
+                    .ThenInclude(allocation => allocation.BatchItem)
+            .FirstOrDefaultAsync(s =>
+                s.ReferenceType == referenceType
+                && s.ReferenceId == referenceId
+                && s.ExportType == exportType,
+                ct);
+
     public async Task<List<StockExportSlip>> GetListAsync(string? search, CancellationToken ct = default)
     {
         var query = _db.StockExportSlips

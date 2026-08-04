@@ -3,7 +3,15 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canConfirmB2BDelivery, canConfirmOrderShipping, canCreateOrder, canVerifyCodPayment, canViewAllOrders } from '../../auth/utils/permissions.js'
+import {
+  canCompleteBackorderRefund,
+  canConfirmB2BDelivery,
+  canConfirmOrderShipping,
+  canCreateOrder,
+  canReviewBackorderRefund,
+  canVerifyCodPayment,
+  canViewAllOrders,
+} from '../../auth/utils/permissions.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
@@ -19,10 +27,13 @@ import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
 import ReceiptReprintModal from '../components/ReceiptReprintModal.jsx'
 import {
   cancelOrder,
+  completeBackorderRefund,
   completeOrder,
   fetchOrder,
   fetchReturnsByOrderId,
   reprintReceipt,
+  requestBackorderCancellation,
+  reviewBackorderCancellation,
   shipOrder,
   updateOrder,
 } from '../services/ordersApi.js'
@@ -67,6 +78,8 @@ function OrderDetailPage() {
   const canReceiveContract = canConfirmB2BDelivery(session)
   const canCollectCod = canVerifyCodPayment(session)
   const isManager = canViewAllOrders(session)
+  const canReviewRefund = canReviewBackorderRefund(session)
+  const canFinalizeRefund = canCompleteBackorderRefund(session)
 
   const [order, setOrder] = useState(null)
   const [shelfOnDuty, setShelfOnDuty] = useState(null)
@@ -131,7 +144,7 @@ function OrderDetailPage() {
   const contractOrder = isContractOrder(order)
   // Đơn hợp đồng do Kế toán lập và Kho xuất — cả hai bộ phận đều làm việc ngoài ca quầy POS.
   const canOperateContract = contractOrder && (canShipContract || canReceiveContract)
-  const canRunActions = canManage || canOperateContract
+  const canRunActions = canManage || canOperateContract || canReviewRefund || canFinalizeRefund
   const canApplyChanges = contractOrder ? canOperateContract : (canManage && canMutate)
 
   useEffect(() => {
@@ -244,6 +257,78 @@ function OrderDetailPage() {
     }
   }
 
+  async function handleRequestBackorderCancellation() {
+    if (!canApplyChanges || !order) return
+    const reason = window.prompt('Nhập lý do yêu cầu hủy đơn chờ nguyên liệu:')
+    if (!reason?.trim()) return
+    try {
+      setIsSaving(true)
+      const updated = await requestBackorderCancellation(order.id, reason)
+      setOrder(updated)
+      setTimelineRefreshKey((key) => key + 1)
+      showSuccess('Đã gửi yêu cầu hủy và hoàn tiền để Manager duyệt.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleReviewBackorderCancellation(approved) {
+    if (!canReviewRefund || !order) return
+    const note = window.prompt(
+      approved ? 'Ghi chú duyệt hoàn tiền (không bắt buộc):' : 'Lý do từ chối (không bắt buộc):',
+    )
+    try {
+      setIsSaving(true)
+      const updated = await reviewBackorderCancellation(order.id, approved, note || '')
+      setOrder(updated)
+      setTimelineRefreshKey((key) => key + 1)
+      showSuccess(approved ? 'Đã duyệt yêu cầu hoàn tiền.' : 'Đã từ chối yêu cầu hủy.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleCompleteBackorderRefund() {
+    if (!canFinalizeRefund || !order) return
+    const hasImmediateItems = order.fulfillmentPreference === 'PartialDelivery'
+      && order.items?.some((item) => Number(item.immediateFulfilledQuantity || 0) > 0)
+    let immediateItemsReturned = false
+    if (hasImmediateItems) {
+      immediateItemsReturned = window.confirm(
+        'Đơn đã giao một phần. Chỉ tiếp tục khi đã nhận lại đầy đủ phần hàng giao ngay. Xác nhận đã thu hồi hàng?',
+      )
+      if (!immediateItemsReturned) return
+    }
+    const refundMethod = window.prompt('Phương thức hoàn tiền (Tiền mặt/Chuyển khoản):')
+    if (!refundMethod?.trim()) return
+    const refundEvidence = window.prompt(
+      hasImmediateItems
+        ? 'Nhập mã giao dịch và bằng chứng thu hồi phần hàng đã giao/hoàn tiền:'
+        : 'Nhập mã giao dịch, đường dẫn chứng từ hoặc nội dung bằng chứng hoàn tiền:',
+    )
+    if (!refundEvidence?.trim()) return
+    try {
+      setIsSaving(true)
+      const updated = await completeBackorderRefund(
+        order.id,
+        refundMethod,
+        refundEvidence,
+        immediateItemsReturned,
+      )
+      setOrder(updated)
+      setTimelineRefreshKey((key) => key + 1)
+      showSuccess('Đã ghi nhận hoàn tiền, lưu bằng chứng và hủy đơn.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   async function handleConfirmReprint(reason) {
     if (!order || isReprinting) return
     try {
@@ -331,6 +416,10 @@ function OrderDetailPage() {
   const showTransferQr = isPendingTransferPayment(order)
   const compactProducts = isPendingPaymentOrder(order)
   const inventorySyncMeta = resolveInventorySyncMeta(order)
+  const normalizedStatus = String(order.orderStatus || '').trim()
+  const isWaitingMaterials = normalizedStatus === 'WaitingMaterials'
+  const isCancellationRequested = normalizedStatus === 'CancellationRequested'
+  const hasCollectedPayment = order.payments?.some((row) => row.paymentStatus === 'Success')
   const contractStepHint = contractOrder
     ? {
         PendingPayment: 'Bước 1/3 — Đã lập đơn và giữ chỗ hàng. Chờ kho soạn và xác nhận xuất hàng.',
@@ -448,6 +537,61 @@ function OrderDetailPage() {
             </section>
           ) : null}
 
+          {order.backorderAcceptedAt ? (
+            <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-violet-700">
+                Đơn chờ nguyên liệu
+              </h2>
+              <dl className="space-y-1.5 text-sm text-slate-700">
+                <div className="flex justify-between gap-3">
+                  <dt>Hình thức nhận</dt>
+                  <dd className="text-right font-semibold">
+                    {order.fulfillmentPreference === 'CompleteDelivery'
+                      ? 'Nhận một lần khi đủ hàng'
+                      : 'Nhận trước phần hàng sẵn'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt>Dự kiến sẵn hàng</dt>
+                  <dd className="text-right font-semibold">
+                    {order.estimatedReadyFrom ? formatVietnamDateTime(order.estimatedReadyFrom) : '—'} -{' '}
+                    {order.estimatedReadyTo ? formatVietnamDateTime(order.estimatedReadyTo) : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt>Hoàn tiền</dt>
+                  <dd className="font-semibold">{order.refundStatus || 'NotRequired'}</dd>
+                </div>
+              </dl>
+              {order.cancellationReason ? (
+                <p className="mt-3 text-xs text-rose-700">Lý do hủy: {order.cancellationReason}</p>
+              ) : null}
+              {order.cancellationRequestedAt ? (
+                <p className="mt-2 text-xs text-slate-600">
+                  Yêu cầu bởi {order.cancellationRequestedByName || '—'} lúc{' '}
+                  {formatVietnamDateTime(order.cancellationRequestedAt)}
+                </p>
+              ) : null}
+              {order.refundApprovedAt ? (
+                <p className="mt-2 text-xs text-slate-600">
+                  Duyệt bởi {order.refundApprovedByName || '—'} lúc{' '}
+                  {formatVietnamDateTime(order.refundApprovedAt)}
+                </p>
+              ) : null}
+              {order.refundedAt ? (
+                <p className="mt-2 text-xs text-emerald-700">
+                  Hoàn bởi {order.refundedByName || '—'} lúc {formatVietnamDateTime(order.refundedAt)}
+                  {order.refundMethod ? ` · ${order.refundMethod}` : ''}
+                </p>
+              ) : null}
+              {order.refundEvidence ? (
+                <p className="mt-2 break-words text-xs text-emerald-700">
+                  Bằng chứng hoàn tiền: {order.refundEvidence}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
           <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Người bán</h2>
             <p className="text-sm font-semibold text-slate-800">
@@ -509,6 +653,48 @@ function OrderDetailPage() {
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thao tác</h2>
               <div className="flex flex-col gap-2">
+                {isWaitingMaterials && canApplyChanges ? (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={hasCollectedPayment
+                      ? handleRequestBackorderCancellation
+                      : () => runAction('cancel')}
+                    className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {hasCollectedPayment ? 'Yêu cầu hủy & hoàn tiền' : 'Hủy đơn chờ nguyên liệu'}
+                  </button>
+                ) : null}
+                {canReviewRefund && isCancellationRequested && order.refundStatus === 'PendingApproval' ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleReviewBackorderCancellation(true)}
+                      className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Duyệt hoàn tiền
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleReviewBackorderCancellation(false)}
+                      className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Từ chối yêu cầu hủy
+                    </button>
+                  </>
+                ) : null}
+                {canFinalizeRefund && isCancellationRequested && order.refundStatus === 'Approved' ? (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleCompleteBackorderRefund}
+                    className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    Xác nhận đã hoàn tiền
+                  </button>
+                ) : null}
                 {canShipOrder(order) && (!contractOrder || canShipContract) ? (
                   <button
                     type="button"
@@ -559,7 +745,7 @@ function OrderDetailPage() {
                     In lại hóa đơn
                   </button>
                 ) : null}
-                {canCancelOrder(order) ? (
+                {canCancelOrder(order) && !isWaitingMaterials && !isCancellationRequested ? (
                   <button
                     type="button"
                     disabled={isSaving || !canApplyChanges}

@@ -20,7 +20,9 @@ public record CreateOrderRequest(
     OrderKind OrderKind = OrderKind.Sale,
     List<CreateCustomBundleRequest>? CustomBundles = null,
     List<CreatePaymentAllocationRequest>? Payments = null,
-    Guid? ContractId = null
+    Guid? ContractId = null,
+    bool AcceptBackorder = false,
+    FulfillmentPreference FulfillmentPreference = FulfillmentPreference.PartialDelivery
 );
 
 public record CreatePaymentAllocationRequest(
@@ -64,6 +66,13 @@ public record UpdateOrderRequest(
 );
 
 public record CancelOrderRequest(string? Reason);
+
+public record ReviewBackorderCancellationRequest(bool Approved, string? Note = null);
+
+public record CompleteBackorderRefundRequest(
+    string RefundMethod,
+    string RefundEvidence,
+    bool ImmediateItemsReturned = false);
 
 public record VerifyCodPaymentRequest(
     string? TransactionRef,

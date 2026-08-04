@@ -1578,9 +1578,13 @@ function PosPage() {
     invoiceCode,
     orderTotal,
     changeAmount = displayChange,
+    backorderResult = null,
   }) => {
     const receiptTotal = orderTotal ?? total
     const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
+    const fulfillmentBySku = new Map(
+      (backorderResult?.items ?? []).map((item) => [String(item.sku || ''), item]),
+    )
     return {
       orderCode: orderCode || activeTab.label,
       invoiceCode: invoiceCode || undefined,
@@ -1594,13 +1598,19 @@ function PosPage() {
       createdAtLabel: vietnamNowLabel(),
       sellerName: seller.name,
       sellerRole: seller.role,
-      items: cartItems.map((item) => ({
-        sku: item.sku,
-        name: item.name,
-        qty: item.qty,
-        price: item.price,
-        total: getLineTotal(item),
-      })),
+      items: cartItems.map((item) => {
+        const fulfillment = fulfillmentBySku.get(String(item.sku || ''))
+        return {
+          sku: item.sku,
+          name: item.name,
+          qty: item.qty,
+          price: item.price,
+          total: getLineTotal(item),
+          immediateFulfilledQuantity: Number(fulfillment?.immediateFulfilledQuantity || 0),
+          reservedFinishedQuantity: Number(fulfillment?.reservedFinishedQuantity || 0),
+          backorderQuantity: Number(fulfillment?.backorderQuantity || 0),
+        }
+      }),
       grossSubtotal,
       totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
       total: receiptTotal,
@@ -1610,6 +1620,14 @@ function PosPage() {
       debtAmount: isRecordedPayment ? debtAmount : 0,
       isDebtSale: method === 'CASH' && isDebtSale,
       isPartialCashPayment: isRecordedPayment && isPartialPayment,
+      isBackorder: Boolean(backorderResult?.backorderAcceptedAt),
+      fulfillmentPreference: backorderResult?.fulfillmentPreference || null,
+      estimatedReadyFromLabel: backorderResult?.estimatedReadyFrom
+        ? formatVietnamDateTimeMinute(backorderResult.estimatedReadyFrom)
+        : '',
+      estimatedReadyToLabel: backorderResult?.estimatedReadyTo
+        ? formatVietnamDateTimeMinute(backorderResult.estimatedReadyTo)
+        : '',
     }
   }
 
@@ -1673,6 +1691,8 @@ function PosPage() {
     createOrder,
     debtSettlement = null,
     idempotencyKey,
+    acceptBackorder = false,
+    fulfillmentPreference = 'PartialDelivery',
   }) => {
     const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
     const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
@@ -1684,6 +1704,8 @@ function PosPage() {
       recordedPaymentAmount,
       backendDebtSettlementJson,
     )
+    payload.acceptBackorder = acceptBackorder
+    payload.fulfillmentPreference = fulfillmentPreference
     const result = await createOrder(payload, { idempotencyKey })
 
     if (method === 'CASH' && recordedPaymentAmount > 0) {
@@ -1719,6 +1741,7 @@ function PosPage() {
                 method,
                 invoiceCode: result.invoiceCode,
                 changeAmount: changeAfterDebt,
+                backorderResult: result,
             }),
         ];
 
@@ -1836,6 +1859,7 @@ function PosPage() {
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
                 method: "TRANSFER",
+                backorderResult: result,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -1890,7 +1914,12 @@ function PosPage() {
         printReceiptFromData(receipt);
     };
 
-    const executePayment = async (debtSettlement = null, idempotencyKey) => {
+    const executePayment = async (
+        debtSettlement = null,
+        idempotencyKey,
+        acceptBackorder = false,
+        fulfillmentPreference = 'PartialDelivery',
+    ) => {
         if (isTakeaway) {
             await handleTakeawayPayment(debtSettlement, idempotencyKey);
             return;
@@ -1908,6 +1937,8 @@ function PosPage() {
                 transferAppliedToOrder,
                 backendDebtSettlementJson,
             );
+            payload.acceptBackorder = acceptBackorder;
+            payload.fulfillmentPreference = fulfillmentPreference;
             const result = await createPosOrderOnline(payload, {
                 qrAmount: actualQrAmount,
                 idempotencyKey,
@@ -1922,6 +1953,7 @@ function PosPage() {
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
                 method: "TRANSFER",
+                backorderResult: result,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -1953,10 +1985,16 @@ function PosPage() {
             createOrder: createPosOrderOffline,
             debtSettlement,
             idempotencyKey,
+            acceptBackorder,
+            fulfillmentPreference,
         });
     };
 
-    const submitCheckoutAttempt = (activeDebtSettlement = null) =>
+    const submitCheckoutAttempt = (
+        activeDebtSettlement = null,
+        acceptBackorder = false,
+        fulfillmentPreference = 'PartialDelivery',
+    ) =>
         checkoutAttemptRef.current.submit(
             {
                 salesMode,
@@ -1973,8 +2011,15 @@ function PosPage() {
                 shippingAddress,
                 orderNote,
                 debtSettlement: activeDebtSettlement,
+                acceptBackorder,
+                fulfillmentPreference,
             },
-            (idempotencyKey) => executePayment(activeDebtSettlement, idempotencyKey),
+            (idempotencyKey) => executePayment(
+                activeDebtSettlement,
+                idempotencyKey,
+                acceptBackorder,
+                fulfillmentPreference,
+            ),
         );
 
     const handlePayment = async () => {
@@ -2091,11 +2136,46 @@ function PosPage() {
 
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
+        if (!navigator.onLine) {
+            showError(
+                "Cần kết nối mạng để kiểm tra Kệ/Kho/BOM và xác nhận khách có đồng ý chờ hàng trước khi thu tiền.",
+            );
+            return;
+        }
         setIsSubmitting(true);
         try {
             await submitCheckoutAttempt(debtSettlement);
             setIsPaymentConfirmOpen(false);
         } catch (error) {
+            if (error?.body?.requiresBackorderConfirmation) {
+                const accepted = window.confirm(
+                    `${error.body.backorderMessage || "Sản phẩm tạm thời hết hàng."}\nKhách hàng có muốn chờ không?`,
+                );
+                if (accepted) {
+                    const availableQuantity = Number(error.body.availableQuantity || 0);
+                    const backorderQuantity = Number(error.body.backorderQuantity || 0);
+                    let fulfillmentPreference = 'CompleteDelivery';
+                    if (availableQuantity > 0) {
+                        const takeAvailableNow = window.confirm(
+                            `Có ${availableQuantity} sản phẩm giao được ngay và ${backorderQuantity} sản phẩm phải chờ.\n\n` +
+                            "OK: nhận phần hàng sẵn, phần còn lại chờ.\n" +
+                            "Hủy: giữ toàn bộ và nhận một lần khi đủ hàng.",
+                        );
+                        fulfillmentPreference = takeAvailableNow
+                            ? 'PartialDelivery'
+                            : 'CompleteDelivery';
+                    }
+                    try {
+                        await submitCheckoutAttempt(debtSettlement, true, fulfillmentPreference);
+                        setIsPaymentConfirmOpen(false);
+                    } catch (retryError) {
+                        showError(retryError.message);
+                    }
+                    return;
+                }
+                setIsPaymentConfirmOpen(false);
+                return;
+            }
             showError(error.message);
         } finally {
             setIsSubmitting(false);

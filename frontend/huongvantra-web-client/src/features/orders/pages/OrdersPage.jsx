@@ -27,6 +27,8 @@ const ORDER_STATUS_CHIPS = [
   { value: '', label: 'Tất cả' },
   { value: 'Processing', label: 'Đang xử lý' },
   { value: 'PendingPayment', label: 'Chờ thanh toán' },
+  { value: 'WaitingMaterials', label: 'Chờ nguyên liệu' },
+  { value: 'CancellationRequested', label: 'Chờ duyệt hủy' },
   { value: 'Shipping', label: 'Đang giao' },
   { value: 'Completed', label: 'Hoàn tất' },
   { value: 'Cancelled', label: 'Đã hủy' },

@@ -155,7 +155,7 @@ public class OrderIdempotencyTests
         Assert.Equal(1, store.Count);
         inventoryCatalog.Verify(
             client => client.PreparePosStockDeductionAsync(
-                It.IsAny<InventoryStockHandlingRequest>(),
+                It.Is<InventoryStockHandlingRequest>(request => !request.PreviewOnly),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -342,6 +342,20 @@ public class OrderIdempotencyTests
             Guid? customerId, bool overdueOnly, DateTime today,
             int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<Dictionary<string, int>> CountByStatusAsync(
+            string? search, Guid? customerId, string? channel,
+            string? excludeChannel, string? codTab, bool returnableOnly,
+            string? orderKind, string? excludeOrderKind,
+            DateTime? fromDate, DateTime? toDate, Guid? employeeId,
+            bool includeAllCodOrders, CancellationToken ct = default,
+            IReadOnlyCollection<Guid>? restrictToOrderIds = null) =>
+            Task.FromResult(new Dictionary<string, int>());
+
+        public Task<decimal> GetPendingContractDebtAsync(
+            Guid customerId,
+            Guid? excludeOrderId,
+            CancellationToken ct = default) => Task.FromResult(0m);
 
         public Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();

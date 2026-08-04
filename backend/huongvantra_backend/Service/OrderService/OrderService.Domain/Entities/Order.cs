@@ -25,6 +25,27 @@ public class Order : BaseEntity
     public string? Note { get; set; }
     public string? IdempotencyKey { get; set; }
 
+    public DateTime? BackorderAcceptedAt { get; set; }
+    public int? BackorderMinLeadDaysSnapshot { get; set; }
+    public int? BackorderMaxLeadDaysSnapshot { get; set; }
+    public DateTime? EstimatedReadyFrom { get; set; }
+    public DateTime? EstimatedReadyTo { get; set; }
+    public FulfillmentPreference? FulfillmentPreference { get; set; }
+    public BackorderRefundStatus RefundStatus { get; set; } = BackorderRefundStatus.NotRequired;
+    public decimal? RefundAmount { get; set; }
+    public string? RefundMethod { get; set; }
+    public string? RefundEvidence { get; set; }
+    public string? CancellationReason { get; set; }
+    public DateTime? CancellationRequestedAt { get; set; }
+    public Guid? CancellationRequestedBy { get; set; }
+    public string? CancellationRequestedByName { get; set; }
+    public DateTime? RefundApprovedAt { get; set; }
+    public Guid? RefundApprovedBy { get; set; }
+    public string? RefundApprovedByName { get; set; }
+    public DateTime? RefundedAt { get; set; }
+    public Guid? RefundedBy { get; set; }
+    public string? RefundedByName { get; set; }
+
     public Guid? ContractId { get; set; }
     public string? ContractCodeSnapshot { get; set; }
     public decimal? ContractDiscountPercentSnapshot { get; set; }

@@ -17,7 +17,12 @@ public record PreparePosStockDeductionRequest(
     string OrderCode,
     string OrderStatus,
     decimal TotalAmount,
-    List<PreparePosStockDeductionItemRequest> Items);
+    List<PreparePosStockDeductionItemRequest> Items,
+    bool AcceptBackorder = false,
+    bool PreviewOnly = false,
+    int BackorderMinLeadDays = 3,
+    int BackorderMaxLeadDays = 5,
+    string? FulfillmentPreference = null);
 
 public record ReplaceCodReservationItemRequest(
     Guid SkuId,
