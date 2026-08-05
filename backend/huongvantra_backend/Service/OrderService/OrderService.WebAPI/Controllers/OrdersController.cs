@@ -212,6 +212,15 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/mark-delivered")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> MarkDelivered(Guid id, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        await orderLogic.MarkDeliveredAsync(id, AccessContext(), actorId, actorName, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/return")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Return(Guid id, [FromBody] ReturnOrderRequest request, CancellationToken ct)

@@ -161,6 +161,16 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("DeliveredBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("DeliveredByName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -224,6 +234,25 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
+
+                    b.Property<string>("PickupCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("PickupContactName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("PickupContactPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime?>("PickupDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PickupNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("PromotionCode")
                         .HasMaxLength(50)
@@ -301,6 +330,8 @@ namespace OrderService.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("OrderKind");
+
+                    b.HasIndex("PickupCode");
 
                     b.HasIndex("PromotionId");
 

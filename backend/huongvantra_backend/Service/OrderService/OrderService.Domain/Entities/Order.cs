@@ -46,6 +46,21 @@ public class Order : BaseEntity
     public Guid? RefundedBy { get; set; }
     public string? RefundedByName { get; set; }
 
+    /// <summary>POS-06 (KB4): ngày hẹn khách quay lại lấy hàng, do thu ngân nhập lúc chấp nhận backorder.</summary>
+    public DateTime? PickupDate { get; set; }
+    /// <summary>POS-06 (KB4): ghi chú kèm hẹn lấy hàng.</summary>
+    public string? PickupNote { get; set; }
+    /// <summary>POS-06 (KB4): tên người sẽ tới nhận hàng, dùng đối chiếu khi khách quay lại.</summary>
+    public string? PickupContactName { get; set; }
+    /// <summary>POS-06 (KB4): số điện thoại đối chiếu người nhận hàng.</summary>
+    public string? PickupContactPhone { get; set; }
+    /// <summary>POS-06 (KB4): mã nhận hàng 6 ký tự in trên hoá đơn cho khách giữ.</summary>
+    public string? PickupCode { get; set; }
+    /// <summary>POS-06 (KB4): mốc Sale xác nhận đã giao hàng cho khách.</summary>
+    public DateTime? DeliveredAt { get; set; }
+    public Guid? DeliveredBy { get; set; }
+    public string? DeliveredByName { get; set; }
+
     public Guid? ContractId { get; set; }
     public string? ContractCodeSnapshot { get; set; }
     public decimal? ContractDiscountPercentSnapshot { get; set; }

@@ -98,6 +98,7 @@ export function mapOrderSummary(item) {
     hasActiveStockReservation: Boolean(
       item.hasActiveStockReservation ?? item.HasActiveStockReservation ?? false,
     ),
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
   }
 }
 
@@ -164,6 +165,13 @@ export function mapOrderDetail(item) {
     refundedAt: item.refundedAt ?? item.RefundedAt ?? null,
     refundedBy: item.refundedBy ?? item.RefundedBy ?? null,
     refundedByName: item.refundedByName ?? item.RefundedByName ?? '',
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
+    pickupNote: item.pickupNote ?? item.PickupNote ?? '',
+    deliveredAt: item.deliveredAt ?? item.DeliveredAt ?? null,
+    deliveredByName: item.deliveredByName ?? item.DeliveredByName ?? '',
+    pickupContactName: item.pickupContactName ?? item.PickupContactName ?? '',
+    pickupContactPhone: item.pickupContactPhone ?? item.PickupContactPhone ?? '',
+    pickupCode: item.pickupCode ?? item.PickupCode ?? '',
   }
 }
 
@@ -316,6 +324,10 @@ export function buildCreateOrderBody(payload) {
     paymentMethod: payload.paymentMethod,
     acceptBackorder: Boolean(payload.acceptBackorder),
     fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
+    pickupDate: payload.pickupDate || null,
+    pickupNote: payload.pickupNote?.trim() || null,
+    pickupContactName: payload.pickupContactName?.trim() || null,
+    pickupContactPhone: payload.pickupContactPhone?.trim() || null,
     codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
     payments: Array.isArray(payload.payments)
       ? payload.payments
@@ -439,6 +451,10 @@ export async function shipOrder(id) {
 
 export async function completeOrder(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/complete`, { method: 'POST' })
+}
+
+export async function markOrderDelivered(id) {
+  return apiRequestAuth(`/api/v1/orders/${id}/mark-delivered`, { method: 'POST' })
 }
 
 function mapReturnOrderLine(item) {

@@ -42,6 +42,12 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.CancellationRequestedByName).HasMaxLength(100);
         builder.Property(e => e.RefundApprovedByName).HasMaxLength(100);
         builder.Property(e => e.RefundedByName).HasMaxLength(100);
+        builder.Property(e => e.PickupNote).HasMaxLength(500);
+        builder.Property(e => e.PickupContactName).HasMaxLength(100);
+        builder.Property(e => e.PickupContactPhone).HasMaxLength(20);
+        builder.Property(e => e.PickupCode).HasMaxLength(10);
+        builder.HasIndex(e => e.PickupCode);
+        builder.Property(e => e.DeliveredByName).HasMaxLength(100);
         builder.Property(e => e.ContractCodeSnapshot).HasMaxLength(50);
         builder.Property(e => e.ContractDiscountPercentSnapshot).HasColumnType("decimal(5,2)");
         builder.HasIndex(e => e.ContractId);

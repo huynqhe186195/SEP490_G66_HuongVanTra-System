@@ -1078,8 +1078,8 @@ function validateForm(title, rows, options = {}) {
       ;(sku.bomLines ?? []).forEach((line, lineIndex) => {
         const linePrefix = `${skuPrefix}, BOM ${lineIndex + 1}`
         const componentKey = line.componentVariantId || line.componentSkuCode || line.componentRequestSkuKey || line.materialId
-        if (!componentKey) errors.push(`${linePrefix}: thiếu component SKU.`)
-        if (componentKey && components.has(String(componentKey))) errors.push(`${linePrefix}: component bị trùng.`)
+        if (!componentKey) errors.push(`${linePrefix}: thiếu nguyên liệu.`)
+        if (componentKey && components.has(String(componentKey))) errors.push(`${linePrefix}: nguyên liệu bị trùng.`)
         if (componentKey) components.add(String(componentKey))
         if (!positiveIntegerOrNull(line.quantity)) errors.push(`${linePrefix}: ${BOM_INTEGER_MESSAGE}`)
         if (line.isRequiredBaseComponent === true) errors.push(`${linePrefix}: IsRequiredBaseComponent không còn được hỗ trợ.`)
@@ -1139,8 +1139,8 @@ const EXCEL_REFERENCE_SOURCES = {
     userMessage: 'Không tải được danh mục sản phẩm.',
   },
   componentSkus: {
-    label: 'Component SKUs',
-    userMessage: 'Không tải được danh sách Component SKU.',
+    label: 'Nguyên liệu định mức',
+    userMessage: 'Không tải được danh sách nguyên liệu.',
   },
   attributeNames: {
     label: 'Attribute Names',
@@ -1224,7 +1224,7 @@ function SkuComponentCombobox({ options, onSelect }) {
     <div className="relative w-full max-w-md">
       <input
         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
-        placeholder="Tìm component SKU..."
+        placeholder="Tìm nguyên liệu..."
         value={query}
         onFocus={() => setIsOpen(true)}
         onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
@@ -2077,12 +2077,12 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                     </p>
                     {sku.isBaseUnitVariant ? <SkuComponentCombobox options={getAvailableComponentOptions(index)} onSelect={(option) => addBomComponent(index, option)} /> : null}
                   </div>
-                  {!sku.isBaseUnitVariant ? <p className="mt-2 text-xs font-medium text-indigo-700">BOM được tự động tính từ SKU đơn vị cơ bản theo tỷ lệ quy đổi. Base SKU: {sku.baseSkuCode || '—'} · Quy đổi: {sku.conversionRate || '—'}.</p> : null}
+                  {!sku.isBaseUnitVariant ? <p className="mt-2 text-xs font-medium text-indigo-700">Định mức được tự động tính từ SKU đơn vị cơ bản theo tỷ lệ quy đổi. SKU cơ bản: {sku.baseSkuCode || '—'} · Quy đổi: {sku.conversionRate || '—'}.</p> : null}
                   {sku.isBaseUnitVariant && getManualBomLines(sku).length === 0 ? (
-                    <p className="mt-3 text-xs font-semibold text-amber-700">Chưa có component BOM. Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.</p>
+                    <p className="mt-3 text-xs font-semibold text-amber-700">Chưa có định mức nguyên liệu. Sản phẩm kệ bắt buộc phải có định mức trước khi gửi duyệt.</p>
                   ) : null}
                   {!sku.isBaseUnitVariant && (deriveVariantBomPreview((skuRows.find((item) => item.isBaseUnitVariant) ?? {}).bomLines, sku.conversionRate) ?? []).length === 0 ? (
-                    <p className="mt-3 text-xs text-slate-400">Chưa có component BOM.</p>
+                    <p className="mt-3 text-xs text-slate-400">Chưa có định mức nguyên liệu.</p>
                   ) : null}
                   {((sku.isBaseUnitVariant ? getManualBomLines(sku) : deriveVariantBomPreview((skuRows.find((item) => item.isBaseUnitVariant) ?? {}).bomLines, sku.conversionRate)) ?? []).length > 0 ? (
                     <div className="mt-3 overflow-x-auto">
@@ -2321,14 +2321,14 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
                   </div>
 
                   <div className="rounded-lg border border-slate-100 p-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Định mức nguyên liệu</p>
                     <div className="mt-2 space-y-2 text-xs">
                       {variants.some((variant) => getSnapshotBomLines(variant).length > 0) ? (
                         variants.flatMap((variant) => getSnapshotBomLines(variant).map((line, lineIndex) => (
                           <div key={`${getVariantValue(variant, 'skuCode', 'sku')}-${lineIndex}`} className="rounded-lg bg-slate-50 p-2">
-                            <p><span className="font-semibold">Output SKU:</span> <span className="font-mono text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</span></p>
-                            <p><span className="font-semibold">Component SKU:</span> {line.componentSkuCode || line.ComponentSkuCode || '—'}</p>
-                            <p><span className="font-semibold">Tên component:</span> {getBomLineDisplayName(line)}</p>
+                            <p><span className="font-semibold">SKU thành phẩm:</span> <span className="font-mono text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</span></p>
+                            <p><span className="font-semibold">Mã nguyên liệu:</span> {line.componentSkuCode || line.ComponentSkuCode || '—'}</p>
+                            <p><span className="font-semibold">Tên nguyên liệu:</span> {getBomLineDisplayName(line)}</p>
                             <p><span className="font-semibold">Định mức:</span> {line.quantity ?? line.Quantity ?? '—'} {line.materialUnitName || line.MaterialUnitName || ''}</p>
                             {line.note || line.Note ? <p><span className="font-semibold">Ghi chú:</span> {line.note || line.Note}</p> : null}
                             {line.isRequiredBaseComponent || line.IsRequiredBaseComponent ? <p className="font-semibold text-emerald-700">Tự động theo quy đổi</p> : null}

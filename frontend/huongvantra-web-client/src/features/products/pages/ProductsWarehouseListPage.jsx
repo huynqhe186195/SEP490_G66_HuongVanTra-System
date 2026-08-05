@@ -861,7 +861,7 @@ export default function ProductsWarehouseListPage() {
                                 {!product.isDeleted && canCreate ? (
                                   <button
                                     type="button"
-                                    title="Master data chỉ sửa qua workflow phê duyệt"
+                                    title="Dữ liệu gốc chỉ sửa qua quy trình phê duyệt"
                                     className="rounded-full p-1.5 text-slate-400"
                                     onClick={() => showError('Sửa Product/SKU/BOM trực tiếp đã bị khóa. Vui lòng tạo yêu cầu Product Creation mới nếu cần thay đổi master data.')}
                                   >

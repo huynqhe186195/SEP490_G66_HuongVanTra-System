@@ -61,12 +61,12 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
             ? { ...prev, queueStatus: result.queueStatus, orderStockStatus: result.orderStockStatus, canDeduct: false }
             : prev,
         )
-        showError('Chưa đủ tồn để xác nhận Queue. Queue đã chuyển sang Chờ hàng.')
+        showError('Chưa đủ tồn để xác nhận. Yêu cầu đóng gói đã chuyển sang Chờ hàng.')
         onConfirmed?.()
         return
       }
 
-      showSuccess('Đã xác nhận Queue thành công.')
+      showSuccess('Đã xác nhận đóng gói thành công.')
       onConfirmed?.()
       onClose?.()
     } catch (error) {
@@ -91,7 +91,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
     setIsCancelling(true)
     try {
       await cancelStockDeductQueue(queueId, reason)
-      showSuccess('Đã hủy queue trừ tồn.')
+      showSuccess('Đã hủy yêu cầu trừ tồn.')
       onConfirmed?.()
       onClose?.()
     } catch (error) {
@@ -110,6 +110,12 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
     preview &&
     (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient')
   const isBomReconciliation = Boolean(preview?.isBomReconciliation)
+  const willCreateProductionOrder = Boolean(preview?.willCreateProductionOrder)
+  const willCreateStockTransfer = Boolean(preview?.willCreateStockTransfer)
+  const generatedDocuments = [
+    willCreateProductionOrder ? 'Lệnh sản xuất (SX-…)' : null,
+    willCreateStockTransfer ? 'Phiếu điều chuyển Kho → Kệ Hàng (DC-…)' : null,
+  ].filter(Boolean)
   const operationLabel = isBomReconciliation ? 'đóng gói và trừ Kho' : 'trừ tồn Kệ Hàng'
   const stockLocationLabel = isBomReconciliation ? 'Kho' : 'Kệ Hàng'
 
@@ -250,26 +256,38 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
 
               {!canConfirm && !canCancel ? (
                 <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Bạn chỉ có quyền xem Queue này.
+                  Bạn chỉ có quyền xem yêu cầu đóng gói này.
                 </p>
               ) : null}
               {!canConfirm && canCancel ? (
                 <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Quản lý/Admin chỉ xử lý ngoại lệ bằng thao tác hủy Queue; Thủ kho là actor xác nhận vận hành.
+                  Quản lý/Admin chỉ xử lý ngoại lệ bằng thao tác hủy yêu cầu; Thủ kho là người xác nhận vận hành.
                 </p>
               ) : null}
 
               {showConfirmDialog ? (
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">Xác nhận {operationLabel}?</p>
-                  <p className="mt-1">
-                    Hệ thống sẽ trừ nguyên liệu kho tổng theo snapshot BOM của phần thiếu và tạo phiếu xuất
-                    `sales_bom_reconciliation`. Thành phẩm đã trừ ở checkout sẽ không bị trừ lại.
-                  </p>
-                  <p className="mt-1 hidden">
-                    Hệ thống sẽ trừ `QuantityOnHand` cho các SKU trong đơn này và tạo phiếu xuất
-                    `sales_deduct_later`. Tồn kho tổng không bị thay đổi.
-                  </p>
+                  {isBomReconciliation ? (
+                    <p className="mt-1">
+                      Hệ thống sẽ trừ nguyên liệu kho tổng theo snapshot BOM của phần thiếu. Thành phẩm đã trừ ở
+                      checkout sẽ không bị trừ lại.
+                    </p>
+                  ) : (
+                    <p className="mt-1">
+                      Hệ thống sẽ chuyển thành phẩm từ Kho sang Kệ Hàng rồi xuất bán cho đơn này.
+                    </p>
+                  )}
+                  {generatedDocuments.length ? (
+                    <div className="mt-2 rounded-lg border border-[#538463]/20 bg-white px-3 py-2">
+                      <p className="font-semibold text-slate-900">Chứng từ sẽ được sinh tự động:</p>
+                      <ul className="mt-1 list-disc pl-5">
+                        {generatedDocuments.map((doc) => (
+                          <li key={doc}>{doc}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
@@ -304,7 +322,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                       className="mt-2 min-h-24 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-red-400"
                       value={cancelReason}
                       onChange={(event) => setCancelReason(event.target.value)}
-                      placeholder="Nhập lý do hủy Queue..."
+                      placeholder="Nhập lý do hủy yêu cầu..."
                     />
                   </label>
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -352,7 +370,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
               onClick={() => setIsCancelOpen(true)}
               className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              Hủy queue
+              Hủy yêu cầu
             </button>
           ) : null}
           {canConfirmQueue && !showConfirmDialog && !isCancelOpen ? (

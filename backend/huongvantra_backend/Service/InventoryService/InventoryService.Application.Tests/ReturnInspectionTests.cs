@@ -70,6 +70,7 @@ public sealed class ReturnInspectionTests
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),

@@ -141,6 +141,10 @@ function buildOrderRequestFromPosPayload(
     paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
     acceptBackorder: Boolean(payload.acceptBackorder),
     fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
+    pickupDate: payload.pickupDate || null,
+    pickupNote: payload.pickupNote || null,
+    pickupContactName: payload.pickupContactName || null,
+    pickupContactPhone: payload.pickupContactPhone || null,
     payments: (payload.payments ?? []).map((allocation) => ({
       paymentMethod: mapPaymentMethod(allocation.paymentMethod),
       amount: Number(allocation.amount ?? 0),
@@ -185,6 +189,10 @@ function mapOrderDetailToPosResult(order) {
     estimatedReadyFrom: order.estimatedReadyFrom ?? null,
     estimatedReadyTo: order.estimatedReadyTo ?? null,
     fulfillmentPreference: order.fulfillmentPreference ?? null,
+    pickupDate: order.pickupDate ?? null,
+    pickupContactName: order.pickupContactName ?? '',
+    pickupContactPhone: order.pickupContactPhone ?? '',
+    pickupCode: order.pickupCode ?? '',
     items: (order.items ?? []).map((row) => ({
       productId: row.skuId,
       productName: row.skuSnapshotName,
@@ -225,6 +233,10 @@ export function mapPosOrderResult(item) {
     estimatedReadyFrom: item.estimatedReadyFrom ?? item.EstimatedReadyFrom ?? null,
     estimatedReadyTo: item.estimatedReadyTo ?? item.EstimatedReadyTo ?? null,
     fulfillmentPreference: item.fulfillmentPreference ?? item.FulfillmentPreference ?? null,
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
+    pickupContactName: item.pickupContactName ?? item.PickupContactName ?? '',
+    pickupContactPhone: item.pickupContactPhone ?? item.PickupContactPhone ?? '',
+    pickupCode: item.pickupCode ?? item.PickupCode ?? '',
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
       productName: row.productName ?? row.ProductName ?? '',

@@ -122,6 +122,8 @@ function mapPreview(data) {
     items: (data.items ?? data.Items ?? []).map(mapPreviewItem),
     lines: (data.lines ?? data.Lines ?? []).map(mapQueueLine),
     isBomReconciliation: Boolean(data.isBomReconciliation ?? data.IsBomReconciliation),
+    willCreateProductionOrder: Boolean(data.willCreateProductionOrder ?? data.WillCreateProductionOrder),
+    willCreateStockTransfer: Boolean(data.willCreateStockTransfer ?? data.WillCreateStockTransfer),
   }
 }
 

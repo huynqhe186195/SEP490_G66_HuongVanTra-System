@@ -13,7 +13,7 @@ import {
   canViewAllOrders,
 } from '../../auth/utils/permissions.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
-import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
 import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
@@ -31,6 +31,7 @@ import {
   completeOrder,
   fetchOrder,
   fetchReturnsByOrderId,
+  markOrderDelivered,
   reprintReceipt,
   requestBackorderCancellation,
   reviewBackorderCancellation,
@@ -42,6 +43,7 @@ import {
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
+  canMarkDelivered,
   canReprintReceipt,
   canReturnOrder,
   canShipOrder,
@@ -57,6 +59,8 @@ import {
   isExchangeOrder,
   getOrderStatusClass,
   getOrderStatusLabel,
+  getPickupDueBadge,
+  getRefundStatusLabel,
   getOrderPaymentMethodLabel,
   resolveOrderPaymentDisplay,
   getOrderRemainingDebt,
@@ -363,6 +367,9 @@ function OrderDetailPage() {
       } else if (action === 'complete') {
         await completeOrder(order.id)
         showSuccess('Đã hoàn tất đơn hàng.')
+      } else if (action === 'markDelivered') {
+        await markOrderDelivered(order.id)
+        showSuccess('Đã ghi nhận giao hàng cho khách.')
       } else if (action === 'cancel') {
         setIsSaving(false)
         setConfirmCancelOpen(true)
@@ -416,8 +423,10 @@ function OrderDetailPage() {
   const showTransferQr = isPendingTransferPayment(order)
   const compactProducts = isPendingPaymentOrder(order)
   const inventorySyncMeta = resolveInventorySyncMeta(order)
+  const pickupDueBadge = getPickupDueBadge(order)
   const normalizedStatus = String(order.orderStatus || '').trim()
-  const isWaitingMaterials = normalizedStatus === 'WaitingMaterials'
+  const isAwaitingFulfillment = ['WaitingMaterials', 'WaitingTransfer', 'WaitingProduction', 'ReadyToDeliver']
+    .includes(normalizedStatus)
   const isCancellationRequested = normalizedStatus === 'CancellationRequested'
   const hasCollectedPayment = order.payments?.some((row) => row.paymentStatus === 'Success')
   const contractStepHint = contractOrder
@@ -472,6 +481,11 @@ function OrderDetailPage() {
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
             {getOrderStatusLabel(order.orderStatus)}
           </span>
+          {pickupDueBadge ? (
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${pickupDueBadge.className}`}>
+              {pickupDueBadge.label}
+            </span>
+          ) : null}
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${inventorySyncMeta.className}`}>
             {inventorySyncMeta.label}
           </span>
@@ -560,7 +574,7 @@ function OrderDetailPage() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt>Hoàn tiền</dt>
-                  <dd className="font-semibold">{order.refundStatus || 'NotRequired'}</dd>
+                  <dd className="font-semibold">{getRefundStatusLabel(order.refundStatus)}</dd>
                 </div>
               </dl>
               {order.cancellationReason ? (
@@ -588,6 +602,52 @@ function OrderDetailPage() {
                 <p className="mt-2 break-words text-xs text-emerald-700">
                   Bằng chứng hoàn tiền: {order.refundEvidence}
                 </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {order.pickupDate || order.deliveredAt || order.pickupCode ? (
+            <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Hẹn lấy hàng</h2>
+              {order.pickupCode ? (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Mã nhận hàng</p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-[0.25em] text-amber-900">
+                    {order.pickupCode}
+                  </p>
+                  <p className="mt-1 text-xs text-amber-700">Đối chiếu mã này trước khi bấm &quot;Đã giao&quot;.</p>
+                </div>
+              ) : null}
+              <dl className="space-y-2 text-sm text-slate-700">
+                {order.pickupDate ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Ngày hẹn</dt>
+                    <dd className="font-semibold">{formatVietnamDate(order.pickupDate)}</dd>
+                  </div>
+                ) : null}
+                {order.pickupContactName?.trim() ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Người nhận</dt>
+                    <dd className="font-semibold">{order.pickupContactName}</dd>
+                  </div>
+                ) : null}
+                {order.pickupContactPhone?.trim() ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Số điện thoại</dt>
+                    <dd className="font-semibold tabular-nums">{order.pickupContactPhone}</dd>
+                  </div>
+                ) : null}
+                {order.deliveredAt ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Đã giao</dt>
+                    <dd className="font-semibold text-emerald-700">
+                      {order.deliveredByName || '—'} · {formatVietnamDateTime(order.deliveredAt)}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              {order.pickupNote?.trim() ? (
+                <p className="mt-3 whitespace-pre-wrap text-xs text-slate-600">Ghi chú: {order.pickupNote}</p>
               ) : null}
             </section>
           ) : null}
@@ -653,7 +713,7 @@ function OrderDetailPage() {
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thao tác</h2>
               <div className="flex flex-col gap-2">
-                {isWaitingMaterials && canApplyChanges ? (
+                {isAwaitingFulfillment && canApplyChanges ? (
                   <button
                     type="button"
                     disabled={isSaving}
@@ -715,6 +775,16 @@ function OrderDetailPage() {
                     {contractOrder ? 'Khách đã nhận hàng — ghi công nợ' : 'Hoàn tất đơn'}
                   </button>
                 ) : null}
+                {canMarkDelivered(order) ? (
+                  <button
+                    type="button"
+                    disabled={isSaving || !canApplyChanges}
+                    onClick={() => runAction('markDelivered')}
+                    className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+                  >
+                    Đã giao hàng cho khách
+                  </button>
+                ) : null}
                 {canCollectCod && canVerifyCod(order) ? (
                   <button
                     type="button"
@@ -745,7 +815,7 @@ function OrderDetailPage() {
                     In lại hóa đơn
                   </button>
                 ) : null}
-                {canCancelOrder(order) && !isWaitingMaterials && !isCancellationRequested ? (
+                {canCancelOrder(order) && !isAwaitingFulfillment && !isCancellationRequested ? (
                   <button
                     type="button"
                     disabled={isSaving || !canApplyChanges}

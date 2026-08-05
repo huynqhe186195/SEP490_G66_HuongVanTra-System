@@ -21,6 +21,7 @@ import {
   getOrderChannelLabel,
   getOrderStatusClass,
   getOrderStatusLabel,
+  getPickupDueBadge,
 } from '../utils/orderDisplay.js'
 
 const ORDER_STATUS_CHIPS = [
@@ -28,6 +29,9 @@ const ORDER_STATUS_CHIPS = [
   { value: 'Processing', label: 'Đang xử lý' },
   { value: 'PendingPayment', label: 'Chờ thanh toán' },
   { value: 'WaitingMaterials', label: 'Chờ nguyên liệu' },
+  { value: 'WaitingTransfer', label: 'Chờ điều chuyển' },
+  { value: 'WaitingProduction', label: 'Chờ sản xuất' },
+  { value: 'ReadyToDeliver', label: 'Sẵn sàng giao' },
   { value: 'CancellationRequested', label: 'Chờ duyệt hủy' },
   { value: 'Shipping', label: 'Đang giao' },
   { value: 'Completed', label: 'Hoàn tất' },
@@ -402,6 +406,11 @@ function OrdersPage() {
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
                           {getOrderStatusLabel(order.orderStatus)}
                         </span>
+                        {getPickupDueBadge(order) ? (
+                          <span className={`mt-1 block w-fit rounded-full px-3 py-1 text-xs font-semibold ${getPickupDueBadge(order).className}`}>
+                            {getPickupDueBadge(order).label}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-4">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderChannelClass(order.orderChannel)}`}>

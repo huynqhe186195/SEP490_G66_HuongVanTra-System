@@ -140,6 +140,7 @@ function getProductTypeLabel(productType) {
 function getSkuUnitName(sku) {
   if (sku?.unitName) return sku.unitName
   if (sku?.inventoryUnit === 'Gram') return 'g'
+  if (sku?.inventoryUnit === 'Piece') return 'cái'
   return sku?.inventoryUnit || '—'
 }
 
@@ -970,7 +971,7 @@ function InventoryImportCreatePage() {
         const isGram = sku.inventoryUnit === 'Gram'
         const validUnits = isGram ? ['kg', 'g'] : ['piece']
         if (!validUnits.includes(line.submittedUnit)) {
-          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU đơn vị ${isGram ? 'Gram (kg/g)' : 'Piece'}.`
+          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU tính theo ${isGram ? 'khối lượng (kg/g)' : 'cái (piece)'}.`
         }
       }
 

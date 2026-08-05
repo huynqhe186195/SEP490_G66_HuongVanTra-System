@@ -96,6 +96,21 @@ const ReceiptPaper = forwardRef(function ReceiptPaper({ receipt }, ref) {
           <div className="receipt-meta">
             Dự kiến: {receipt.estimatedReadyFromLabel || '—'} - {receipt.estimatedReadyToLabel || '—'}
           </div>
+          {receipt.pickupDateLabel ? (
+            <div className="receipt-meta">Hẹn lấy: {receipt.pickupDateLabel}</div>
+          ) : null}
+          {receipt.pickupContactName ? (
+            <div className="receipt-meta">
+              Người nhận: {receipt.pickupContactName}
+              {receipt.pickupContactPhone ? ` — ${receipt.pickupContactPhone}` : ''}
+            </div>
+          ) : null}
+          {receipt.pickupCode ? (
+            <>
+              <div className="receipt-meta receipt-highlight">MÃ NHẬN HÀNG: {receipt.pickupCode}</div>
+              <div className="receipt-meta">Vui lòng giữ hoá đơn và đọc mã này khi tới lấy hàng.</div>
+            </>
+          ) : null}
         </>
       ) : null}
 

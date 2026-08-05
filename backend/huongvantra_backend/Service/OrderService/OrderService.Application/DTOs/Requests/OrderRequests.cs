@@ -22,7 +22,12 @@ public record CreateOrderRequest(
     List<CreatePaymentAllocationRequest>? Payments = null,
     Guid? ContractId = null,
     bool AcceptBackorder = false,
-    FulfillmentPreference FulfillmentPreference = FulfillmentPreference.PartialDelivery
+    FulfillmentPreference FulfillmentPreference = FulfillmentPreference.PartialDelivery,
+    // POS-06 (KB4): thu ngân nhập ngày hẹn khách quay lại lấy hàng khi chấp nhận backorder.
+    DateTime? PickupDate = null,
+    string? PickupNote = null,
+    string? PickupContactName = null,
+    string? PickupContactPhone = null
 );
 
 public record CreatePaymentAllocationRequest(

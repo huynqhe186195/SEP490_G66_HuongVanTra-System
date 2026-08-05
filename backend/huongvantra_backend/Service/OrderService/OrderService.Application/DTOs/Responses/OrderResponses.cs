@@ -61,7 +61,14 @@ public record OrderResponse(
     string? RefundApprovedByName = null,
     DateTime? RefundedAt = null,
     Guid? RefundedBy = null,
-    string? RefundedByName = null
+    string? RefundedByName = null,
+    DateTime? PickupDate = null,
+    string? PickupNote = null,
+    DateTime? DeliveredAt = null,
+    string? DeliveredByName = null,
+    string? PickupContactName = null,
+    string? PickupContactPhone = null,
+    string? PickupCode = null
 );
 
 public record StockHandlingLineResponse(    Guid SkuId,
@@ -187,7 +194,9 @@ public record OrderSummaryResponse(
     int TotalQuantity = 0,
     // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
     bool HasActiveStockReservation = false,
-    string? EmployeeSnapshotName = null
+    string? EmployeeSnapshotName = null,
+    // POS-06 (KB4): dùng để hiện badge hạn giao ngoài danh sách đơn.
+    DateTime? PickupDate = null
 );
 
 public record CustomBundleIngredientResponse(

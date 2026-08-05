@@ -29,11 +29,14 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
         Guid? excludeQueueId = null,
         CancellationToken ct = default)
     {
+        // Chỉ queue Waiting mới giữ chỗ nguyên liệu. Queue Insufficient đã được xác nhận là
+        // thiếu nguyên liệu nên phần thiếu của nó không được tính là "đang giữ chỗ" — nếu tính,
+        // số thiếu bị cộng dồn và mọi đơn KB3 sau đó đều bị phân loại sai thành backorder.
         var query = _db.StockDeductQueues
             .Include(q => q.Items)
             .Where(q =>
                 !q.IsDeducted &&
-                (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient) &&
+                q.QueueStatus == QueueStatus.Waiting &&
                 q.Items.Any(i =>
                     i.PendingBomQuantity != null &&
                     i.PendingBomQuantity > 0 &&

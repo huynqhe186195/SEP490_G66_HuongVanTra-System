@@ -14,8 +14,8 @@ import StockDeductPreviewModal from '../components/StockDeductPreviewModal.jsx'
 import { fetchPendingStockDeductQueues } from '../services/stockDeductQueueApi.js'
 import {
   formatVnd,
-  getPaymentStatusClass,
-  getPaymentStatusLabel,
+  getOrderStatusClass,
+  getOrderStatusLabel,
   getQueueStatusLabel,
   getStockStatusClass,
   getStockStatusLabel,
@@ -106,10 +106,10 @@ function StockDeductQueuePage() {
         title="Chờ đóng gói / trừ Kho"
         titleInfo={
           canExecuteDeduct
-            ? 'Thủ kho xác nhận đóng gói và trừ nguyên liệu Kho theo Queue.'
+            ? 'Thủ kho xác nhận đóng gói và trừ nguyên liệu Kho theo yêu cầu đóng gói.'
             : canCancelQueue
-              ? 'Theo dõi Queue; Quản lý hoặc Admin chỉ hủy khi xử lý ngoại lệ.'
-              : 'Theo dõi Queue đóng gói theo quyền được cấp.'
+              ? 'Theo dõi yêu cầu đóng gói; Quản lý hoặc Admin chỉ hủy khi xử lý ngoại lệ.'
+              : 'Theo dõi yêu cầu đóng gói theo quyền được cấp.'
         }
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
@@ -148,10 +148,10 @@ function StockDeductQueuePage() {
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
-                <th className="px-4 py-4">Queue</th>
+                <th className="px-4 py-4">Trạng thái đóng gói</th>
                 <th className="px-4 py-4">Tồn cần đối soát</th>
-                <th className="px-4 py-4">Thanh toán</th>
-                <th className="px-4 py-4">Ngày tạo queue</th>
+                <th className="px-4 py-4">Trạng thái đơn</th>
+                <th className="px-4 py-4">Ngày tạo yêu cầu</th>
                 <th className="px-8 py-4 text-right">Tổng tiền</th>
                 <th className="px-4 py-4 text-right">Thao tác</th>
               </tr>
@@ -167,7 +167,7 @@ function StockDeductQueuePage() {
               {!isLoading && queues.length === 0 ? (
                 <tr>
                   <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Không có Queue đóng gói trong mục này.
+                    Không có yêu cầu đóng gói trong mục này.
                   </td>
                 </tr>
               ) : null}
@@ -212,9 +212,9 @@ function StockDeductQueuePage() {
                       </td>
                       <td className="px-4 py-5">
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(row.orderPaymentStatus)}`}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(row.orderPaymentStatus)}`}
                         >
-                          {getPaymentStatusLabel(row.orderPaymentStatus)}
+                          {getOrderStatusLabel(row.orderPaymentStatus)}
                         </span>
                       </td>
                       <td className="px-4 py-5 text-sm text-slate-600">
@@ -247,7 +247,7 @@ function StockDeductQueuePage() {
           pageSize={pageSize}
           pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
-          itemLabel="Queue đóng gói"
+          itemLabel="yêu cầu đóng gói"
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
         />

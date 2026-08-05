@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
@@ -595,6 +596,9 @@ public class OrderLogic(
                 order.EstimatedReadyTo = acceptedAt.AddDays(backorderMaxLeadDays);
                 order.FulfillmentPreference = req.FulfillmentPreference;
                 ApplyFulfillmentSnapshot(order, stockPreview, req.FulfillmentPreference);
+                order.PickupDate = req.PickupDate ?? order.EstimatedReadyFrom;
+                order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
+                ApplyPickupContact(order, req);
 
                 if (isPosCompletedOnCreate)
                     order.OrderStatus = OrderStatus.WaitingMaterials;
@@ -643,8 +647,8 @@ public class OrderLogic(
                 ct);
             if (stockHandling.BackorderRequired)
                 throw new BackorderConfirmationRequiredException(stockHandling);
-            if (!stockHandling.HasPendingStockReconciliation)
-                order.OrderStatus = OrderStatus.Completed;
+            // POS-06: mỗi mode ứng với một kịch bản chờ khác nhau ở phía Thủ kho.
+            order.OrderStatus = ResolvePosStockHandlingStatus(stockHandling, order.OrderStatus);
             ApplyFulfillmentSnapshot(
                 order,
                 stockHandling,
@@ -1204,11 +1208,11 @@ public class OrderLogic(
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
-        if (order.OrderStatus == OrderStatus.WaitingMaterials
+        if (IsBackorderRefundGuardedStatus(order.OrderStatus)
             && payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
         {
             throw new OrderValidationException(
-                "Đơn chờ nguyên liệu đã thu tiền. Hãy gửi yêu cầu hủy để Manager duyệt và hoàn tiền có bằng chứng.");
+                "Đơn chờ hàng đã thu tiền. Hãy gửi yêu cầu hủy để Manager duyệt và hoàn tiền có bằng chứng.");
         }
 
         // POS-04 (quyết định #10): giữ lại trạng thái trước khi hủy để Inventory biết
@@ -1264,8 +1268,8 @@ public class OrderLogic(
 
         if (order.OrderStatus == OrderStatus.CancellationRequested)
             return MapToResponse(order);
-        if (order.OrderStatus != OrderStatus.WaitingMaterials)
-            throw new OrderValidationException("Chỉ đơn đang chờ nguyên liệu mới được gửi yêu cầu hủy backorder.");
+        if (!IsBackorderRefundGuardedStatus(order.OrderStatus))
+            throw new OrderValidationException("Chỉ đơn đang chờ hàng mới được gửi yêu cầu hủy backorder.");
         if (string.IsNullOrWhiteSpace(reason))
             throw new OrderValidationException("Lý do yêu cầu hủy là bắt buộc.");
         if (reason.Trim().Length > 500)
@@ -1569,6 +1573,60 @@ public class OrderLogic(
         await _orderRepo.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// POS-06 (KB4): Sale xác nhận khách đã quay lại lấy hàng. Chỉ nhận đơn ở
+    /// <see cref="OrderStatus.ReadyToDeliver"/>; ghi log người giao rồi hoàn tất đơn.
+    /// </summary>
+    public async Task MarkDeliveredAsync(
+        Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        EnsureCanModify(order, access);
+
+        if (order.OrderStatus != OrderStatus.ReadyToDeliver)
+            throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
+
+        var claimed = await _orderRepo.TryTransitionStatusAsync(
+            order.Id, OrderStatus.ReadyToDeliver, OrderStatus.Completed, ct);
+        if (!claimed)
+        {
+            var current = await _orderRepo.GetByIdAsync(order.Id, ct)
+                ?? throw new OrderNotFoundException(order.Id);
+            if (current.OrderStatus == OrderStatus.Completed)
+                return;
+            throw new OrderValidationException("Trạng thái đơn vừa thay đổi; không thể xác nhận giao hàng.");
+        }
+
+        var deliveredAt = DateTime.UtcNow;
+        order.OrderStatus = OrderStatus.Completed;
+        order.DeliveredAt = deliveredAt;
+        order.DeliveredBy = actorId;
+        order.DeliveredByName = actorName;
+        order.UpdatedAt = deliveredAt;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Completed,
+            $"Đã giao hàng cho khách{(string.IsNullOrWhiteSpace(actorName) ? string.Empty : $" bởi {actorName}")}.",
+            actorId,
+            actorName,
+            ct);
+
+        if (order.CustomerId.HasValue)
+        {
+            var paidAmount = (order.Payments ?? [])
+                .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+                .Sum(payment => payment.Amount);
+            await EnqueueOrderCompletedAsync(order, Math.Max(0, order.FinalAmount - paidAmount), ct);
+        }
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        if (order.CustomerId.HasValue)
+            TrySendInvoiceEmail(order);
+    }
+
     public async Task CompleteAsync(
         Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null,
         decimal? actualReceivedAmount = null, CancellationToken ct = default)
@@ -1722,8 +1780,7 @@ public class OrderLogic(
             if (stockHandling.BackorderRequired)
                 throw new OrderValidationException(
                     "Tồn kho đã thay đổi sau khi tạo yêu cầu thanh toán và khách chưa xác nhận chờ hàng.");
-            if (!stockHandling.HasPendingStockReconciliation)
-                order.OrderStatus = OrderStatus.Completed;
+            order.OrderStatus = ResolvePosStockHandlingStatus(stockHandling, order.OrderStatus);
             ApplyFulfillmentSnapshot(
                 order,
                 stockHandling,
@@ -2064,24 +2121,42 @@ public class OrderLogic(
             ?? throw new OrderNotFoundException(orderId);
 
         if (order.InventorySyncStatus == InventorySyncStatus.Synced
-            && order.OrderStatus != OrderStatus.WaitingMaterials)
+            && order.OrderStatus is not (OrderStatus.WaitingMaterials
+                or OrderStatus.WaitingTransfer
+                or OrderStatus.WaitingProduction))
             return;
 
         order.InventorySyncStatus = InventorySyncStatus.Synced;
         order.UpdatedAt = DateTime.UtcNow;
 
         var completedForPickup = false;
-        if (order.OrderStatus == OrderStatus.WaitingMaterials)
+        // POS-06: KB2/KB3 khách đang chờ tại quầy nên hoàn thành luôn;
+        // KB4 khách đã về nên chỉ sẵn sàng giao, chờ Sale bấm "Đã giao hàng".
+        var readyToDeliver = false;
+        if (order.OrderStatus is OrderStatus.WaitingMaterials
+            or OrderStatus.WaitingTransfer
+            or OrderStatus.WaitingProduction)
         {
-            completedForPickup = string.IsNullOrWhiteSpace(order.ShippingAddress);
-            order.OrderStatus = completedForPickup
-                ? OrderStatus.Completed
-                : OrderStatus.Processing;
+            var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
+            if (!pickupAtStore)
+            {
+                order.OrderStatus = OrderStatus.Processing;
+            }
+            else if (order.OrderStatus == OrderStatus.WaitingMaterials)
+            {
+                readyToDeliver = true;
+                order.OrderStatus = OrderStatus.ReadyToDeliver;
+            }
+            else
+            {
+                completedForPickup = true;
+                order.OrderStatus = OrderStatus.Completed;
+            }
 
             foreach (var detail in order.OrderDetails ?? [])
             {
                 detail.BackorderQuantity = 0;
-                if (completedForPickup)
+                if (completedForPickup || readyToDeliver)
                 {
                     detail.ImmediateFulfilledQuantity = detail.Quantity;
                     detail.ReservedFinishedQuantity = 0;
@@ -2098,7 +2173,17 @@ public class OrderLogic(
             actorName: "Hệ thống",
             ct);
 
-        if (completedForPickup)
+        if (readyToDeliver)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.Updated,
+                "Đã đủ hàng; đơn sẵn sàng giao, chờ khách quay lại lấy.",
+                actorId: null,
+                actorName: "Hệ thống",
+                ct);
+        }
+        else if (completedForPickup)
         {
             await RecordActivityAsync(
                 order.Id,
@@ -2147,8 +2232,9 @@ public class OrderLogic(
         if (order.InventorySyncStatus == InventorySyncStatus.Cancelled)
             return;
 
+        var now = DateTime.UtcNow;
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
-        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedAt = now;
 
         var description = string.IsNullOrWhiteSpace(reason)
             ? "Đã hủy trừ tồn kho cho đơn hàng."
@@ -2161,6 +2247,57 @@ public class OrderLogic(
             actorId: null,
             actorName: "Hệ thống",
             ct);
+
+        // POS-06a: queue backorder bị hủy → đơn không thể tự thoát trạng thái chờ nữa.
+        // Đã thu tiền thì phải qua duyệt hoàn tiền; chưa thu tiền thì hủy thẳng.
+        if (order.OrderStatus is OrderStatus.WaitingMaterials
+            or OrderStatus.WaitingTransfer
+            or OrderStatus.WaitingProduction)
+        {
+            var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+            var collectedAmount = payments
+                .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+                .Sum(payment => payment.Amount);
+
+            if (collectedAmount > 0)
+            {
+                order.OrderStatus = OrderStatus.CancellationRequested;
+                order.RefundStatus = BackorderRefundStatus.PendingApproval;
+                order.RefundAmount = collectedAmount;
+                order.CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+                order.CancellationRequestedAt = now;
+
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.Updated,
+                    $"Kho đã hủy phiếu chờ nguyên liệu. Chờ Manager duyệt hoàn {FormatVnd(collectedAmount)}.",
+                    actorId: null,
+                    actorName: "Hệ thống",
+                    ct);
+            }
+            else
+            {
+                order.OrderStatus = OrderStatus.Cancelled;
+                order.CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
+                foreach (var payment in payments)
+                {
+                    if (payment.PaymentStatus != PaymentStatus.Success)
+                    {
+                        payment.PaymentStatus = PaymentStatus.Failed;
+                        payment.UpdatedAt = now;
+                    }
+                }
+
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.Cancelled,
+                    "Kho đã hủy phiếu chờ nguyên liệu nên đơn hàng bị hủy.",
+                    actorId: null,
+                    actorName: "Hệ thống",
+                    ct);
+            }
+        }
 
         await _orderRepo.SaveChangesAsync(ct);
     }
@@ -2218,6 +2355,21 @@ public class OrderLogic(
         && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials
         && (order.OrderDetails?.Count ?? 0) > 0;
 
+    /// <summary>
+    /// POS-06: ánh xạ mode do InventoryService trả về sang trạng thái đơn.
+    /// KB1 hoàn thành ngay; KB2/KB3 chờ Thủ kho sinh chứng từ; KB4 chờ khách quay lại lấy.
+    /// </summary>
+    private static OrderStatus ResolvePosStockHandlingStatus(
+        InventoryStockHandlingResponse stockHandling,
+        OrderStatus currentStatus) =>
+        stockHandling.StockHandlingMode switch
+        {
+            "WarehouseTransferPending" => OrderStatus.WaitingTransfer,
+            "PartialOrFullPendingBomReconciliation" => OrderStatus.WaitingProduction,
+            "BackorderAccepted" => OrderStatus.WaitingMaterials,
+            _ => stockHandling.HasPendingStockReconciliation ? currentStatus : OrderStatus.Completed
+        };
+
     private static void EnsureIdempotentOrderCanBeReturned(Order order)
     {
         // The idempotency claim is deliberately persisted before calling InventoryService.
@@ -2259,7 +2411,9 @@ public class OrderLogic(
                     previewOnly,
                     backorderMinLeadDays,
                     backorderMaxLeadDays,
-                    order.FulfillmentPreference?.ToString()),
+                    order.FulfillmentPreference?.ToString(),
+                    order.PickupDate,
+                    order.PickupNote),
                 ct);
         }
         catch (InventoryStockHandlingException ex)
@@ -2285,6 +2439,57 @@ public class OrderLogic(
         return (
             windows.Max(window => window.MinLeadDays),
             windows.Max(window => window.MaxLeadDays));
+    }
+
+    /// <summary>
+    /// POS-06 (KB4): đơn backorder phải nhận diện được người tới lấy hàng vài ngày sau.
+    /// Ưu tiên hồ sơ khách đã chọn; khách vãng lai bắt buộc nhập tên + SĐT.
+    /// </summary>
+    private static void ApplyPickupContact(Order order, CreateOrderRequest req)
+    {
+        var name = req.PickupContactName?.Trim();
+        var phone = NormalizePickupPhone(req.PickupContactPhone);
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new OrderValidationException("Đơn chờ hàng phải có tên người nhận để đối chiếu khi khách quay lại.");
+        if (!IsPickupContactNameValid(name))
+            throw new OrderValidationException("Tên người nhận chỉ được chứa chữ cái và khoảng trắng.");
+        if (phone is null)
+            throw new OrderValidationException("Số điện thoại người nhận phải đúng 10 chữ số và bắt đầu bằng 0.");
+
+        order.PickupContactName = name;
+        order.PickupContactPhone = phone;
+        order.PickupCode = GeneratePickupCode();
+    }
+
+    // POS-06: mọi trạng thái "khách chờ hàng" đều đã có thể thu tiền trước, nên huỷ phải qua
+    // duyệt hoàn tiền của Manager thay vì huỷ thẳng.
+    private static bool IsBackorderRefundGuardedStatus(OrderStatus status) =>
+        status is OrderStatus.WaitingMaterials
+            or OrderStatus.WaitingTransfer
+            or OrderStatus.WaitingProduction
+            or OrderStatus.ReadyToDeliver;
+
+    private static bool IsPickupContactNameValid(string name) =>
+        name.All(c => char.IsLetter(c) || char.IsWhiteSpace(c));
+
+    private static string? NormalizePickupPhone(string? raw)
+    {
+        var digits = new string((raw ?? string.Empty).Where(char.IsDigit).ToArray());
+        return digits.Length == 10 && digits[0] == '0' ? digits : null;
+    }
+
+    // Bỏ ký tự dễ đọc nhầm (0/O, 1/I) vì mã được đọc miệng tại quầy.
+    private const string PickupCodeAlphabet = "23456789ACDEFGHJKLMNPQRSTUVWXYZ";
+
+    private static string GeneratePickupCode()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(6);
+        return string.Create(6, bytes, static (span, source) =>
+        {
+            for (var i = 0; i < span.Length; i++)
+                span[i] = PickupCodeAlphabet[source[i] % PickupCodeAlphabet.Length];
+        });
     }
 
     private static void ApplyFulfillmentSnapshot(
@@ -2666,7 +2871,14 @@ public class OrderLogic(
         o.RefundApprovedByName,
         o.RefundedAt,
         o.RefundedBy,
-        o.RefundedByName
+        o.RefundedByName,
+        o.PickupDate,
+        o.PickupNote,
+        o.DeliveredAt,
+        o.DeliveredByName,
+        o.PickupContactName,
+        o.PickupContactPhone,
+        o.PickupCode
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)
@@ -2683,7 +2895,8 @@ public class OrderLogic(
             codPayment is { IsCodVerified: false } && codPayment.Amount > 0 ? codPayment.Amount : null,
             o.OrderDetails?.Sum(d => d.Quantity) ?? 0,
             HasActiveStockReservation: false,
-            EmployeeSnapshotName: o.EmployeeSnapshotName);
+            EmployeeSnapshotName: o.EmployeeSnapshotName,
+            PickupDate: o.PickupDate);
     }
 
     private static string FormatVnd(decimal amount)

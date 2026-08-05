@@ -38,7 +38,9 @@ public record StockDeductQueueLineResponse(
     int OrderedQuantity,
     int FinishedDeductedQuantity,
     int PendingBomQuantity,
-    string StockHandlingMode);
+    string StockHandlingMode,
+    // POS-06 (KB2/KB3): phần chờ điều chuyển Kho thành phẩm → Kệ khi Thủ kho xác nhận.
+    int WarehouseTransferQuantity = 0);
 
 /// <summary>
 /// POS-04 (truy vết giữ chỗ hai chiều): một dòng giữ chỗ tồn Kệ Hàng của đơn COD.
@@ -123,7 +125,10 @@ public record StockDeductPreviewResponse(
     bool CanDeduct,
     List<StockDeductPreviewItemResponse> Items,
     List<StockDeductQueueLineResponse>? Lines = null,
-    bool IsBomReconciliation = false);
+    bool IsBomReconciliation = false,
+    // POS-06: chứng từ sẽ được sinh khi Thủ kho xác nhận — để màn hình preview mô tả trước.
+    bool WillCreateProductionOrder = false,
+    bool WillCreateStockTransfer = false);
 
 public record StockDeductConfirmResponse(
     Guid QueueId,

@@ -48,6 +48,7 @@ public sealed class InventoryLogicIdempotencyTests
             Mock.Of<IInventoryEventPublisher>(),
             BuildPassThroughUnitOfWork(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),

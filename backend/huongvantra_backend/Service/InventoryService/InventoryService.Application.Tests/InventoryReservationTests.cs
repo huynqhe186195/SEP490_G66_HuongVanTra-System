@@ -75,6 +75,7 @@ public sealed class InventoryReservationTests
             publisher ?? Mock.Of<IInventoryEventPublisher>(),
             BuildPassThroughUnitOfWork(db),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),

@@ -238,7 +238,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
       <div className="border-b border-slate-200 pb-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
         <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Phiếu xuất kho</h1>
-        <p className="mt-1 text-sm text-slate-500">Kho tổng - Workflow 1</p>
+        <p className="mt-1 text-sm text-slate-500">Kho tổng</p>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -313,7 +313,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
       <div className="border-b border-slate-200 pb-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
         <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Phiếu nhập kho</h1>
-        <p className="mt-1 text-sm text-slate-500">Kho tổng - Workflow 1</p>
+        <p className="mt-1 text-sm text-slate-500">Kho tổng</p>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">

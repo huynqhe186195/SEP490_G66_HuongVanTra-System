@@ -73,6 +73,7 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             catalogClient ?? Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
@@ -327,7 +328,7 @@ public sealed class SellFirstCheckoutTests
     }
 
     [Fact]
-    public async Task ZeroShelf_SufficientWarehouse_AutoTransfers_NoQueue()
+    public async Task ZeroShelf_SufficientWarehouse_QueuesWarehouseTransfer()
     {
         await using var db = NewDb();
         var sku = Guid.NewGuid();
@@ -338,18 +339,21 @@ public sealed class SellFirstCheckoutTests
             Req(Guid.NewGuid(), (sku, 5)), Guid.NewGuid(), null);
 
         var line = Assert.Single(result.Lines);
-        Assert.Equal("ImmediateFinishedStockOnly", result.StockHandlingMode);
-        Assert.Empty(result.QueueIds);
-        Assert.Equal(5, line.FinishedDeductedQuantity);
+        Assert.Equal("WarehouseTransferPending", result.StockHandlingMode);
+        Assert.Single(result.QueueIds);
+        Assert.Equal(0, line.FinishedDeductedQuantity);
         Assert.Equal(5, line.WarehouseDeductedQuantity);
         Assert.Equal(0, line.PendingBomQuantity);
+        // POS-06 (KB2): Kho chưa bị trừ ở checkout, chờ Thủ kho xác nhận điều chuyển.
         var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == sku);
         Assert.Equal(0, stock.QuantityOnHand);
-        Assert.Equal(5, stock.WarehouseQuantityOnHand);
+        Assert.Equal(10, stock.WarehouseQuantityOnHand);
+        var queueItem = await db.StockDeductQueueItems.AsNoTracking().SingleAsync(i => i.SkuId == sku);
+        Assert.Equal(5, queueItem.WarehouseTransferQuantity);
     }
 
     [Fact]
-    public async Task PartialShelf_PartialWarehouse_FilledByBoth_NoQueue()
+    public async Task PartialShelf_PartialWarehouse_DeductsShelfAndQueuesTransfer()
     {
         await using var db = NewDb();
         var sku = Guid.NewGuid();
@@ -360,10 +364,14 @@ public sealed class SellFirstCheckoutTests
             Req(Guid.NewGuid(), (sku, 7)), Guid.NewGuid(), null);
 
         var line = Assert.Single(result.Lines);
-        Assert.Equal(7, line.FinishedDeductedQuantity);
+        Assert.Equal("WarehouseTransferPending", result.StockHandlingMode);
+        Assert.Equal(3, line.FinishedDeductedQuantity);
         Assert.Equal(4, line.WarehouseDeductedQuantity);
         Assert.Equal(0, line.PendingBomQuantity);
-        Assert.Empty(result.QueueIds);
+        Assert.Single(result.QueueIds);
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == sku);
+        Assert.Equal(0, stock.QuantityOnHand);
+        Assert.Equal(5, stock.WarehouseQuantityOnHand);
     }
 
     [Fact]
@@ -386,7 +394,8 @@ public sealed class SellFirstCheckoutTests
             Req(Guid.NewGuid(), (finishedSku, 7)), Guid.NewGuid(), null);
 
         var line = Assert.Single(result.Lines);
-        Assert.Equal(5, line.FinishedDeductedQuantity);
+        Assert.Equal("PartialOrFullPendingBomReconciliation", result.StockHandlingMode);
+        Assert.Equal(2, line.FinishedDeductedQuantity);
         Assert.Equal(3, line.WarehouseDeductedQuantity);
         Assert.Equal(2, line.PendingBomQuantity);
         Assert.Single(result.QueueIds);
@@ -409,7 +418,9 @@ public sealed class SellFirstCheckoutTests
         Assert.Equal(3, result.Lines.Single(line => line.SkuId == firstSku).WarehouseDeductedQuantity);
         Assert.Equal(3, result.Lines.Single(line => line.SkuId == secondSku).WarehouseDeductedQuantity);
         Assert.All(result.Lines, line => Assert.Equal(0, line.PendingBomQuantity));
-        Assert.Empty(result.QueueIds);
+        // POS-06 (KB2): cả 2 SKU đều cần điều chuyển nên gom vào 1 queue chờ Thủ kho.
+        Assert.Single(result.QueueIds);
+        Assert.Equal(2, await db.StockDeductQueueItems.AsNoTracking().CountAsync());
     }
 
     [Fact]

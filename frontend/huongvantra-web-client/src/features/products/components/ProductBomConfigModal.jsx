@@ -397,7 +397,7 @@ export default function ProductBomConfigModal({
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-          <span className="text-xs text-slate-500">{lines.length} component trong BOM</span>
+          <span className="text-xs text-slate-500">{lines.length} nguyên liệu trong định mức</span>
           <button
             type="button"
             onClick={handleConfirm}

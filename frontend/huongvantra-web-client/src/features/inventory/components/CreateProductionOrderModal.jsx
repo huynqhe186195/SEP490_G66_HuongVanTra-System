@@ -6,7 +6,7 @@ import { me } from '../../auth/services/authApi.js'
 import { fetchProductById, fetchProducts } from '../../products/services/productsApi.js'
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
-import { createProductionOrder, submitProductionOrder } from '../services/productionOrderApi.js'
+import { createProductionOrder } from '../services/productionOrderApi.js'
 
 const STEPS = ['Sản phẩm kệ đầu ra', 'Nguyên liệu / Bao bì cần xuất', 'Xác nhận']
 
@@ -66,6 +66,106 @@ async function fetchFinishedProductsForProduction() {
   } while (page <= totalPages && page <= 20)
 
   return products
+}
+
+function getSkuUnitSuffix(sku) {
+  const variant = String(sku?.variantName || '').trim()
+  if (!variant) return ''
+  const product = String(sku?.productName || '').trim()
+  let suffix = variant
+  if (product && suffix.toLowerCase().startsWith(product.toLowerCase())) {
+    suffix = suffix.slice(product.length).replace(/^[\s\-–—/|,]+/, '')
+  }
+  return suffix.trim().toLowerCase()
+}
+
+function getSkuDisplayName(sku) {
+  const product = String(sku?.productName || '').trim() || String(sku?.skuCode || '')
+  const suffix = getSkuUnitSuffix(sku)
+  return suffix ? `${product} (${suffix})` : product
+}
+
+function SkuSearchPicker({ skus, value, onChange, disabled, loading }) {
+  const rootRef = useRef(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selected = skus.find((sku) => sameId(sku.id, value)) ?? null
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
+
+  const keyword = query.trim().toLowerCase()
+  const filtered = keyword
+    ? skus.filter(
+        (sku) =>
+          getSkuDisplayName(sku).toLowerCase().includes(keyword) ||
+          String(sku.skuCode || '').toLowerCase().includes(keyword),
+      )
+    : skus
+
+  return (
+    <div ref={rootRef} className="relative">
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={isOpen}
+        autoComplete="off"
+        disabled={disabled}
+        className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm outline-none focus:border-[#538463] disabled:opacity-50"
+        placeholder={loading ? 'Đang tải...' : 'Chọn thành phẩm muốn sản xuất'}
+        value={isOpen ? query : selected ? getSkuDisplayName(selected) : ''}
+        onFocus={() => {
+          setIsOpen(true)
+          setQuery('')
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          if (!isOpen) setIsOpen(true)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setIsOpen(false)
+        }}
+      />
+      {isOpen ? (
+        <ul className="custom-scrollbar absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {filtered.length === 0 ? (
+            <li className="px-3 py-3 text-sm text-slate-500">
+              {loading ? 'Đang tải...' : 'Không tìm thấy thành phẩm phù hợp.'}
+            </li>
+          ) : (
+            filtered.map((sku) => {
+              const isSelected = sameId(sku.id, value)
+              return (
+                <li key={sku.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      onChange(String(sku.id))
+                      setIsOpen(false)
+                      setQuery('')
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-[#f6f4ec] ${
+                      isSelected ? 'bg-[#eef5f0] font-semibold text-[#356647]' : 'text-slate-800'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{getSkuDisplayName(sku)}</span>
+                    <span className="shrink-0 font-mono text-xs text-slate-500">{sku.skuCode}</span>
+                  </button>
+                </li>
+              )
+            })
+          )}
+        </ul>
+      ) : null}
+    </div>
+  )
 }
 
 function formatQuantity(value) {
@@ -380,7 +480,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     setStep(2)
   }
 
-  async function handleSubmit({ submitForApproval = false } = {}) {
+  async function handleSubmit() {
     const rows = validateOutputRows()
     if (!rows || !validateBomLines()) return
 
@@ -402,8 +502,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           plannedQuantity: line.requiredQuantity,
         })),
       })
-      const finalOrder = submitForApproval ? await submitProductionOrder(order.id) : order
-      onCreated?.(finalOrder)
+      onCreated?.(order)
       onClose()
     } catch (err) {
       showError(err.message)
@@ -452,37 +551,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               <div className="space-y-3">
                 {outputRows.map((row, index) => (
                   <div key={row.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-800">Thành phẩm đầu ra {index + 1}</p>
-                      {outputRows.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeOutputRow(row.key)}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600"
-                          aria-label="Xóa thành phẩm"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_160px]">
-                      <label className="block space-y-1.5">
-                        <span className="text-xs font-semibold text-[#717971]">SKU thành phẩm *</span>
-                        <select
-                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_160px_auto]">
+                      <div className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Thành phẩm đầu ra {index + 1}</span>
+                        <SkuSearchPicker
+                          skus={tpSkus}
                           value={row.skuId}
-                          onChange={(event) => updateOutputRow(row.key, { skuId: event.target.value })}
+                          onChange={(skuId) => updateOutputRow(row.key, { skuId })}
                           disabled={loadingSkus}
-                        >
-                          <option value="">{loadingSkus ? 'Đang tải...' : 'Chọn SKU thành phẩm'}</option>
-                          {tpSkus.map((sku) => (
-                            <option key={sku.id} value={sku.id}>
-                              {sku.skuCode} - {sku.productName}
-                              {sku.variantName ? ` (${sku.variantName})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          loading={loadingSkus}
+                        />
+                      </div>
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">Số lượng sản xuất *</span>
                         <input
@@ -503,6 +582,19 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           onChange={(event) => updateOutputRow(row.key, { expiresAt: event.target.value })}
                         />
                       </label>
+                      <div className="flex items-end">
+                        {outputRows.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removeOutputRow(row.key)}
+                            className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-400 hover:border-red-200 hover:text-red-600"
+                            aria-label="Xóa thành phẩm"
+                            title="Xóa thành phẩm"
+                          >
+                            <span className="material-symbols-outlined text-[20px]">delete</span>
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -821,24 +913,14 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             </button>
           )}
           {step === 2 && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleSubmit({ submitForApproval: false })}
-                disabled={saving}
-                className="rounded-xl border border-[#538463]/30 px-5 py-2 text-sm font-bold text-[#356647] hover:bg-[#f3f7f4] disabled:opacity-50"
-              >
-                {saving ? 'Đang tạo...' : 'Lưu nháp'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSubmit({ submitForApproval: true })}
-                disabled={saving}
-                className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-              >
-                {saving ? 'Đang tạo...' : 'Tạo và gửi duyệt'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={saving}
+              className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+            >
+              {saving ? 'Đang tạo...' : 'Tạo lệnh sản xuất'}
+            </button>
           )}
         </footer>
       </div>

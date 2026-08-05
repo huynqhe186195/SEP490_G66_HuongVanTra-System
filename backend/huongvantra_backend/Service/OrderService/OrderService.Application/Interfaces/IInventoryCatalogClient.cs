@@ -45,7 +45,9 @@ public record InventoryStockHandlingRequest(
     bool PreviewOnly = false,
     int BackorderMinLeadDays = 3,
     int BackorderMaxLeadDays = 5,
-    string? FulfillmentPreference = null);
+    string? FulfillmentPreference = null,
+    DateTime? PickupDate = null,
+    string? PickupNote = null);
 
 public record InventoryStockHandlingLineResponse(
     Guid SkuId,
