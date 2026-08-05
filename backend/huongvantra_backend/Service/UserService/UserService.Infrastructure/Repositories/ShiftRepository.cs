@@ -90,6 +90,14 @@ public class ShiftRepository(UserDbContext context) : IShiftRepository
         await context.ShiftRegistrations.CountAsync(r =>
             r.SlotId == slotId && r.Status == ShiftRegistrationStatus.Approved && !r.IsDeleted);
 
+    public async Task<IReadOnlyList<ShiftRegistration>> GetActiveRegistrationsForSlotAsync(Guid slotId) =>
+        await context.ShiftRegistrations
+            .Where(r =>
+                r.SlotId == slotId
+                && !r.IsDeleted
+                && (r.Status == ShiftRegistrationStatus.Approved || r.Status == ShiftRegistrationStatus.Pending))
+            .ToListAsync();
+
     public async Task<ShiftRegistration?> GetRegistrationByIdAsync(Guid id) =>
         await context.ShiftRegistrations
             .Include(r => r.Slot)

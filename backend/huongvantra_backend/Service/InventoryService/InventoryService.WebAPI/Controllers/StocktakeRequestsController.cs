@@ -36,7 +36,8 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
 
     private bool IsSaleActor =>
         !CanViewAllStocktakes
-        && (HasRole("SalePos", "SaleCod", "Sale") || HasPermission(PermissionNames.CreateOrder));
+        && !HasRole("SaleCod")
+        && (HasRole("SalePos", "Sale") || HasPermission(PermissionNames.CreatePosOrder));
 
     private bool CanCreateOrSubmitShelfAsSale(string? location) =>
         IsSaleActor

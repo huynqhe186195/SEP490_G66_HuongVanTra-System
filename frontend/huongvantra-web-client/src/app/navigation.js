@@ -101,7 +101,7 @@ export const navigationItems = [
   { label: 'Sản phẩm theo nhà cung cấp', path: '/inventory/supplier-products', module: 'supplier_receipts', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['agencyManager', 'inventoryManager'] },
-  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
+  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salePos'] },
   { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Quản lý lệnh sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Nhật ký kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
@@ -147,7 +147,7 @@ export const navigationItems = [
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
-    roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'],
+    roles: ['admin', 'agencyManager', 'inventoryManager', 'salePos'],
   },
   {
     label: 'Phiếu điều chuyển Kho → Kệ',
@@ -958,6 +958,15 @@ export function canAccessModule(session, module) {
     return hasAnyRoleGroup(session.roles, ['inventoryManager', 'accountant'])
   }
 
+  // Sale COD không dùng kiểm kê kệ / YC bổ sung kệ (chỉ Sale quầy).
+  if (
+    (String(module).toLowerCase() === 'inventory_stocktake'
+      || String(module).toLowerCase() === 'stock_adjustment_ops')
+    && isSaleCodOnlySession(session)
+  ) {
+    return false
+  }
+
   if (session?.modules?.length) {
     const normalizedModule = String(module).toLowerCase()
     if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
@@ -1073,7 +1082,10 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Thủ kho được tạo hoặc gửi Phiếu nhập nhà cung cấp.'
   }
   if (module === 'stock_adjustment_ops') {
-    return 'Chỉ Nhân viên bán hàng, Quản lý, Thủ kho hoặc Admin được xem Yêu cầu bổ sung Kệ Hàng; chỉ Thủ kho không có role Admin được duyệt hoặc từ chối.'
+    return 'Chỉ Sale quầy (POS), Quản lý, Thủ kho hoặc Admin được xem Yêu cầu bổ sung Kệ Hàng; Sale COD không dùng chức năng này.'
+  }
+  if (module === 'inventory_stocktake') {
+    return 'Chỉ Sale quầy (POS), Thủ kho, Quản lý hoặc Admin được kiểm kê tồn kho; Sale COD không dùng chức năng này.'
   }
   if (module === 'stock_transfer_ops') {
     return 'Chỉ Thủ kho, Quản lý hoặc Admin được xem điều chuyển Kho → Kệ; chỉ Thủ kho không có role Admin được thao tác.'

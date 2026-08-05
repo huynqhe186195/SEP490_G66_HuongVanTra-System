@@ -258,6 +258,7 @@ public class ShiftLogic(
 
         var actorUser = await userRepo.GetByIdAsync(actorUserId);
         var roleName = GetPrimaryRoleName(actorUser) ?? "N/A";
+        await EnsureSaleRoleSeatAvailableAsync(slotId, roleName, excludeUserId: actorUserId);
 
         if (existing is not null && existing.IsDeleted)
         {
@@ -333,6 +334,8 @@ public class ShiftLogic(
             if (approvedCount >= slot.Template.Capacity)
                 throw new UserValidationException("Ca làm việc đã đủ số lượng nhân viên.");
 
+            await EnsureSaleRoleSeatAvailableAsync(slotId, roleName, excludeUserId: staffUserId);
+
             existing.IsDeleted = false;
             existing.Status = ShiftRegistrationStatus.Approved;
             existing.StaffName = staffEmployee.FullName;
@@ -348,6 +351,8 @@ public class ShiftLogic(
 
         if (approvedCount >= slot.Template.Capacity)
             throw new UserValidationException("Ca làm việc đã đủ số lượng nhân viên.");
+
+        await EnsureSaleRoleSeatAvailableAsync(slotId, roleName, excludeUserId: staffUserId);
 
         var now = DateTime.UtcNow;
         var registration = new ShiftRegistration
@@ -417,6 +422,12 @@ public class ShiftLogic(
         var approvedCount = await shiftRepo.CountApprovedRegistrationsAsync(registration.SlotId);
         if (approvedCount >= registration.Slot.Template.Capacity)
             throw new UserValidationException("Ca làm việc đã đủ số lượng nhân viên, không thể duyệt thêm.");
+
+        await EnsureSaleRoleSeatAvailableAsync(
+            registration.SlotId,
+            registration.RoleName,
+            excludeUserId: registration.UserId,
+            countPending: false);
 
         registration.Status = ShiftRegistrationStatus.Approved;
         registration.ReviewedAt = DateTime.UtcNow;
@@ -494,6 +505,50 @@ public class ShiftLogic(
 
         var actor = await userRepo.GetByIdAsync(actorUserId);
         return ResolveStaffArea(actor);
+    }
+
+    private async Task EnsureSaleRoleSeatAvailableAsync(
+        Guid slotId,
+        string? roleName,
+        Guid? excludeUserId = null,
+        bool countPending = true)
+    {
+        var seat = ResolveSaleShiftSeat(roleName);
+        if (seat is null)
+            return;
+
+        var active = await shiftRepo.GetActiveRegistrationsForSlotAsync(slotId);
+        var occupied = active
+            .Where(r => excludeUserId is null || r.UserId != excludeUserId.Value)
+            .Where(r => countPending
+                || r.Status == ShiftRegistrationStatus.Approved)
+            .Any(r => ResolveSaleShiftSeat(r.RoleName) == seat);
+
+        if (occupied)
+        {
+            var label = seat == SaleShiftSeat.Pos ? "Sale POS" : "Sale COD";
+            throw new UserValidationException(
+                $"Mỗi ca chỉ được tối đa 1 {label}. Vai trò này đã có người trong ca.");
+        }
+    }
+
+    private enum SaleShiftSeat
+    {
+        Pos,
+        Cod,
+    }
+
+    /// <summary>SalePos/Sale legacy → ghế POS; SaleCod → ghế COD.</summary>
+    private static SaleShiftSeat? ResolveSaleShiftSeat(string? roleName)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+            return null;
+        if (string.Equals(roleName, StaffManagementScope.SaleCodRoleName, StringComparison.OrdinalIgnoreCase))
+            return SaleShiftSeat.Cod;
+        if (string.Equals(roleName, StaffManagementScope.SalePosRoleName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(roleName, StaffManagementScope.SaleRoleName, StringComparison.OrdinalIgnoreCase))
+            return SaleShiftSeat.Pos;
+        return null;
     }
 
     private static bool HasManageEmployee(IReadOnlyList<string> permissions) =>

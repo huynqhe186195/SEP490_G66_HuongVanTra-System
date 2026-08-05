@@ -12,6 +12,7 @@ public interface IShiftRepository
     Task<IReadOnlyList<ShiftSlot>> GetSlotsForWeekAsync(IEnumerable<Guid> templateIds, DateOnly weekStart, DateOnly weekEnd);
     Task<ShiftSlot?> GetSlotByIdAsync(Guid id);
     Task<int> CountApprovedRegistrationsAsync(Guid slotId);
+    Task<IReadOnlyList<ShiftRegistration>> GetActiveRegistrationsForSlotAsync(Guid slotId);
     Task<ShiftRegistration?> GetRegistrationByIdAsync(Guid id);
     Task<ShiftRegistration?> GetRegistrationAsync(Guid slotId, Guid userId);
     Task<IReadOnlyList<ShiftRegistration>> GetApprovedForUserOnDateAsync(Guid userId, DateOnly workDate);

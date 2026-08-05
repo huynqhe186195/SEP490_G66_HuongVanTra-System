@@ -44,27 +44,22 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateOrder,
                     PermissionNames.CreateCustomer)));
 
-            // YC bổ sung kệ: Sale (tạo đơn) + kho/admin xem qua VIEW_INVENTORY
+            // YC bổ sung kệ: Sale quầy (CREATE_POS_ORDER) + kho/admin xem qua VIEW_INVENTORY.
+            // Sale COD (CREATE_COD_ORDER) không dùng YC bổ sung / kiểm kê kệ.
             options.AddPolicy(PermissionNames.StockAdjustmentReadAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ViewInventory,
-                    PermissionNames.CreateOrder,
-                    PermissionNames.CreatePosOrder,
-                    PermissionNames.CreateCodOrder)));
+                    PermissionNames.CreatePosOrder)));
 
             options.AddPolicy(PermissionNames.StockAdjustmentCreateAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.CreateOrder,
                     PermissionNames.CreatePosOrder,
-                    PermissionNames.CreateCodOrder,
                     PermissionNames.ManageEmployee)));
 
-            // Kiểm kê: ngoài Sale/Manager còn có Thủ kho (kiểm kê Kho tổng) — vị trí siết ở controller.
+            // Kiểm kê: Sale quầy / Manager / Thủ kho (kiểm kê Kho tổng) — vị trí siết ở controller.
             options.AddPolicy(PermissionNames.StocktakeCreateAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.CreateOrder,
                     PermissionNames.CreatePosOrder,
-                    PermissionNames.CreateCodOrder,
                     PermissionNames.ManageEmployee,
                     PermissionNames.OperateWarehouse)));
 

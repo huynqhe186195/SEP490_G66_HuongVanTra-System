@@ -21,6 +21,8 @@ import {
   fetchAssignableShiftStaff,
   fetchShiftRegistrationWindow,
   fetchShiftWeek,
+  isSaleShiftSeatTaken,
+  isShiftStaffingFull,
   rejectShiftRegistration,
   reopenShiftRegistrationWindow,
   unassignShiftRegistration,
@@ -188,14 +190,17 @@ function ShiftManagePage() {
         .filter((a) => a.status === 'Approved' || a.status === 'Pending')
         .map((a) => a.staffId),
     )
-    return staffOptions.filter((s) => !onSlotIds.has(s.userId))
+    return staffOptions.filter(
+      (s) =>
+        !onSlotIds.has(s.userId)
+        && !isSaleShiftSeatTaken(selected.assignments, s.roleName, { includePending: true }),
+    )
   }, [selected, staffOptions])
 
   const canAssignSelected = useMemo(() => {
     if (!selected || !selectedTpl || !canManage) return false
     if (selected.status === 'Closed') return false
-    const approvedCount = selected.assignments.filter((a) => a.status === 'Approved').length
-    return approvedCount < selectedTpl.capacity
+    return !isShiftStaffingFull(selected.assignments, selectedTpl.capacity)
   }, [selected, selectedTpl, canManage])
 
   const stats = useMemo(() => {
@@ -551,7 +556,7 @@ function ShiftManagePage() {
                               />
                               <div className="min-w-0 flex-1">
                                 <p className="font-bold text-slate-900">{tpl.name}</p>
-                                <p className="text-[11px] text-slate-500">max {tpl.capacity} người</p>
+                                <p className="text-[11px] text-slate-500">tối đa 1 Sale POS + 1 Sale COD</p>
                                 {canManage ? (
                                   <div
                                     className="mt-2 space-y-1.5"
@@ -602,7 +607,7 @@ function ShiftManagePage() {
                             const pending = slot?.assignments.filter((a) => a.status === 'Pending') || []
                             const isSelected = selectedSlotId === slot?.id
                             const isClosed = slot?.status === 'Closed'
-                            const isFull = approved.length >= tpl.capacity
+                            const isFull = isShiftStaffingFull(slot?.assignments || [], tpl.capacity)
                             const isEmpty = approved.length === 0 && pending.length === 0
 
                             return (
@@ -758,7 +763,7 @@ function ShiftManagePage() {
 
                 <div className="rounded-2xl border border-dashed border-[#c1c9c0] px-4 py-3 text-xs text-slate-500">
                   <span className="font-semibold text-slate-700">Chú thích:</span> xanh = đã duyệt · vàng = chờ duyệt ·
-                  ô nét đứt = trống · ô xám = đã khóa
+                  ô nét đứt = trống · ô xám = đã khóa · mỗi ca tối đa 1 Sale POS + 1 Sale COD
                 </div>
               </aside>
             </div>

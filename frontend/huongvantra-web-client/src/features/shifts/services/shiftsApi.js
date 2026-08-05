@@ -30,6 +30,33 @@ export function normalizeShiftLabel(label) {
   return suffix ? `${name} · ${suffix}` : name
 }
 
+/** Ghế ca: mỗi ca tối đa 1 Sale POS + 1 Sale COD. Legacy Sale → ghế POS. */
+export function resolveSaleShiftSeat(roleName) {
+  const role = String(roleName || '').trim().toLowerCase().replace(/\s+/g, '')
+  if (role === 'salecod') return 'cod'
+  if (role === 'salepos' || role === 'sale') return 'pos'
+  return null
+}
+
+export function isSaleShiftSeatTaken(assignments, roleName, { includePending = true } = {}) {
+  const seat = resolveSaleShiftSeat(roleName)
+  if (!seat) return false
+  const statuses = includePending ? ['Approved', 'Pending'] : ['Approved']
+  return (assignments || []).some(
+    (a) => statuses.includes(a.status) && resolveSaleShiftSeat(a.role) === seat,
+  )
+}
+
+/** Ca đủ khi đã có cả ghế POS + COD, hoặc đạt capacity template. */
+export function isShiftStaffingFull(assignments, capacity) {
+  const approved = (assignments || []).filter((a) => a.status === 'Approved')
+  if (capacity > 0 && approved.length >= capacity) return true
+  const seats = new Set(
+    approved.map((a) => resolveSaleShiftSeat(a.role)).filter(Boolean),
+  )
+  return seats.has('pos') && seats.has('cod')
+}
+
 function normalizeTemplate(raw) {
   if (!raw || typeof raw !== 'object') return null
   return {

@@ -14,7 +14,7 @@ import {
   getWeekDays,
   shortName,
 } from '../data/mockShiftData.js'
-import { fetchMyShiftWeekStatus, fetchShiftWeek, registerShiftSlot } from '../services/shiftsApi.js'
+import { fetchMyShiftWeekStatus, fetchShiftWeek, isSaleShiftSeatTaken, isShiftStaffingFull, registerShiftSlot } from '../services/shiftsApi.js'
 
 function statusTone(status) {
   if (status === 'Approved') return 'bg-emerald-100 text-emerald-900'
@@ -38,6 +38,14 @@ function MyShiftsPage() {
   const auth = loadAuthSession()
   const myUserId = String(auth?.userId || '')
   const myName = auth?.username || 'Bạn'
+  const myRoleName = (() => {
+    const roles = Array.isArray(auth?.roles) ? auth.roles : []
+    const preferred = roles.find((role) => {
+      const key = String(role || '').toLowerCase().replace(/\s+/g, '')
+      return key === 'salecod' || key === 'salepos' || key === 'sale'
+    })
+    return preferred || roles[0] || ''
+  })()
   const canManage = hasPermission(auth, 'MANAGE_EMPLOYEE') || hasPermission(auth, 'MANAGE_ROLE')
   const areaHint = isWarehouseRole(auth) ? 'Kho' : 'Quầy'
 
@@ -184,8 +192,9 @@ function MyShiftsPage() {
     if (selected.status === 'Closed') return false
     if (selected.workDate < today) return false
     if (myOnSelected) return false
-    const approved = selected.assignments.filter((a) => a.status === 'Approved').length
-    return approved < selectedTpl.capacity
+    if (isShiftStaffingFull(selected.assignments, selectedTpl.capacity)) return false
+    if (isSaleShiftSeatTaken(selected.assignments, myRoleName, { includePending: true })) return false
+    return true
   }
 
   const register = async (slotId) => {
@@ -402,9 +411,14 @@ function MyShiftsPage() {
                           const visiblePeople = filterAssignments(slot?.assignments || [])
                           const approved =
                             slot?.assignments.filter((a) => a.status === 'Approved') || []
-                          const isFull = approved.length >= tpl.capacity
+                          const isFull = isShiftStaffingFull(slot?.assignments || [], tpl.capacity)
+                          const seatTaken = isSaleShiftSeatTaken(
+                            slot?.assignments || [],
+                            myRoleName,
+                            { includePending: true },
+                          )
                           const isClosed = slot?.status === 'Closed' || (slot && slot.workDate < today)
-                          const canPick = slot && !isClosed && !mine && !isFull
+                          const canPick = slot && !isClosed && !mine && !isFull && !seatTaken
                           const isSelected = selectedSlotId === slot?.id
                           const hasMineVisible = visiblePeople.some((a) => a.staffId === myUserId)
 
@@ -471,7 +485,7 @@ function MyShiftsPage() {
                                       Đăng ký
                                     </span>
                                     <span className="mt-1 text-[11px] text-slate-500">
-                                      Còn {tpl.capacity - approved.length} chỗ
+                                      Còn chỗ cho vai trò của bạn
                                     </span>
                                   </>
                                 ) : isFull ? (

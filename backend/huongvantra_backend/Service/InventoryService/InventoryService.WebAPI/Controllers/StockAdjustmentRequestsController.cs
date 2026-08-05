@@ -18,15 +18,23 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
 {
     private bool IsSaleRole() =>
-        User.IsInRole("Sale") || User.IsInRole("SalePos") || User.IsInRole("SaleCod");
+        User.IsInRole("Sale") || User.IsInRole("SalePos");
 
-    /// <summary>Sale thuần chỉ được xem yêu cầu do chính mình tạo.</summary>
+    /// <summary>Sale quầy thuần chỉ được xem yêu cầu do chính mình tạo. Sale COD không dùng YC bổ sung.</summary>
     private bool IsSaleOnly() =>
         IsSaleRole()
         && !User.IsInRole("Manager")
         && !User.IsInRole("Warehouse")
         && !User.IsInRole("Admin")
         && !User.IsInRole("Accountant");
+
+    private bool IsSaleCodOnly() =>
+        User.IsInRole("SaleCod")
+        && !User.IsInRole("SalePos")
+        && !User.IsInRole("Sale")
+        && !User.IsInRole("Manager")
+        && !User.IsInRole("Warehouse")
+        && !User.IsInRole("Admin");
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
@@ -44,6 +52,9 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         [FromQuery] bool onlyRemaining = false,
         [FromQuery] string? sort = null)
     {
+        if (IsSaleCodOnly())
+            return Forbid();
+
         var saleOnly = IsSaleOnly();
 
         Guid? requestedBy;
@@ -92,6 +103,9 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
+        if (IsSaleCodOnly())
+            return Forbid();
+
         var item = await _logic.GetStockAdjustmentRequestAsync(id, ct);
         if (item == null) return NotFound();
 
@@ -111,7 +125,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
-        if (User.IsInRole("Admin")) return Forbid();
+        if (User.IsInRole("Admin") || IsSaleCodOnly()) return Forbid();
         var requestedBy = User.GetUserId();
         if (requestedBy == Guid.Empty)
             return Unauthorized(new { message = "Không xác định được người dùng." });
