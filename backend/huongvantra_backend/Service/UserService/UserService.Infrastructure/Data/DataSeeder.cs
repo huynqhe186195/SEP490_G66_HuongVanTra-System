@@ -100,9 +100,9 @@ public static class DataSeeder
 
     private static readonly (Guid Id, string Name, ShiftArea Area, TimeSpan Start, TimeSpan End, int Capacity, string Color, int SortOrder)[] DefaultShiftTemplates =
     [
-        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"), "Ca sáng quầy", ShiftArea.Shelf,
+        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"), "Ca 1", ShiftArea.Shelf,
             new TimeSpan(8, 0, 0), new TimeSpan(12, 0, 0), 2, "#356647", 1),
-        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000002"), "Ca chiều quầy", ShiftArea.Shelf,
+        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000002"), "Ca 2", ShiftArea.Shelf,
             new TimeSpan(13, 0, 0), new TimeSpan(21, 0, 0), 2, "#4e7f5e", 2),
         (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000003"), "Ca kho", ShiftArea.Warehouse,
             new TimeSpan(8, 0, 0), new TimeSpan(17, 0, 0), 1, "#6b5b4a", 3),
@@ -189,6 +189,8 @@ public static class DataSeeder
             {
                 if (existing.IsActive != isActive)
                     existing.IsActive = isActive;
+                if (!string.Equals(existing.Name, name, StringComparison.Ordinal))
+                    existing.Name = name;
                 continue;
             }
 
@@ -204,6 +206,27 @@ public static class DataSeeder
                 SortOrder = sortOrder,
                 IsActive = isActive
             });
+        }
+
+        if (context.ChangeTracker.HasChanges())
+            await context.SaveChangesAsync();
+
+        // Đổi tên legacy trên mọi template để lịch làm việc /my-shifts đồng bộ.
+        var legacyRenames = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Ca sáng quầy"] = "Ca 1",
+            ["Ca chiều quầy"] = "Ca 2",
+            ["Ca sáng"] = "Ca 1",
+            ["Ca chiều"] = "Ca 2",
+        };
+        var templates = await context.ShiftTemplates.Where(t => !t.IsDeleted).ToListAsync();
+        foreach (var template in templates)
+        {
+            if (legacyRenames.TryGetValue(template.Name, out var renamed)
+                && !string.Equals(template.Name, renamed, StringComparison.Ordinal))
+            {
+                template.Name = renamed;
+            }
         }
 
         if (context.ChangeTracker.HasChanges())

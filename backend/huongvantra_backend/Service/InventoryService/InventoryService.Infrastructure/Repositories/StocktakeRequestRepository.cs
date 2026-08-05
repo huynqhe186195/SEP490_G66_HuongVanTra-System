@@ -86,10 +86,19 @@ public class StocktakeRequestRepository(InventoryDbContext _db) : IStocktakeRequ
             .GroupBy(r => r.Status)
             .Select(group => new { Status = group.Key, Count = group.Count() })
             .ToListAsync(ct);
-        return rows.ToDictionary(
-            row => row.Status.ToString(),
-            row => row.Count,
-            StringComparer.OrdinalIgnoreCase);
+
+        // Dữ liệu lịch sử có thể lưu Status dạng số ("4") lẫn dạng tên ("Cancelled");
+        // cả hai đều parse về cùng một enum nên phải cộng dồn thay vì ToDictionary.
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            var key = row.Status.ToString();
+            counts[key] = counts.TryGetValue(key, out var current)
+                ? current + row.Count
+                : row.Count;
+        }
+
+        return counts;
     }
 
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>

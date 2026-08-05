@@ -1,10 +1,40 @@
 import { apiRequestAuth } from '../../../lib/apiClient.js'
 
+/** Tên ca cũ → tên mới (lịch làm việc / POS vẫn có thể nhận bản ghi chưa seed lại). */
+const SHIFT_TEMPLATE_NAME_ALIASES = {
+  'Ca sáng quầy': 'Ca 1',
+  'Ca chiều quầy': 'Ca 2',
+  'Ca sáng': 'Ca 1',
+  'Ca chiều': 'Ca 2',
+}
+
+export function normalizeShiftTemplateName(name) {
+  const text = String(name || '').trim()
+  if (!text) return ''
+  return SHIFT_TEMPLATE_NAME_ALIASES[text] || text
+}
+
+/**
+ * Đổi tên ca legacy nhưng giữ phần khung giờ nếu nhãn có dạng "Tên · 08:00–12:00".
+ * Dùng cho snapshot đã lưu (quỹ ca POS, ghi chú kiểm kệ).
+ */
+export function normalizeShiftLabel(label) {
+  const text = String(label || '').trim()
+  if (!text) return ''
+
+  const separatorIndex = Math.max(text.lastIndexOf('·'), text.lastIndexOf('•'))
+  if (separatorIndex <= 0) return normalizeShiftTemplateName(text)
+
+  const name = normalizeShiftTemplateName(text.slice(0, separatorIndex))
+  const suffix = text.slice(separatorIndex + 1).trim()
+  return suffix ? `${name} · ${suffix}` : name
+}
+
 function normalizeTemplate(raw) {
   if (!raw || typeof raw !== 'object') return null
   return {
     id: String(raw.id ?? raw.Id ?? ''),
-    name: raw.name ?? raw.Name ?? '',
+    name: normalizeShiftTemplateName(raw.name ?? raw.Name ?? ''),
     area: raw.area ?? raw.Area ?? '',
     areaLabel: raw.areaLabel ?? raw.AreaLabel ?? '',
     start: raw.start ?? raw.Start ?? '',
@@ -175,14 +205,22 @@ export async function fetchOnDutyShift(area = 'Shelf') {
   const data = await apiRequestAuth(`/api/shifts/me/on-duty?${params}`)
   const raw = data?.onDuty ?? data?.OnDuty ?? null
   if (!raw) return null
+  const templateName = normalizeShiftTemplateName(raw.templateName ?? raw.TemplateName ?? '')
+  const start = raw.start ?? raw.Start ?? ''
+  const end = raw.end ?? raw.End ?? ''
+  const rawLabel = String(raw.label ?? raw.Label ?? '')
   return {
     slotId: String(raw.slotId ?? raw.SlotId ?? ''),
     templateId: String(raw.templateId ?? raw.TemplateId ?? ''),
-    templateName: raw.templateName ?? raw.TemplateName ?? '',
+    templateName,
     area: raw.area ?? raw.Area ?? '',
     workDate: raw.workDate ?? raw.WorkDate ?? '',
-    start: raw.start ?? raw.Start ?? '',
-    end: raw.end ?? raw.End ?? '',
-    label: raw.label ?? raw.Label ?? '',
+    start,
+    end,
+    label: templateName && start && end
+      ? `${templateName} · ${start}–${end}`
+      : normalizeShiftTemplateName(
+        rawLabel.replace(/\s*[·•]\s*\d{1,2}:\d{2}\s*[–\-]\s*\d{1,2}:\d{2}\s*$/u, '').trim(),
+      ) || rawLabel,
   }
 }

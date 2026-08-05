@@ -668,7 +668,7 @@ export default function StockTransferCreatePage() {
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
-                placeholder="VD: Bổ sung hàng cho ca chiều"
+                placeholder="VD: Bổ sung hàng cho Ca 2"
               />
             </label>
           </div>

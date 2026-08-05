@@ -1,4 +1,5 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { normalizeShiftLabel } from '../../shifts/services/shiftsApi.js'
 
 export function mapCashSession(raw) {
   if (!raw || typeof raw !== 'object') return null
@@ -13,7 +14,7 @@ export function mapCashSession(raw) {
     note: raw.note ?? raw.Note ?? '',
     openedByName: raw.openedByName ?? raw.OpenedByName ?? '',
     openedByRole: raw.openedByRole ?? raw.OpenedByRole ?? '',
-    shiftLabel: raw.shiftLabel ?? raw.ShiftLabel ?? '',
+    shiftLabel: normalizeShiftLabel(raw.shiftLabel ?? raw.ShiftLabel ?? ''),
     shiftSlotId: raw.shiftSlotId ?? raw.ShiftSlotId ?? null,
     openedAt: raw.openedAt ?? raw.OpenedAt ?? null,
     updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
@@ -46,11 +47,12 @@ export async function fetchCurrentCashSession() {
   const requiresCloseForNewShift = Boolean(
     data?.requiresCloseForNewShift ?? data?.RequiresCloseForNewShift,
   )
-  const previousShiftLabel =
+  const previousShiftLabel = normalizeShiftLabel(
     data?.previousShiftLabel
     ?? data?.PreviousShiftLabel
     ?? session.shiftLabel
-    ?? ''
+    ?? '',
+  )
 
   return {
     ...session,

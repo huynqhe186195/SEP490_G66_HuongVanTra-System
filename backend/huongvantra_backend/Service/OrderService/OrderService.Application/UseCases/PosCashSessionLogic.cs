@@ -245,7 +245,7 @@ public class PosCashSessionLogic(
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    /// <summary>Bỏ phần giờ trong nhãn ca ("Ca sáng · 08:00–12:00" → "Ca sáng").</summary>
+    /// <summary>Bỏ phần giờ trong nhãn ca ("Ca 1 · 08:00–12:00" → "Ca 1").</summary>
     private static string? StripShiftHours(string? label)
     {
         var text = NormalizeOptional(label);
