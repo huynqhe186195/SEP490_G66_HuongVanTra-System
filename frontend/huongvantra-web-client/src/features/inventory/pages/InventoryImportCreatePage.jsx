@@ -145,13 +145,20 @@ function getSkuUnitName(sku) {
 }
 
 function defaultSubmittedUnit(unit) {
-  return unit === 'Gram' ? 'kg' : 'piece'
+  return unit === 'Gram' ? 'g' : 'piece'
 }
 
 const SUBMITTED_UNIT_LABELS = { kg: 'kg', g: 'g', piece: 'cái' }
 
 function getSubmittedUnitOptions(inventoryUnit) {
-  return inventoryUnit === 'Gram' ? ['kg', 'g'] : ['piece']
+  return inventoryUnit === 'Gram' ? ['g', 'kg'] : ['piece']
+}
+
+/** Số lượng sau khi quy đổi về đơn vị tồn kho (gram cho nguyên liệu). */
+function toStockQuantity(quantityText, submittedUnit) {
+  const quantity = Number(String(quantityText ?? '').trim())
+  if (!Number.isFinite(quantity) || quantity <= 0) return null
+  return submittedUnit === 'kg' ? quantity * 1000 : quantity
 }
 
 function getSkuSnapshotName(sku) {
@@ -1662,6 +1669,11 @@ function InventoryImportCreatePage() {
                                   : <option value="">—</option>}
                               </select>
                               {errs.submittedUnit ? <p className="text-xs text-red-500">{errs.submittedUnit}</p> : null}
+                              {!errs.submittedUnit && line.submittedUnit === 'kg' && toStockQuantity(line.actualQuantity, 'kg') !== null ? (
+                                <p className="text-xs font-semibold text-amber-700">
+                                  Tồn kho sẽ tăng {toStockQuantity(line.actualQuantity, 'kg').toLocaleString('vi-VN')} g
+                                </p>
+                              ) : null}
                             </label>
                           </div>
                         </section>
