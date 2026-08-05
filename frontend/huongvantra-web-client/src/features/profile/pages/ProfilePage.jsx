@@ -37,19 +37,33 @@ function ProfilePage() {
 
   useEffect(() => {
     let mounted = true
+    let autofillGuardTimer = null
 
     async function loadProfile() {
       try {
         const profile = await fetchMyProfile()
         if (!mounted) return
+        const phoneFromApi = profile.phone || ''
         setForm({
           ...EMPTY_FORM,
           fullName: profile.fullName || '',
           username: profile.username || '',
-          phone: profile.phone || '',
+          phone: phoneFromApi,
           role: (profile.roles || []).join(', '),
           note: profile.note || '',
         })
+        // Chrome hay autofill username vào ô tel sau paint khi có field password gần đó.
+        autofillGuardTimer = window.setTimeout(() => {
+          if (!mounted) return
+          setForm((current) => {
+            const username = current.username || ''
+            if (!username) return current
+            if (current.phone === username && phoneFromApi !== username) {
+              return { ...current, phone: phoneFromApi }
+            }
+            return current
+          })
+        }, 100)
       } catch (error) {
         showError(error.message)
       } finally {
@@ -60,6 +74,7 @@ function ProfilePage() {
     void loadProfile()
     return () => {
       mounted = false
+      if (autofillGuardTimer) window.clearTimeout(autofillGuardTimer)
     }
   }, [])
 
@@ -136,7 +151,7 @@ function ProfilePage() {
           <p className="text-center text-sm text-[#717971]">Đang tải hồ sơ...</p>
         </section>
       ) : (
-        <form id="profile-form" className="space-y-5" onSubmit={handleSubmit}>
+        <form id="profile-form" className="space-y-5" onSubmit={handleSubmit} autoComplete="off">
           <section className="overflow-hidden rounded-[24px] border border-[#c1c9c0]/30 bg-white shadow-sm">
             <div className="flex flex-col gap-4 bg-gradient-to-r from-[#356647]/10 via-[#fbf9f1] to-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
               <div className="flex items-center gap-4">
@@ -174,6 +189,8 @@ function ProfilePage() {
                   <input
                     className={inputClass}
                     type="text"
+                    name="fullName"
+                    autoComplete="name"
                     value={form.fullName}
                     onChange={handleChange('fullName')}
                     required
@@ -183,12 +200,15 @@ function ProfilePage() {
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Tên đăng nhập</span>
+                  {/* Không dùng disabled: Chrome bỏ qua field đó rồi đổ username vào ô SĐT gần password. */}
                   <input
                     className={inputClass}
                     type="text"
+                    name="username"
+                    autoComplete="username"
                     value={form.username}
                     readOnly
-                    disabled
+                    tabIndex={-1}
                     title="Tên đăng nhập do quản trị viên quản lý"
                   />
                 </label>
@@ -198,9 +218,14 @@ function ProfilePage() {
                   <input
                     className={inputClass}
                     type="tel"
+                    name="employeePhone"
+                    autoComplete="tel"
+                    inputMode="tel"
                     value={form.phone}
                     onChange={handleChange('phone')}
-                    placeholder="Có thể để trống"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
                   />
                 </label>
 
@@ -208,6 +233,8 @@ function ProfilePage() {
                   <span className="text-xs font-semibold text-[#414942]">Ghi chú</span>
                   <textarea
                     className={`${inputClass} min-h-[96px] resize-y`}
+                    name="note"
+                    autoComplete="off"
                     rows={3}
                     value={form.note}
                     onChange={handleChange('note')}
@@ -231,6 +258,7 @@ function ProfilePage() {
                   <input
                     className={inputClass}
                     type="password"
+                    name="currentPassword"
                     value={form.currentPassword}
                     onChange={handleChange('currentPassword')}
                     autoComplete="current-password"
@@ -242,6 +270,7 @@ function ProfilePage() {
                   <input
                     className={inputClass}
                     type="password"
+                    name="newPassword"
                     value={form.newPassword}
                     onChange={handleChange('newPassword')}
                     autoComplete="new-password"
