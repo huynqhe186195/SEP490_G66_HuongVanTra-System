@@ -46,6 +46,11 @@ import {
   getProductTypeLabel,
 } from '../utils/productTypes.js'
 import { formatWholeVnd, parseWholeVndInput } from '../utils/productDisplay.js'
+import {
+  attachProductCreationZipImages,
+  extractProductCreationZip,
+  isProductCreationZipFile,
+} from '../utils/productCreationZipImport.js'
 
 const STATUS_LABELS = {
   Draft: 'Nháp',
@@ -3041,7 +3046,11 @@ export default function ProductApprovalsPage() {
 
     setIsImporting(true)
     try {
-      const preview = await parseOfficialProductCreationFile(file, {
+      const zipBundle = isProductCreationZipFile(file)
+        ? await extractProductCreationZip(file)
+        : null
+      const excelFile = zipBundle?.excelFile ?? file
+      let preview = await parseOfficialProductCreationFile(excelFile, {
         categories,
         materials,
         attributeNameByKey,
@@ -3051,15 +3060,56 @@ export default function ProductApprovalsPage() {
         getSkuRows,
         moneyOrNull,
       })
+
+      if (zipBundle) {
+        preview = {
+          ...preview,
+          sourceFilename: file.name,
+          excelFilename: zipBundle.excelFilename,
+          suggestedTitle: file.name.replace(/\.zip$/i, ''),
+          counts: { ...preview.counts, images: 0 },
+        }
+
+        if (zipBundle.images.length === 0) {
+          preview.warnings.push('File ZIP không có ảnh .jpg, .jpeg, .png, .webp hoặc .gif.')
+        } else if (preview.errors.length > 0) {
+          preview.warnings.push('Chưa upload ảnh vì dữ liệu Excel còn lỗi. Hãy sửa Excel rồi import lại file ZIP.')
+        } else {
+          const imageResult = attachProductCreationZipImages({
+            rows: preview.rows,
+            images: zipBundle.images,
+            createImageId: createLocalImageId,
+            maxImagesPerProduct: MAX_PRODUCT_IMAGES,
+            maxImageBytes: MAX_IMAGE_UPLOAD_BYTES,
+          })
+          preview = {
+            ...preview,
+            rows: imageResult.rows,
+            warnings: [...preview.warnings, ...imageResult.warnings],
+            counts: {
+              ...preview.counts,
+              images: imageResult.attachedCount,
+              productsWithImages: imageResult.matchedProductCount,
+            },
+          }
+        }
+      } else {
+        preview = {
+          ...preview,
+          counts: { ...preview.counts, images: 0 },
+        }
+      }
+
       setImportPreview(preview)
       setImportMode(hasCurrentDraftData ? 'replace' : 'replace')
       if (preview.errors.length) {
         showError(preview.errors[0])
       } else {
-        showSuccess('Đã đọc file Excel. Kiểm tra preview trước khi áp dụng vào bản nháp.')
+        const imageMessage = preview.counts.images > 0 ? ` và ghép ${preview.counts.images} ảnh` : ''
+        showSuccess(`Đã đọc file ${zipBundle ? 'ZIP' : 'Excel'}${imageMessage}. Kiểm tra preview trước khi áp dụng.`)
       }
     } catch (error) {
-      showError(error.message || 'Không thể đọc file Excel.')
+      showError(error.message || 'Không thể đọc file Excel/ZIP.')
     } finally {
       setIsImporting(false)
     }
@@ -3072,12 +3122,20 @@ export default function ProductApprovalsPage() {
       return
     }
 
+    const importedRows = importPreview.rows.map((row) => ({
+      ...row,
+      images: (Array.isArray(row.images) ? row.images : []).map((image) => (
+        image.pending && image.file && !image.previewUrl
+          ? { ...image, previewUrl: URL.createObjectURL(image.file) }
+          : image
+      )),
+    }))
     const nextRows = importMode === 'append'
-      ? [...rows, ...importPreview.rows]
-      : importPreview.rows
+      ? [...rows, ...importedRows]
+      : importedRows
 
     setRows(nextRows.length ? nextRows : [createDraftProduct()])
-    if (!title.trim()) setTitle(importPreview.suggestedTitle || importPreview.sourceFilename?.replace(/\.xlsx$/i, '') || '')
+    if (!title.trim()) setTitle(importPreview.suggestedTitle || importPreview.sourceFilename?.replace(/\.(?:xlsx|zip)$/i, '') || '')
     setImportPreview(null)
     setImportMode('replace')
     showSuccess('Đã áp dụng dữ liệu import vào bản nháp.')
@@ -3104,33 +3162,47 @@ export default function ProductApprovalsPage() {
               <h2 className="text-base font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu' : 'Tạo biên bản yêu cầu thêm sản phẩm kho mới'}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              <input ref={fileInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
+              <input ref={fileInputRef} type="file" accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip" className="hidden" onChange={handleImportFile} />
               <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadTemplate}>{isTemplateGenerating ? 'Đang tạo...' : 'Tải file mẫu'}</button>
               <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadSampleWithData}>{isTemplateGenerating ? 'Đang tạo...' : 'Tải file có dữ liệu mẫu'}</button>
-              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Import Excel'}</button>
+              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Import Excel / ZIP'}</button>
               <button type="button" disabled={isExporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={exportCurrentDraft}>{isExporting ? 'Đang export...' : 'Export Excel'}</button>
               {activeRequestId ? <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={resetForm}>Tạo yêu cầu khác</button> : null}
             </div>
+          </div>
+          <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+            <p className="font-bold">Import kèm ảnh bằng ZIP</p>
+            <p className="mt-1">
+              ZIP gồm 1 file Excel và thư mục ảnh. Đặt tên ảnh theo Mã sản phẩm, ví dụ
+              <span className="font-mono font-semibold"> SP01.jpg</span>,
+              <span className="font-mono font-semibold"> SP01_2.jpg</span>. Hệ thống tự ghép ảnh và upload lên Cloudinary khi gửi duyệt.
+            </p>
           </div>
 
           {importPreview ? (
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-bold text-slate-900">Preview import Excel</p>
+                  <p className="font-bold text-slate-900">Preview import Excel / ZIP</p>
                   <p className="mt-1 text-xs text-slate-500">
                     File: <span className="font-semibold text-slate-700">{importPreview.sourceFilename || '—'}</span>
+                    {importPreview.excelFilename ? (
+                      <>
+                        <span className="mx-2">•</span>
+                        Excel: <span className="font-semibold text-slate-700">{importPreview.excelFilename}</span>
+                      </>
+                    ) : null}
                     <span className="mx-2">•</span>
                     Sheet: <span className="font-semibold text-slate-700">{importPreview.sheetName || '—'}</span>
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    File mẫu có dropdown theo danh mục / SKU / thuộc tính hiện có trên hệ thống. Chọn từ danh sách thay vì gõ tay. Ảnh sản phẩm thêm sau trên form.
+                    File mẫu có dropdown theo danh mục / SKU / thuộc tính hiện có. Với ZIP, ảnh khớp Mã sản phẩm sẽ được ghép sẵn và tải lên Cloudinary khi gửi duyệt.
                   </p>
                 </div>
                 <button type="button" className="font-semibold text-slate-500 hover:text-slate-700" onClick={() => setImportPreview(null)}>Đóng</button>
               </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-7">
                 <div className="rounded-lg bg-white px-3 py-2">
                   <p className="text-[11px] font-bold uppercase text-slate-400">Sản phẩm</p>
                   <p className="text-lg font-bold text-slate-900">{importPreview.counts.products}</p>
@@ -3146,6 +3218,10 @@ export default function ProductApprovalsPage() {
                 <div className="rounded-lg bg-white px-3 py-2">
                   <p className="text-[11px] font-bold uppercase text-slate-400">Thành phần BOM</p>
                   <p className="text-lg font-bold text-slate-900">{importPreview.counts.manualBomLines}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Ảnh</p>
+                  <p className="text-lg font-bold text-[#356647]">{importPreview.counts.images ?? 0}</p>
                 </div>
                 <div className="rounded-lg bg-white px-3 py-2">
                   <p className="text-[11px] font-bold uppercase text-slate-400">Cảnh báo</p>
