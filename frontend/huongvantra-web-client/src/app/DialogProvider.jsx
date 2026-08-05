@@ -110,7 +110,9 @@ export default function DialogProvider({ children }) {
           role="presentation"
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/60 bg-white p-6 shadow-2xl"
+            className={`w-full rounded-2xl border border-[#c1c9c0]/60 bg-white p-6 shadow-2xl ${
+              dialog.kind === 'prompt' ? 'max-w-xl' : 'max-w-md'
+            }`}
             onClick={(event) => event.stopPropagation()}
             role="alertdialog"
             aria-modal="true"
@@ -149,6 +151,7 @@ export default function DialogProvider({ children }) {
                   suggestions={dialog.suggestions}
                   value={inputValue}
                   onSelect={setInputValue}
+                  layout="grid"
                 />
                 {dialog.presets?.length ? (
                   <div className="space-y-2">

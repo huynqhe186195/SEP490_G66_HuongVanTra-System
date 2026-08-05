@@ -23,11 +23,14 @@ function ReceiptReprintModal({ isOpen, order, isSaving, onClose, onConfirm }) {
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[70] bg-black/40" onClick={isSaving ? undefined : onClose} />
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
+      onClick={isSaving ? undefined : onClose}
+    >
       <form
         onSubmit={handleSubmit}
-        className="fixed inset-x-4 top-1/2 z-[71] mx-auto max-w-md -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:inset-x-auto"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
         role="dialog"
         aria-modal="true"
       >
@@ -78,7 +81,7 @@ function ReceiptReprintModal({ isOpen, order, isSaving, onClose, onConfirm }) {
           </button>
         </div>
       </form>
-    </>
+    </div>
   )
 }
 

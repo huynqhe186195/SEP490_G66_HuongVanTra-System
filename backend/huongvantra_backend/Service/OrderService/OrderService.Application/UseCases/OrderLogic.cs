@@ -36,6 +36,7 @@ public class OrderLogic(
     private readonly SepayOptions _sepay = sepayOptions.Value;
     private readonly BackorderOptions _backorder = backorderOptions?.Value ?? new BackorderOptions();
     private const int MaxActivities = 100;
+    private const int OverdueDepositCancelDays = 7;
 
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
         GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
@@ -414,10 +415,16 @@ public class OrderLogic(
         }
         var paymentAllocations = NormalizePaymentAllocations(req, finalAmount);
         var allocatedPaymentTotal = paymentAllocations.Sum(item => item.Amount);
-        OrderBusinessRules.EnsureGuestFullyPaid(
-            req.CustomerId,
-            allocatedPaymentTotal,
-            finalAmount);
+        // Đơn đặt cọc chỉ thu trước một phần nên không áp quy tắc "khách lẻ phải trả đủ";
+        // mức tối thiểu 50% được kiểm ở nhánh BackorderAccepted bên dưới.
+        var isDepositCheckout = req.AcceptBackorder && req.DepositAmount is > 0;
+        if (!isDepositCheckout)
+        {
+            OrderBusinessRules.EnsureGuestFullyPaid(
+                req.CustomerId,
+                allocatedPaymentTotal,
+                finalAmount);
+        }
 
         if (contract is not null)
         {
@@ -550,6 +557,9 @@ public class OrderLogic(
                     ? paymentCreatedAt.AddDays(7)
                     : null,
                 CodDebtSettlementJson = item.DebtSettlementJson,
+                PaymentPurpose = req.DepositAmount.HasValue && req.DepositAmount.Value > 0
+                    ? PaymentPurpose.Deposit
+                    : PaymentPurpose.Full,
                 PaidAt = item.PaymentStatus == PaymentStatus.Success
                     ? paymentCreatedAt
                     : null,
@@ -600,12 +610,32 @@ public class OrderLogic(
                 order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
                 ApplyPickupContact(order, req);
 
+                if (req.DepositAmount.HasValue && req.DepositAmount.Value > 0)
+                {
+                    var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
+                    if (req.DepositAmount.Value < minimumDeposit)
+                    {
+                        throw new OrderValidationException(
+                            $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
+                    }
+
+                    order.DepositAmount = req.DepositAmount.Value;
+                }
+
                 if (isPosCompletedOnCreate)
                     order.OrderStatus = OrderStatus.WaitingMaterials;
             }
             else
             {
                 order.FulfillmentPreference = null;
+                // Hàng đã đủ ngay khi thanh toán ⇒ không còn là đơn cọc, phải thu đủ.
+                if (isDepositCheckout)
+                {
+                    OrderBusinessRules.EnsureGuestFullyPaid(
+                        req.CustomerId,
+                        allocatedPaymentTotal,
+                        finalAmount);
+                }
             }
         }
 
@@ -1208,7 +1238,10 @@ public class OrderLogic(
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        // Đơn đặt cọc: khách mất cọc khi hủy, không đi qua luồng duyệt hoàn tiền.
+        var isDepositOrder = order.DepositAmount is > 0;
         if (IsBackorderRefundGuardedStatus(order.OrderStatus)
+            && !isDepositOrder
             && payments.Any(payment => payment.PaymentStatus == PaymentStatus.Success))
         {
             throw new OrderValidationException(
@@ -1235,6 +1268,8 @@ public class OrderLogic(
         var description = string.IsNullOrWhiteSpace(reason)
             ? "Hủy đơn hàng."
             : $"Hủy đơn hàng. Lý do: {reason.Trim()}";
+        if (isDepositOrder)
+            description += $" Giữ lại tiền cọc {FormatVnd(order.DepositAmount!.Value)}, không hoàn lại.";
 
         await RecordActivityAsync(
             order.Id,
@@ -1279,7 +1314,8 @@ public class OrderLogic(
         var collectedAmount = payments
             .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
             .Sum(payment => payment.Amount);
-        if (collectedAmount <= 0)
+        // Đơn đặt cọc: toàn bộ tiền đã thu bị giữ lại — không còn gì để hoàn, hủy thẳng.
+        if (collectedAmount <= 0 || order.DepositAmount is > 0)
         {
             await CancelAsync(id, access, reason, actorId, actorName, ct);
             return MapToResponse(order);
@@ -1582,7 +1618,9 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanModify(order, access);
+        // Khách tới quầy nhận hàng có thể gặp bất kỳ thu ngân nào đang trực,
+        // không nhất thiết là người đã tạo đơn.
+        EnsureCanView(order, access);
 
         if (order.OrderStatus != OrderStatus.ReadyToDeliver)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1625,6 +1663,151 @@ public class OrderLogic(
 
         if (order.CustomerId.HasValue)
             TrySendInvoiceEmail(order);
+    }
+
+    /// <summary>
+    /// POS-06 (cọc): thu nốt phần còn lại khi khách quay lại nhận hàng rồi hoàn tất đơn.
+    /// </summary>
+    public async Task<OrderResponse> CollectRemainingAndDeliverAsync(
+        Guid id,
+        CollectRemainingRequest request,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        EnsureCanView(order, access);
+
+        if (order.DepositAmount is not > 0)
+            throw new OrderValidationException("Đơn này không phải đơn đặt cọc.");
+        if (order.OrderStatus != OrderStatus.ReadyToDeliver)
+            throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var collected = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        var remaining = Math.Max(0, order.FinalAmount - collected);
+        if (remaining > 0 && request.Amount < remaining)
+        {
+            throw new OrderValidationException(
+                $"Số tiền thu chưa đủ. Còn phải thu {FormatVnd(remaining)}.");
+        }
+
+        if (remaining > 0)
+        {
+            var paidAt = DateTime.UtcNow;
+            // QR thu phần còn lại đã tạo sẵn một Payment Pending — tái sử dụng để không ghi trùng.
+            var remainingPayment = payments.FirstOrDefault(payment =>
+                payment.PaymentPurpose == PaymentPurpose.RemainingAtPickup
+                && payment.PaymentStatus == PaymentStatus.Pending);
+
+            if (remainingPayment is not null)
+            {
+                remainingPayment.PaymentMethod = request.PaymentMethod;
+                remainingPayment.Amount = remaining;
+                remainingPayment.PaymentStatus = PaymentStatus.Success;
+                remainingPayment.TransactionRef = string.IsNullOrWhiteSpace(request.TransactionRef)
+                    ? remainingPayment.TransactionRef
+                    : request.TransactionRef.Trim();
+                remainingPayment.PaidAt = paidAt;
+                remainingPayment.UpdatedAt = paidAt;
+            }
+            else
+            {
+                remainingPayment = new Payment
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    PaymentMethod = request.PaymentMethod,
+                    Amount = remaining,
+                    PaymentStatus = PaymentStatus.Success,
+                    PaymentPurpose = PaymentPurpose.RemainingAtPickup,
+                    TransactionRef = string.IsNullOrWhiteSpace(request.TransactionRef)
+                        ? null
+                        : request.TransactionRef.Trim(),
+                    IsCodVerified = false,
+                    PaidAt = paidAt,
+                    CreatedAt = paidAt,
+                    UpdatedAt = paidAt
+                };
+                await _paymentRepo.AddAsync(remainingPayment, ct);
+                order.Payments?.Add(remainingPayment);
+            }
+
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.Updated,
+                $"Thu nốt {FormatVnd(remaining)} khi khách nhận hàng ({GetPaymentMethodLabel(request.PaymentMethod)}).",
+                actorId,
+                actorName,
+                ct);
+        }
+
+        await MarkDeliveredAsync(id, access, actorId, actorName, ct);
+        return MapToResponse(order);
+    }
+
+    /// <summary>
+    /// POS-06 (cọc): Manager hủy đơn đặt cọc quá 7 ngày kể từ ngày hẹn. Tiền cọc bị giữ lại.
+    /// </summary>
+    public async Task<OrderResponse> CancelOverdueDepositAsync(
+        Guid id,
+        OrderAccessContext access,
+        string? reason,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        if (!access.CanViewAllOrders)
+            throw new OrderForbiddenException();
+
+        if (order.DepositAmount is not > 0)
+            throw new OrderValidationException("Chỉ đơn đặt cọc mới dùng được luồng hủy quá hạn.");
+        if (!IsBackorderRefundGuardedStatus(order.OrderStatus))
+            throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
+        if (!order.PickupDate.HasValue)
+            throw new OrderValidationException("Đơn chưa có ngày hẹn nhận hàng.");
+
+        var overdueDays = (DateTime.UtcNow.Date - order.PickupDate.Value.Date).Days;
+        if (overdueDays < OverdueDepositCancelDays)
+        {
+            throw new OrderValidationException(
+                $"Chỉ được hủy sau {OverdueDepositCancelDays} ngày kể từ ngày hẹn. Hiện quá hạn {Math.Max(0, overdueDays)} ngày.");
+        }
+
+        var statusBeforeCancel = order.OrderStatus;
+        var now = DateTime.UtcNow;
+        order.OrderStatus = OrderStatus.Cancelled;
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.RefundStatus = BackorderRefundStatus.NotRequired;
+        order.RefundAmount = null;
+        order.CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        order.CancellationRequestedAt = now;
+        order.CancellationRequestedBy = actorId;
+        order.CancellationRequestedByName = NormalizeActorName(actorName);
+        order.UpdatedAt = now;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Cancelled,
+            $"Hủy đơn quá hạn nhận hàng {overdueDays} ngày. Giữ lại tiền cọc {FormatVnd(order.DepositAmount!.Value)}, không hoàn lại."
+                + (string.IsNullOrWhiteSpace(reason) ? string.Empty : $" Lý do: {reason.Trim()}"),
+            actorId,
+            actorName,
+            ct);
+
+        await _eventPublisher.PublishOrderCancelledAsync(
+            order.Id, order.OrderCode, statusBeforeCancel.ToString(),
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+            ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+        return MapToResponse(order);
     }
 
     public async Task CompleteAsync(
@@ -2839,7 +3022,8 @@ public class OrderLogic(
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
-            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson)).ToList(),
+            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson,
+            p.PaymentPurpose.ToString())).ToList(),
         (o.CustomBundles ?? []).Select(b => new CustomBundleResponse(
             b.Id, b.OrderId, b.Label, b.Note, b.TotalPrice,
             b.PackingStatus.ToString(), b.PackedAt,
@@ -2878,8 +3062,20 @@ public class OrderLogic(
         o.DeliveredByName,
         o.PickupContactName,
         o.PickupContactPhone,
-        o.PickupCode
+        o.PickupCode,
+        o.DepositAmount,
+        CalculateRemainingAmountDue(o)
     );
+
+    /// <summary>Số tiền còn phải thu khi khách quay lại nhận hàng (đơn đặt cọc).</summary>
+    private static decimal? CalculateRemainingAmountDue(Order o)
+    {
+        if (!o.DepositAmount.HasValue || o.DepositAmount.Value <= 0) return null;
+        var collected = (o.Payments ?? [])
+            .Where(p => p.PaymentStatus == PaymentStatus.Success)
+            .Sum(p => p.Amount);
+        return Math.Max(0, o.FinalAmount - collected);
+    }
 
     private static OrderSummaryResponse MapToSummary(Order o)
     {

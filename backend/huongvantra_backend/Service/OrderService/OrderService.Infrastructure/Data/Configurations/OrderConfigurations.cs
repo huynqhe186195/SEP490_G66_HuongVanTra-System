@@ -48,6 +48,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.PickupCode).HasMaxLength(10);
         builder.HasIndex(e => e.PickupCode);
         builder.Property(e => e.DeliveredByName).HasMaxLength(100);
+        builder.Property(e => e.DepositAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.ContractCodeSnapshot).HasMaxLength(50);
         builder.Property(e => e.ContractDiscountPercentSnapshot).HasColumnType("decimal(5,2)");
         builder.HasIndex(e => e.ContractId);
@@ -160,6 +161,8 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.TransactionRef).HasMaxLength(100);
         builder.Property(e => e.CodDebtSettlementJson).HasMaxLength(4000);
         builder.Property(e => e.TransferQrExpiresAtUtc);
+        builder.Property(e => e.PaymentPurpose).HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(PaymentPurpose.Full).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }

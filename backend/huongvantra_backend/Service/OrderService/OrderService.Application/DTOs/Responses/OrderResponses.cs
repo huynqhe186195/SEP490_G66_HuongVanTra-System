@@ -68,7 +68,9 @@ public record OrderResponse(
     string? DeliveredByName = null,
     string? PickupContactName = null,
     string? PickupContactPhone = null,
-    string? PickupCode = null
+    string? PickupCode = null,
+    decimal? DepositAmount = null,
+    decimal? RemainingAmountDue = null
 );
 
 public record StockHandlingLineResponse(    Guid SkuId,
@@ -170,7 +172,8 @@ public record PaymentResponse(
     bool IsCodVerified,
     DateTime? CodWarningDate,
     DateTime? PaidAt,
-    string? CodDebtSettlementJson = null
+    string? CodDebtSettlementJson = null,
+    string PaymentPurpose = "Full"
 );
 
 public record OrderSummaryResponse(

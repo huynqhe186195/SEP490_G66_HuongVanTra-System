@@ -83,3 +83,10 @@ public enum PosCashSessionStatus
     Open,
     Closed
 }
+
+public enum PaymentPurpose
+{
+    Full,
+    Deposit,
+    RemainingAtPickup
+}

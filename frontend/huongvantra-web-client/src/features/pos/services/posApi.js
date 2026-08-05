@@ -145,6 +145,7 @@ function buildOrderRequestFromPosPayload(
     pickupNote: payload.pickupNote || null,
     pickupContactName: payload.pickupContactName || null,
     pickupContactPhone: payload.pickupContactPhone || null,
+    depositAmount: payload.depositAmount ?? null,
     payments: (payload.payments ?? []).map((allocation) => ({
       paymentMethod: mapPaymentMethod(allocation.paymentMethod),
       amount: Number(allocation.amount ?? 0),
@@ -306,6 +307,22 @@ export async function fetchOrderTransferQrByOrderId(orderId) {
 export async function refreshOrderTransferQr(orderId) {
   const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/transfer-qr/refresh`, { method: 'POST' })
   return mapTransferQrResponse(qr)
+}
+
+/** POS-06 (cọc): QR thu nốt phần còn lại khi khách tới nhận hàng. */
+export async function fetchOrderRemainingQr(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-qr`, { method: 'GET' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function refreshOrderRemainingQr(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-qr/refresh`, { method: 'POST' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function fetchOrderRemainingPaymentStatus(orderId) {
+  const data = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-status`, { method: 'GET' })
+  return mapPosPaymentStatus(data)
 }
 
 export async function fetchOrderTransferQr({ orderCode, amount, orderId }) {

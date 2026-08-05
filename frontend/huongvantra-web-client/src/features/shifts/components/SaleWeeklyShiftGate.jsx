@@ -168,9 +168,11 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
     }
   }, [])
 
-  const load = () => {
+  // silent=true cho các lần poll định kỳ: bật lại `checking` sẽ unmount toàn bộ children,
+  // làm mất modal/form đang mở của người dùng mỗi phút.
+  const load = (silent = false) => {
     if (!gateApplies) return
-    setChecking(true)
+    if (!silent) setChecking(true)
     setError('')
     Promise.all([
       fetchMyShiftWeekStatus().catch((err) => {
@@ -233,7 +235,7 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
       return undefined
     }
     load()
-    const id = window.setInterval(load, CHECK_INTERVAL_MS)
+    const id = window.setInterval(() => load(true), CHECK_INTERVAL_MS)
     return () => window.clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gateApplies])

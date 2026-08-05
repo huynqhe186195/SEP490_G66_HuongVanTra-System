@@ -27,8 +27,15 @@ public record CreateOrderRequest(
     DateTime? PickupDate = null,
     string? PickupNote = null,
     string? PickupContactName = null,
-    string? PickupContactPhone = null
+    string? PickupContactPhone = null,
+    // POS-06 (cọc): tiền cọc thu trước, tối thiểu 50% FinalAmount khi chấp nhận backorder.
+    decimal? DepositAmount = null
 );
+
+public record CollectRemainingRequest(
+    PaymentMethod PaymentMethod,
+    decimal Amount,
+    string? TransactionRef = null);
 
 public record CreatePaymentAllocationRequest(
     PaymentMethod PaymentMethod,

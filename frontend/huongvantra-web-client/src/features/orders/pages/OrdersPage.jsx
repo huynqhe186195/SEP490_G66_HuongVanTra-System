@@ -11,7 +11,6 @@ import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { showError } from '../../../app/toast.js'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
-import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import { fetchOrders } from '../services/ordersApi.js'
 import {
@@ -353,29 +352,26 @@ function OrdersPage() {
           <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Mã đơn</th>
+                <th className="px-6 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Trạng thái</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Khách</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Trạng thái</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kênh</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Người bán</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kho</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ngày tạo</th>
                 <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wide text-[#717971]">Thành tiền</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-10" colSpan={10}>
+                  <td className="px-6 py-10" colSpan={7}>
                     <LoadingIndicator />
                   </td>
                 </tr>
               ) : null}
               {!isLoading && orders.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={10}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={7}>
                     Không có đơn phù hợp bộ lọc.
                   </td>
                 </tr>
@@ -385,10 +381,15 @@ function OrdersPage() {
                     const inventorySyncMeta = resolveInventorySyncMeta(order)
                     return (
                     <tr key={order.id} className="transition-colors hover:bg-[#fbf9f1]/30">
-                      <td className="px-6 py-4 font-bold text-slate-700">
-                        <Link className="hover:text-[#538463] hover:underline" to={`/orders/${order.id}`}>
-                          {order.orderCode}
-                        </Link>
+                      <td className="px-6 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
+                          {getOrderStatusLabel(order.orderStatus)}
+                        </span>
+                        {getPickupDueBadge(order) ? (
+                          <span className={`mt-1 block w-fit rounded-full px-3 py-1 text-xs font-semibold ${getPickupDueBadge(order).className}`}>
+                            {getPickupDueBadge(order).label}
+                          </span>
+                        ) : null}
                         {order.hasActiveStockReservation ? (
                           <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
                             <span className="material-symbols-outlined text-[13px]">inventory_2</span>
@@ -403,16 +404,6 @@ function OrdersPage() {
                         />
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
-                          {getOrderStatusLabel(order.orderStatus)}
-                        </span>
-                        {getPickupDueBadge(order) ? (
-                          <span className={`mt-1 block w-fit rounded-full px-3 py-1 text-xs font-semibold ${getPickupDueBadge(order).className}`}>
-                            {getPickupDueBadge(order).label}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-4">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderChannelClass(order.orderChannel)}`}>
                           {getOrderChannelLabel(order.orderChannel)}
                         </span>
@@ -425,17 +416,7 @@ function OrdersPage() {
                           {inventorySyncMeta.label}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-xs text-slate-500">{formatVietnamDateTime(order.createdAt)}</td>
                       <td className="px-6 py-4 text-right font-bold text-[#356647]">{formatVnd(order.finalAmount)}</td>
-                      <td className="max-w-[200px] px-4 py-4 text-xs text-slate-600">
-                        {order.note?.trim() ? (
-                          <span className="line-clamp-2" title={order.note}>
-                            {order.note}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
                       <td className="px-4 py-4 text-right">
                         <Link className="text-sm font-semibold text-[#538463] hover:underline" to={`/orders/${order.id}`}>
                           Chi tiết

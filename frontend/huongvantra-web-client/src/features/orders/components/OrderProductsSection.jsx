@@ -8,13 +8,14 @@ function OrderProductsSection({
   constrained = false,
   orderId,
   timelineRefreshKey,
+  className = 'lg:col-span-2',
 }) {
   const showTimeline = constrained && orderId
   const itemCount = orderLines.reduce((sum, { line }) => sum + (line.quantity || 0), 0)
 
   return (
     <section
-      className={`flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-2 ${
+      className={`flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm ${className} ${
         showTimeline
           ? 'max-h-[min(520px,calc(100dvh-11rem))] p-4'
           : constrained

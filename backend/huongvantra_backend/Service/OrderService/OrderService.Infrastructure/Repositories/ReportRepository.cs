@@ -114,6 +114,32 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         
         var customerGrowthRate = prevCustomerCount == 0 ? (customerCount > 0 ? 1.0 : 0.0) : (double)(customerCount - prevCustomerCount) / prevCustomerCount;
 
+        // Cọc bị mất khi hủy đơn backorder: thu nhập khác, tách riêng khỏi doanh thu bán hàng.
+        var forfeitedQuery = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Cancelled && o.DepositAmount != null && o.DepositAmount > 0);
+
+        if (year.HasValue)
+        {
+            forfeitedQuery = forfeitedQuery.Where(o => o.CreatedAt.Year == year.Value);
+        }
+
+        if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            forfeitedQuery = forfeitedQuery.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+        }
+
+        if (month.HasValue)
+        {
+            forfeitedQuery = forfeitedQuery.Where(o => o.CreatedAt.Month == month.Value);
+        }
+
+        var forfeitedDeposits = await forfeitedQuery
+            .Select(o => o.DepositAmount!.Value)
+            .ToListAsync(ct);
+
         return new SalesStatisticsResponse
         {
             GrossRevenue = grossRevenue,
@@ -129,6 +155,8 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             CustomerGrowthRate = customerGrowthRate,
             TotalCostOfGoods = totalCost,
             GrossProfit = grossProfit,
+            ForfeitedDepositIncome = forfeitedDeposits.Sum(),
+            ForfeitedDepositOrders = forfeitedDeposits.Count,
             TotalDiscountAmount = totalDiscountAmount
         };
     }

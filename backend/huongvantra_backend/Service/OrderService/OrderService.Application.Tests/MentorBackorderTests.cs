@@ -291,7 +291,8 @@ public sealed class MentorBackorderTests
     }
 
     [Theory]
-    [InlineData(null, OrderStatus.Completed)]
+    // POS-06 (KB4): nhận tại quầy thì khách đã về, chỉ sẵn sàng giao — chờ Sale bấm "Đã giao hàng".
+    [InlineData(null, OrderStatus.ReadyToDeliver)]
     [InlineData("12 Nguyễn Trãi", OrderStatus.Processing)]
     public async Task InventoryConfirmation_TransitionsPickupOrDeliveryCorrectly(
         string? shippingAddress,
@@ -311,9 +312,238 @@ public sealed class MentorBackorderTests
         Assert.Equal(InventorySyncStatus.Synced, order.InventorySyncStatus);
     }
 
+    [Fact]
+    public async Task AcceptBackorder_WithDeposit_StoresDepositAmount_TagsPaymentAsDeposit()
+    {
+        Order? persisted = null;
+        var repository = new Mock<IOrderRepository>();
+        repository
+            .Setup(item => item.AddAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()))
+            .Callback<Order, CancellationToken>((order, _) => persisted = order)
+            .Returns(Task.CompletedTask);
+        repository
+            .Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(client => client.PreparePosStockDeductionAsync(
+                It.IsAny<InventoryStockHandlingRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InventoryStockHandlingRequest request, CancellationToken _) =>
+                BackorderResponse(request, required: false));
+        var logic = CreateLogic(repository, inventory);
+
+        // Đơn 100.000đ, khách cọc 60.000đ (60%).
+        var result = await logic.CreateAsync(
+            CreateRequest() with
+            {
+                AcceptBackorder = true,
+                FulfillmentPreference = FulfillmentPreference.PartialDelivery,
+                PaidAmount = 60_000,
+                DepositAmount = 60_000
+            },
+            ManagerAccess());
+
+        Assert.NotNull(persisted);
+        Assert.Equal(60_000m, persisted!.DepositAmount);
+        Assert.Equal(60_000m, result.DepositAmount);
+        Assert.Equal(40_000m, result.RemainingAmountDue);
+        var payment = Assert.Single(persisted.Payments);
+        Assert.Equal(PaymentPurpose.Deposit, payment.PaymentPurpose);
+        Assert.Equal(60_000m, payment.Amount);
+        Assert.Equal(PaymentStatus.Success, payment.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task AcceptBackorder_DepositBelowHalf_Throws()
+    {
+        var repository = new Mock<IOrderRepository>();
+        repository
+            .Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(client => client.PreparePosStockDeductionAsync(
+                It.IsAny<InventoryStockHandlingRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InventoryStockHandlingRequest request, CancellationToken _) =>
+                BackorderResponse(request, required: false));
+        var logic = CreateLogic(repository, inventory);
+
+        // Đơn 100.000đ, khách chỉ cọc 40.000đ (40%) — dưới mức tối thiểu 50%.
+        await Assert.ThrowsAsync<OrderValidationException>(() =>
+            logic.CreateAsync(
+                CreateRequest() with
+                {
+                    AcceptBackorder = true,
+                    FulfillmentPreference = FulfillmentPreference.PartialDelivery,
+                    PaidAmount = 40_000,
+                    DepositAmount = 40_000
+                },
+                ManagerAccess()));
+
+        repository.Verify(
+            item => item.AddAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DepositOrder_Cancel_DoesNotRequireRefundApproval_DepositKept()
+    {
+        var order = DepositOrder();
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        repository.Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>());
+
+        await logic.CancelAsync(order.Id, ManagerAccess(), "Khách đổi ý");
+
+        Assert.Equal(OrderStatus.Cancelled, order.OrderStatus);
+        Assert.Equal(InventorySyncStatus.Cancelled, order.InventorySyncStatus);
+        Assert.Equal(BackorderRefundStatus.NotRequired, order.RefundStatus);
+        Assert.Null(order.RefundAmount);
+        // Tiền cọc đã vào két — không đảo trạng thái thanh toán.
+        Assert.Equal(PaymentStatus.Success, Assert.Single(order.Payments).PaymentStatus);
+    }
+
+    [Fact]
+    public async Task CancelOverdueDeposit_Before7Days_Throws()
+    {
+        var order = DepositOrder();
+        order.PickupDate = DateTime.UtcNow.Date.AddDays(-3);
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>());
+
+        await Assert.ThrowsAsync<OrderValidationException>(() =>
+            logic.CancelOverdueDepositAsync(order.Id, ManagerAccess(), "Khách không đến lấy"));
+
+        Assert.Equal(OrderStatus.WaitingMaterials, order.OrderStatus);
+        repository.Verify(item => item.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CancelOverdueDeposit_After7Days_CancelsAndKeepsDeposit()
+    {
+        var order = DepositOrder();
+        order.PickupDate = DateTime.UtcNow.Date.AddDays(-8);
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        repository.Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>());
+
+        var result = await logic.CancelOverdueDepositAsync(
+            order.Id, ManagerAccess(), "Quá hạn nhận hàng", Guid.NewGuid(), "Manager");
+
+        Assert.Equal(OrderStatus.Cancelled, order.OrderStatus);
+        Assert.Equal(InventorySyncStatus.Cancelled, order.InventorySyncStatus);
+        Assert.Equal(BackorderRefundStatus.NotRequired, order.RefundStatus);
+        Assert.Null(order.RefundAmount);
+        Assert.Equal(60_000m, result.DepositAmount);
+        Assert.Equal(PaymentStatus.Success, Assert.Single(order.Payments).PaymentStatus);
+    }
+
+    [Fact]
+    public async Task CancelOverdueDeposit_NonManager_Throws()
+    {
+        var order = DepositOrder();
+        order.PickupDate = DateTime.UtcNow.Date.AddDays(-8);
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>());
+
+        await Assert.ThrowsAsync<OrderForbiddenException>(() =>
+            logic.CancelOverdueDepositAsync(
+                order.Id,
+                new OrderAccessContext(Guid.NewGuid(), CanViewAllOrders: false),
+                "Quá hạn nhận hàng"));
+
+        Assert.Equal(OrderStatus.WaitingMaterials, order.OrderStatus);
+    }
+
+    [Fact]
+    public async Task CollectRemainingAndDeliver_CompletesOrder_WithTwoPaymentRecords()
+    {
+        var order = DepositOrder();
+        order.OrderStatus = OrderStatus.ReadyToDeliver;
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        repository.Setup(item => item.TryTransitionStatusAsync(
+                order.Id,
+                OrderStatus.ReadyToDeliver,
+                OrderStatus.Completed,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repository.Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var paymentRepository = new Mock<IPaymentRepository>();
+        Payment? added = null;
+        paymentRepository
+            .Setup(item => item.AddAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
+            .Callback<Payment, CancellationToken>((payment, _) => added = payment)
+            .Returns(Task.CompletedTask);
+
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>(), paymentRepository);
+
+        var result = await logic.CollectRemainingAndDeliverAsync(
+            order.Id,
+            new CollectRemainingRequest(PaymentMethod.Cash, 40_000),
+            ManagerAccess(),
+            Guid.NewGuid(),
+            "Sale POS");
+
+        Assert.Equal(OrderStatus.Completed, order.OrderStatus);
+        Assert.NotNull(added);
+        Assert.Equal(PaymentPurpose.RemainingAtPickup, added!.PaymentPurpose);
+        Assert.Equal(40_000m, added.Amount);
+        Assert.Equal(PaymentStatus.Success, added.PaymentStatus);
+        Assert.Equal(2, order.Payments!.Count);
+        Assert.Equal(
+            [PaymentPurpose.Deposit, PaymentPurpose.RemainingAtPickup],
+            order.Payments.Select(payment => payment.PaymentPurpose));
+        Assert.Equal(0m, result.RemainingAmountDue);
+    }
+
+    [Fact]
+    public async Task CollectRemainingAndDeliver_AmountBelowRemaining_Throws()
+    {
+        var order = DepositOrder();
+        order.OrderStatus = OrderStatus.ReadyToDeliver;
+        var repository = new Mock<IOrderRepository>();
+        repository.Setup(item => item.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        var paymentRepository = new Mock<IPaymentRepository>();
+        var logic = CreateLogic(repository, new Mock<IInventoryCatalogClient>(), paymentRepository);
+
+        await Assert.ThrowsAsync<OrderValidationException>(() =>
+            logic.CollectRemainingAndDeliverAsync(
+                order.Id,
+                new CollectRemainingRequest(PaymentMethod.Cash, 10_000),
+                ManagerAccess()));
+
+        Assert.Equal(OrderStatus.ReadyToDeliver, order.OrderStatus);
+        paymentRepository.Verify(
+            item => item.AddAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static OrderLogic CreateLogic(
         Mock<IOrderRepository> repository,
         Mock<IInventoryCatalogClient> inventory)
+    {
+        return CreateLogic(repository, inventory, new Mock<IPaymentRepository>());
+    }
+
+    private static OrderLogic CreateLogic(
+        Mock<IOrderRepository> repository,
+        Mock<IInventoryCatalogClient> inventory,
+        Mock<IPaymentRepository> paymentRepository)
     {
         var productCatalog = new Mock<IProductCatalogClient>();
         productCatalog
@@ -339,7 +569,7 @@ public sealed class MentorBackorderTests
         return new OrderLogic(
             repository.Object,
             new Mock<IReturnOrderRepository>().Object,
-            new Mock<IPaymentRepository>().Object,
+            paymentRepository.Object,
             codeGenerator.Object,
             new Mock<IOrderEventPublisher>().Object,
             new Mock<IOrderActivityRepository>().Object,
@@ -393,7 +623,10 @@ public sealed class MentorBackorderTests
                     UnitPrice: 50_000)
             ],
             PaymentMethod: PaymentMethod.Cash,
-            PaidAmount: 100_000);
+            PaidAmount: 100_000,
+            // POS-06 (KB4): đơn backorder bắt buộc có người nhận để đối chiếu khi khách quay lại.
+            PickupContactName: "Nguyễn Văn A",
+            PickupContactPhone: "0900000000");
 
     private static Order WaitingOrder() => new()
     {
@@ -418,6 +651,33 @@ public sealed class MentorBackorderTests
         ],
         Payments = []
     };
+
+    /// <summary>Đơn backorder đã thu cọc 60.000đ trên tổng 100.000đ.</summary>
+    private static Order DepositOrder()
+    {
+        var order = WaitingOrder();
+        order.FinalAmount = 100_000;
+        order.TotalAmount = 100_000;
+        order.DepositAmount = 60_000;
+        order.PickupDate = DateTime.UtcNow.Date.AddDays(2);
+        order.FulfillmentPreference = FulfillmentPreference.PartialDelivery;
+        order.Payments =
+        [
+            new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                PaymentMethod = PaymentMethod.Cash,
+                PaymentStatus = PaymentStatus.Success,
+                PaymentPurpose = PaymentPurpose.Deposit,
+                Amount = 60_000,
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            }
+        ];
+        return order;
+    }
 
     private static OrderAccessContext ManagerAccess() =>
         new(Guid.NewGuid(), CanViewAllOrders: true);

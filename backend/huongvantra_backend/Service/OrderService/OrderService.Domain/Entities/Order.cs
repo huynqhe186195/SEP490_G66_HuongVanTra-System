@@ -58,6 +58,9 @@ public class Order : BaseEntity
     public string? PickupCode { get; set; }
     /// <summary>POS-06 (KB4): mốc Sale xác nhận đã giao hàng cho khách.</summary>
     public DateTime? DeliveredAt { get; set; }
+
+    /// <summary>Tiền cọc thu trước khi sản xuất/chờ hàng. Tối thiểu 50% FinalAmount.</summary>
+    public decimal? DepositAmount { get; set; }
     public Guid? DeliveredBy { get; set; }
     public string? DeliveredByName { get; set; }
 

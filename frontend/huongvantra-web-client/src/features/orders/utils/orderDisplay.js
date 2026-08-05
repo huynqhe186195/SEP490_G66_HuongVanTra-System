@@ -528,8 +528,16 @@ export function canMarkDelivered(order) {
 }
 
 // POS-06 (KB4): cảnh báo hạn giao dựa trên ngày hẹn; không tự động hủy đơn.
+// Badge hiện từ lúc đơn còn chờ hàng để Manager/Sale kịp liên hệ khách, không chỉ khi đã sẵn sàng giao.
+const PICKUP_DUE_STATUSES = new Set([
+  'WaitingMaterials',
+  'WaitingTransfer',
+  'WaitingProduction',
+  'ReadyToDeliver',
+])
+
 export function getPickupDueBadge(order) {
-  if (!canMarkDelivered(order) || !order?.pickupDate) return null
+  if (!PICKUP_DUE_STATUSES.has(normalizeOrderKey(order?.orderStatus)) || !order?.pickupDate) return null
   const due = new Date(order.pickupDate)
   if (Number.isNaN(due.getTime())) return null
   due.setHours(0, 0, 0, 0)
@@ -537,9 +545,22 @@ export function getPickupDueBadge(order) {
   today.setHours(0, 0, 0, 0)
   const diffDays = Math.round((due - today) / 86400000)
   if (diffDays > 0) return null
-  return diffDays === 0
-    ? { label: 'Hôm nay cần giao', className: 'text-amber-700 bg-amber-100 border border-amber-300' }
-    : { label: 'Quá hạn giao', className: 'text-red-700 bg-red-100 border border-red-300' }
+  if (diffDays === 0) {
+    return { label: 'Hôm nay cần giao', className: 'text-amber-700 bg-amber-100 border border-amber-300' }
+  }
+  const overdueDays = Math.abs(diffDays)
+  // Quá 7 ngày: Manager được phép hủy đơn và giữ lại tiền cọc.
+  if (overdueDays >= 7) {
+    return {
+      label: `Quá hạn ${overdueDays} ngày`,
+      className: 'text-red-700 bg-red-100 border border-red-300',
+      canCancelOverdue: true,
+    }
+  }
+  return {
+    label: `Quá hạn ${overdueDays} ngày`,
+    className: 'text-amber-700 bg-amber-100 border border-amber-300',
+  }
 }
 
 export function isContractOrder(order) {

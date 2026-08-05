@@ -1705,15 +1705,18 @@ function PosPage() {
     pickupNote = null,
     pickupContactName = null,
     pickupContactPhone = null,
+    depositAmount = null,
   }) => {
     const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
     const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
     const backendDebtSettlementJson = debtApplyAmount > 0
       ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: method })
       : null
+    // Đơn đặt cọc chỉ thu trước phần cọc; phần còn lại thu khi khách tới nhận hàng.
+    const collectedNow = depositAmount ?? recordedPaymentAmount
     const payload = buildOrderPayload(
       method,
-      recordedPaymentAmount,
+      collectedNow,
       backendDebtSettlementJson,
     )
     payload.acceptBackorder = acceptBackorder
@@ -1722,9 +1725,10 @@ function PosPage() {
     payload.pickupNote = pickupNote
     payload.pickupContactName = pickupContactName
     payload.pickupContactPhone = pickupContactPhone
+    payload.depositAmount = depositAmount
     const result = await createOrder(payload, { idempotencyKey })
 
-    if (method === 'CASH' && recordedPaymentAmount > 0) {
+    if (method === 'CASH' && collectedNow > 0) {
       await recordCashSale()
     }
 
@@ -1732,7 +1736,11 @@ function PosPage() {
             ? ` Â· ${result.stockHandlingSummary.message}`
             : "";
 
-        if (recordedPaymentAmount >= total) {
+        if (depositAmount != null) {
+            showSuccess(
+                `Đã nhận cọc ${formatMoney(depositAmount)} đ cho đơn ${result.orderCode}. Còn lại ${formatMoney(Math.max(0, total - depositAmount))} đ thu khi khách nhận hàng.${stockNote}`,
+            );
+        } else if (recordedPaymentAmount >= total) {
             const debtNote =
                 debtApplyAmount > 0 ? ` · Trừ nợ ${formatMoney(debtApplyAmount)} đ tại backend`
                 : changeAfterDebt > 0 ? ` · Thừa ${formatMoney(changeAfterDebt)} đ`
@@ -1939,6 +1947,7 @@ function PosPage() {
         pickupNote = null,
         pickupContactName = null,
         pickupContactPhone = null,
+        depositAmount = null,
     ) => {
         if (isTakeaway) {
             await handleTakeawayPayment(debtSettlement, idempotencyKey);
@@ -1950,7 +1959,7 @@ function PosPage() {
             const backendDebtSettlementJson = debtApplyAmount > 0
                 ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: "VietQR" })
                 : null;
-            const transferAppliedToOrder = Math.min(transferQrAmount, total);
+            const transferAppliedToOrder = depositAmount ?? Math.min(transferQrAmount, total);
             const actualQrAmount = transferAppliedToOrder + debtApplyAmount;
             const payload = buildOrderPayload(
                 "TRANSFER",
@@ -1963,6 +1972,7 @@ function PosPage() {
             payload.pickupNote = pickupNote;
             payload.pickupContactName = pickupContactName;
             payload.pickupContactPhone = pickupContactPhone;
+            payload.depositAmount = depositAmount;
             const result = await createPosOrderOnline(payload, {
                 qrAmount: actualQrAmount,
                 idempotencyKey,
@@ -2015,6 +2025,7 @@ function PosPage() {
             pickupNote,
             pickupContactName,
             pickupContactPhone,
+            depositAmount,
         });
     };
 
@@ -2026,6 +2037,7 @@ function PosPage() {
         pickupNote = null,
         pickupContactName = null,
         pickupContactPhone = null,
+        depositAmount = null,
     ) =>
         checkoutAttemptRef.current.submit(
             {
@@ -2049,6 +2061,7 @@ function PosPage() {
                 pickupNote,
                 pickupContactName,
                 pickupContactPhone,
+                depositAmount,
             },
             (idempotencyKey) => executePayment(
                 activeDebtSettlement,
@@ -2059,6 +2072,7 @@ function PosPage() {
                 pickupNote,
                 pickupContactName,
                 pickupContactPhone,
+                depositAmount,
             ),
         );
 
@@ -2210,6 +2224,7 @@ function PosPage() {
         pickupNote,
         pickupContactName,
         pickupContactPhone,
+        depositAmount,
     }) => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         setIsSubmitting(true);
@@ -2222,6 +2237,7 @@ function PosPage() {
                 pickupNote,
                 pickupContactName,
                 pickupContactPhone,
+                depositAmount,
             );
             // Khách vãng lai đặt đơn chờ hàng sẽ quay lại lấy — lưu thành hồ sơ để lần sau tra được.
             // Thất bại (trùng SĐT, mất mạng) không được ảnh hưởng đơn vừa tạo.
@@ -3243,6 +3259,7 @@ function PosPage() {
           backorderQuantity={backorderPrompt.backorderQuantity || 0}
           estimatedReadyFrom={backorderPrompt.estimatedReadyFrom || null}
           selectedCustomer={selectedCustomer}
+          orderTotal={total}
           isSubmitting={isSubmitting}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}

@@ -19,6 +19,7 @@ export function mapPayment(item) {
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     paidAt: item.paidAt ?? item.PaidAt ?? null,
     codDebtSettlementJson: item.codDebtSettlementJson ?? item.CodDebtSettlementJson ?? null,
+    paymentPurpose: normalizeEnum(item.paymentPurpose ?? item.PaymentPurpose ?? 'Full'),
   }
 }
 
@@ -172,6 +173,8 @@ export function mapOrderDetail(item) {
     pickupContactName: item.pickupContactName ?? item.PickupContactName ?? '',
     pickupContactPhone: item.pickupContactPhone ?? item.PickupContactPhone ?? '',
     pickupCode: item.pickupCode ?? item.PickupCode ?? '',
+    depositAmount: Number(item.depositAmount ?? item.DepositAmount ?? 0),
+    remainingAmountDue: Number(item.remainingAmountDue ?? item.RemainingAmountDue ?? 0),
   }
 }
 
@@ -328,6 +331,7 @@ export function buildCreateOrderBody(payload) {
     pickupNote: payload.pickupNote?.trim() || null,
     pickupContactName: payload.pickupContactName?.trim() || null,
     pickupContactPhone: payload.pickupContactPhone?.trim() || null,
+    depositAmount: payload.depositAmount != null ? Number(payload.depositAmount) : null,
     codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
     payments: Array.isArray(payload.payments)
       ? payload.payments
@@ -455,6 +459,28 @@ export async function completeOrder(id) {
 
 export async function markOrderDelivered(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/mark-delivered`, { method: 'POST' })
+}
+
+// POS-06 (cọc): thu phần tiền còn lại khi khách tới nhận, rồi chuyển đơn sang Hoàn tất.
+export async function collectRemainingAndDeliver(id, payload) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/collect-and-deliver`, {
+    method: 'POST',
+    body: JSON.stringify({
+      paymentMethod: payload.paymentMethod,
+      amount: Number(payload.amount ?? 0),
+      transactionRef: payload.transactionRef?.trim() || null,
+    }),
+  })
+  return mapOrderDetail(data)
+}
+
+// POS-06 (cọc): Manager hủy đơn quá hạn nhận hàng 7 ngày, giữ lại tiền cọc.
+export async function cancelOverdueDepositOrder(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/cancel-overdue-deposit`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+  return mapOrderDetail(data)
 }
 
 function mapReturnOrderLine(item) {

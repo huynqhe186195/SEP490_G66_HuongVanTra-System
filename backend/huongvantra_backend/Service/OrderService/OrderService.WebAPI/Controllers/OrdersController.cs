@@ -221,6 +221,23 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/collect-and-deliver")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> CollectAndDeliver(Guid id, [FromBody] CollectRemainingRequest request, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CollectRemainingAndDeliverAsync(id, request, AccessContext(), actorId, actorName, ct));
+    }
+
+    [HttpPost("{id:guid}/cancel-overdue-deposit")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> CancelOverdueDeposit(Guid id, [FromBody] CancelOrderRequest request, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CancelOverdueDepositAsync(
+            id, AccessContext() with { CanViewAllOrders = true }, request.Reason, actorId, actorName, ct));
+    }
+
     [HttpPost("{id:guid}/return")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Return(Guid id, [FromBody] ReturnOrderRequest request, CancellationToken ct)
