@@ -66,8 +66,53 @@ const ReceiptPaper = forwardRef(function ReceiptPaper({ receipt }, ref) {
             <span className="receipt-item-total">{formatMoney(item.total)}</span>
           </div>
           <div className="receipt-item-sku">{item.sku}</div>
+          {Number(item.immediateFulfilledQuantity || 0) > 0 ? (
+            <div className="receipt-item-sku">
+              Giao ngay: {formatQty(item.immediateFulfilledQuantity)}
+            </div>
+          ) : null}
+          {Number(item.reservedFinishedQuantity || 0) > 0 ? (
+            <div className="receipt-item-sku">
+              Đã giữ: {formatQty(item.reservedFinishedQuantity)}
+            </div>
+          ) : null}
+          {Number(item.backorderQuantity || 0) > 0 ? (
+            <div className="receipt-item-sku">
+              Chờ nguyên liệu: {formatQty(item.backorderQuantity)}
+            </div>
+          ) : null}
         </div>
       ))}
+
+      {receipt.isBackorder ? (
+        <>
+          <div className="receipt-divider" />
+          <div className="receipt-meta receipt-highlight">ĐƠN CHỜ NGUYÊN LIỆU</div>
+          <div className="receipt-meta">
+            Hình thức: {receipt.fulfillmentPreference === 'CompleteDelivery'
+              ? 'Nhận một lần khi đủ hàng'
+              : 'Nhận trước phần hàng sẵn'}
+          </div>
+          <div className="receipt-meta">
+            Dự kiến: {receipt.estimatedReadyFromLabel || '—'} - {receipt.estimatedReadyToLabel || '—'}
+          </div>
+          {receipt.pickupDateLabel ? (
+            <div className="receipt-meta">Hẹn lấy: {receipt.pickupDateLabel}</div>
+          ) : null}
+          {receipt.pickupContactName ? (
+            <div className="receipt-meta">
+              Người nhận: {receipt.pickupContactName}
+              {receipt.pickupContactPhone ? ` — ${receipt.pickupContactPhone}` : ''}
+            </div>
+          ) : null}
+          {receipt.pickupCode ? (
+            <>
+              <div className="receipt-meta receipt-highlight">MÃ NHẬN HÀNG: {receipt.pickupCode}</div>
+              <div className="receipt-meta">Vui lòng giữ hoá đơn và đọc mã này khi tới lấy hàng.</div>
+            </>
+          ) : null}
+        </>
+      ) : null}
 
       <div className="receipt-divider" />
 

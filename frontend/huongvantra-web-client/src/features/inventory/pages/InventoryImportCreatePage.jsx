@@ -140,11 +140,25 @@ function getProductTypeLabel(productType) {
 function getSkuUnitName(sku) {
   if (sku?.unitName) return sku.unitName
   if (sku?.inventoryUnit === 'Gram') return 'g'
+  if (sku?.inventoryUnit === 'Piece') return 'cái'
   return sku?.inventoryUnit || '—'
 }
 
 function defaultSubmittedUnit(unit) {
-  return unit === 'Gram' ? 'kg' : 'piece'
+  return unit === 'Gram' ? 'g' : 'piece'
+}
+
+const SUBMITTED_UNIT_LABELS = { kg: 'kg', g: 'g', piece: 'cái' }
+
+function getSubmittedUnitOptions(inventoryUnit) {
+  return inventoryUnit === 'Gram' ? ['g', 'kg'] : ['piece']
+}
+
+/** Số lượng sau khi quy đổi về đơn vị tồn kho (gram cho nguyên liệu). */
+function toStockQuantity(quantityText, submittedUnit) {
+  const quantity = Number(String(quantityText ?? '').trim())
+  if (!Number.isFinite(quantity) || quantity <= 0) return null
+  return submittedUnit === 'kg' ? quantity * 1000 : quantity
 }
 
 function getSkuSnapshotName(sku) {
@@ -647,7 +661,14 @@ function InventoryImportCreatePage() {
       const supplierLotCode = String(raw.lotCode ?? '').trim()
       const manufacturedAt = String(raw.manufacturedAt ?? '').trim()
       const expiresAt = String(raw.expiresAt ?? '').trim()
-      // ĐVT trên Excel chỉ mang tính tham khảo — form luôn lấy đơn vị chuẩn của SKU.
+      const rawUnit = String(raw.submittedUnit ?? '').trim().toLowerCase()
+      const allowedUnits = getSubmittedUnitOptions(sku?.inventoryUnit)
+      const submittedUnit = allowedUnits.includes(rawUnit) ? rawUnit : defaultSubmittedUnit(sku?.inventoryUnit)
+      if (sku && rawUnit && !allowedUnits.includes(rawUnit)) {
+        previewWarnings.push(
+          `Dòng ${rowLabel}: đơn vị “${rawUnit}” không hợp lệ — tạm dùng “${SUBMITTED_UNIT_LABELS[submittedUnit] ?? submittedUnit}”, kiểm tra lại trước khi lưu.`,
+        )
+      }
 
       if (!sku) {
         previewErrors.push(
@@ -686,7 +707,7 @@ function InventoryImportCreatePage() {
         documentQuantity,
         actualQuantity,
         unitCost: sanitizeVndInput(unitCost),
-        submittedUnit: defaultSubmittedUnit(sku?.inventoryUnit),
+        submittedUnit,
         lotCode: supplierLotCode,
         manufacturedAt,
         expiresAt,
@@ -966,11 +987,13 @@ function InventoryImportCreatePage() {
 
       // Đơn vị phải hợp lệ theo inventoryUnit của SKU (B12)
       const sku = skuById.get(line.skuId)
-      if (sku && line.submittedUnit) {
+      if (sku) {
         const isGram = sku.inventoryUnit === 'Gram'
-        const validUnits = isGram ? ['kg', 'g'] : ['piece']
-        if (!validUnits.includes(line.submittedUnit)) {
-          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU đơn vị ${isGram ? 'Gram (kg/g)' : 'Piece'}.`
+        const validUnits = getSubmittedUnitOptions(sku.inventoryUnit)
+        if (!line.submittedUnit) {
+          lineErr.submittedUnit = 'Vui lòng chọn đơn vị nhập.'
+        } else if (!validUnits.includes(line.submittedUnit)) {
+          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU tính theo ${isGram ? 'khối lượng (kg/g)' : 'cái (piece)'}.`
         }
       }
 
@@ -1521,7 +1544,7 @@ function InventoryImportCreatePage() {
                         {!isExpanded ? (
                           <p className="mt-0.5 truncate text-xs text-slate-500">
                             SL {line.actualQuantity || '—'}
-                            {selectedSku ? ` ${getSkuUnitName(selectedSku)}` : ''}
+                            {line.submittedUnit ? ` ${SUBMITTED_UNIT_LABELS[line.submittedUnit] ?? line.submittedUnit}` : ''}
                             {' · '}
                             Lô {line.lotCode || '—'}
                             {' · '}
@@ -1629,12 +1652,28 @@ function InventoryImportCreatePage() {
                               {errs.actualQuantity ? <p className="text-xs text-red-500">{errs.actualQuantity}</p> : null}
                             </label>
                             <label className="space-y-1">
-                              <span className="text-xs font-semibold text-[#717971]">Đơn vị</span>
-                              <input
-                                readOnly
-                                value={selectedSku ? getSkuUnitName(selectedSku) : ''}
-                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700"
-                              />
+                              <span className="text-xs font-semibold text-[#717971]">Đơn vị <span className="text-red-500">*</span></span>
+                              <select
+                                disabled={!selectedSku}
+                                value={line.submittedUnit || ''}
+                                onChange={(event) => {
+                                  updateLine(line.key, { submittedUnit: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), submittedUnit: undefined } }))
+                                }}
+                                className={`w-full rounded-xl border p-2.5 text-sm disabled:bg-slate-50 disabled:text-slate-400 ${fi('submittedUnit')}`}
+                              >
+                                {selectedSku
+                                  ? getSubmittedUnitOptions(selectedSku.inventoryUnit).map((unit) => (
+                                      <option key={unit} value={unit}>{SUBMITTED_UNIT_LABELS[unit] ?? unit}</option>
+                                    ))
+                                  : <option value="">—</option>}
+                              </select>
+                              {errs.submittedUnit ? <p className="text-xs text-red-500">{errs.submittedUnit}</p> : null}
+                              {!errs.submittedUnit && line.submittedUnit === 'kg' && toStockQuantity(line.actualQuantity, 'kg') !== null ? (
+                                <p className="text-xs font-semibold text-amber-700">
+                                  Tồn kho sẽ tăng {toStockQuantity(line.actualQuantity, 'kg').toLocaleString('vi-VN')} g
+                                </p>
+                              ) : null}
                             </label>
                           </div>
                         </section>

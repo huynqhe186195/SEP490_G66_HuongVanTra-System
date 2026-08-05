@@ -238,7 +238,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
       <div className="border-b border-slate-200 pb-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
         <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Phiếu xuất kho</h1>
-        <p className="mt-1 text-sm text-slate-500">Kho tổng - Workflow 1</p>
+        <p className="mt-1 text-sm text-slate-500">Kho tổng</p>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -296,6 +296,164 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
   )
 }
 
+export function ProductionOrderDocument({ order, statusLabel }) {
+  const outputLines = Array.isArray(order?.outputLines) ? order.outputLines.filter(Boolean) : []
+  const materialLines = Array.isArray(order?.lines) ? order.lines.filter(Boolean) : []
+  const totalOutput = outputLines.reduce((sum, line) => sum + Number(line.plannedQuantity || 0), 0)
+  const creator = getCreatorDisplay(order)
+
+  return (
+    <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="border-b border-slate-200 pb-4 text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
+        <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Lệnh sản xuất</h1>
+        <p className="mt-1 font-mono text-sm text-slate-500">{order?.productionCode || '-'}</p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <HeaderField label="Mã lệnh SX" value={order?.productionCode} />
+        <HeaderField label="Trạng thái" value={statusLabel} />
+        <HeaderField label="Ngày tạo" value={order?.createdAt ? formatVietnamDateTime(order.createdAt) : '-'} />
+        <HeaderField label="Hoàn thành" value={order?.completedAt ? formatVietnamDateTime(order.completedAt) : '-'} />
+        <HeaderField label="Người lập phiếu" value={creator.name} />
+        <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
+        <HeaderField label="Tổng số lượng SX" value={formatStockQuantity(totalOutput)} />
+        <HeaderField label="Số dòng" value={`${outputLines.length} thành phẩm · ${materialLines.length} nguyên liệu`} />
+      </div>
+
+      {order?.note ? (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span className="font-semibold">Ghi chú:</span> {order.note}
+        </div>
+      ) : null}
+
+      <div className="mt-6 overflow-x-auto">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Thành phẩm đầu ra</p>
+        <table className="min-w-full border border-slate-200 text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="border-b border-slate-200 px-3 py-2">Sản Phẩm</th>
+              <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
+              <th className="border-b border-slate-200 px-3 py-2">Nơi nhập</th>
+              <th className="border-b border-slate-200 px-3 py-2">Lô thành phẩm</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {outputLines.map((line) => (
+              <tr key={line.id}>
+                <td className="px-3 py-2">
+                  <p className="text-slate-800">{line.finishedSkuSnapshotName || '-'}</p>
+                  <p className="font-mono text-xs text-slate-500">{line.finishedSkuCode || '-'}</p>
+                </td>
+                <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.plannedQuantity)}</td>
+                <td className="px-3 py-2 text-slate-700">{formatDestinationLocation(line.destinationLocation)}</td>
+                <td className="px-3 py-2 font-mono text-slate-700">{line.warehouseBatchLotCode || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {materialLines.length ? (
+        <div className="mt-5 overflow-x-auto">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Nguyên liệu cần xuất theo BOM</p>
+          <table className="min-w-full border border-slate-200 text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="border-b border-slate-200 px-3 py-2">Nguyên liệu</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {materialLines.map((line) => (
+                <tr key={line.id}>
+                  <td className="px-3 py-2">
+                    <p className="text-slate-800">{line.materialSnapshotName || '-'}</p>
+                    <p className="font-mono text-xs text-slate-500">{line.materialSkuCode || '-'}</p>
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.plannedQuantity)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <SignatureArea creator={creator} />
+    </article>
+  )
+}
+
+export function StockTransferDocument({ transfer, statusLabel }) {
+  const lines = Array.isArray(transfer?.lines) ? transfer.lines.filter(Boolean) : []
+  const totalQuantity = Number(
+    transfer?.totalQuantity ?? lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0),
+  )
+  const creator = getCreatorDisplay(transfer)
+
+  return (
+    <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="border-b border-slate-200 pb-4 text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
+        <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Phiếu điều chuyển</h1>
+        <p className="mt-1 text-sm text-slate-500">Kho → Kệ Hàng</p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <HeaderField label="Mã phiếu" value={transfer?.transferCode} />
+        <HeaderField label="Trạng thái" value={statusLabel} />
+        <HeaderField label="Yêu cầu nguồn" value={transfer?.sourceRequestCode} />
+        <HeaderField label="Thời gian tạo" value={transfer?.createdAt ? formatVietnamDateTime(transfer.createdAt) : '-'} />
+        <HeaderField label="Phiếu xuất" value={transfer?.exportSlipCode} />
+        <HeaderField label="Phiếu nhập" value={transfer?.importSlipCode} />
+        <HeaderField label="Hoàn tất lúc" value={transfer?.completedAt ? formatVietnamDateTime(transfer.completedAt) : '-'} />
+        <HeaderField label="Người lập phiếu" value={creator.name} />
+        <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
+        <HeaderField label="Tổng số lượng" value={formatStockQuantity(totalQuantity)} />
+        <HeaderField label="Số dòng" value={`${lines.length} dòng`} />
+      </div>
+
+      {transfer?.note ? (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span className="font-semibold">Ghi chú:</span> {transfer.note}
+        </div>
+      ) : null}
+
+      {transfer?.cancellationReason ? (
+        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <span className="font-semibold">Lý do hủy:</span> {transfer.cancellationReason}
+        </div>
+      ) : null}
+
+      <div className="mt-6 overflow-x-auto">
+        <table className="min-w-full border border-slate-200 text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="border-b border-slate-200 px-3 py-2">Sản Phẩm</th>
+              <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
+              <th className="border-b border-slate-200 px-3 py-2">Lô FIFO</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {lines.map((line) => (
+              <tr key={line.id}>
+                <td className="px-3 py-2">
+                  <p className="text-slate-800">{line.skuNameSnapshot || '-'}</p>
+                  <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
+                </td>
+                <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
+                <td className="px-3 py-2 text-slate-700">{formatAllocations(line.batchAllocations)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <SignatureArea creator={creator} />
+    </article>
+  )
+}
+
 export function ImportSlipDocument({ slip, getTypeLabel }) {
   const lines = getImportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
@@ -313,7 +471,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
       <div className="border-b border-slate-200 pb-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#356647]">HuongVanTra</p>
         <h1 className="mt-2 text-2xl font-bold uppercase text-slate-900">Phiếu nhập kho</h1>
-        <p className="mt-1 text-sm text-slate-500">Kho tổng - Workflow 1</p>
+        <p className="mt-1 text-sm text-slate-500">Kho tổng</p>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">

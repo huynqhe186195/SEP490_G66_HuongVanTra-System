@@ -425,6 +425,17 @@ export function canApproveContracts(session) {
   return hasPermission(session, 'APPROVE_CONTRACT')
 }
 
+/** Hoàn backorder: Manager duyệt; Manager hoặc Kế toán ghi nhận chứng từ hoàn tiền. */
+export function canReviewBackorderRefund(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
+}
+
+export function canCompleteBackorderRefund(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isAccountantRole(session) || isBranchManager(session) || isManagerRole(session)
+}
+
 /** Chỉ kế toán được tạo/sửa/ẩn/khôi phục nhà cung cấp và mặt hàng nhà cung cấp; Admin/thủ kho chỉ xem. */
 export function canManageSuppliers(session) {
   return isAccountantRole(session)

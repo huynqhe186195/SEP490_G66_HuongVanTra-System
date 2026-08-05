@@ -139,7 +139,7 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
             Mock.Of<IStocktakeRequestRepository>(), Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             Mock.Of<IProcessedIntegrationEventRepository>(),
             Mock.Of<IInventoryEventPublisher>(), Mock.Of<IInventoryUnitOfWork>(),
-            Mock.Of<IProductionOrderRepository>(), productCatalog.Object, Mock.Of<ISupplierRepository>(),
+            Mock.Of<IProductionOrderRepository>(), Mock.Of<IStockTransferRepository>(), productCatalog.Object, Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(), Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }

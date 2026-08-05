@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  canCompleteBackorderRefund,
   canCreateOrder,
+  canReviewBackorderRefund,
   canUsePosCodMode,
   canUsePosCounterMode,
   canVerifyCodPayment,
@@ -78,4 +80,17 @@ test('Manager keeps both create modes; Admin is blocked from POS ops', () => {
   assert.equal(canUsePosCounterMode(admin), false)
   assert.equal(canUsePosCodMode(admin), false)
   assert.equal(canVerifyCodPayment(admin), false)
+})
+
+test('backorder refund separates approval from evidence recording', () => {
+  const manager = { roles: ['Manager'], permissions: [] }
+  const accountant = { roles: ['Accountant'], permissions: [] }
+  const admin = { roles: ['Admin'], permissions: ['MANAGE_ROLE'] }
+
+  assert.equal(canReviewBackorderRefund(manager), true)
+  assert.equal(canCompleteBackorderRefund(manager), true)
+  assert.equal(canReviewBackorderRefund(accountant), false)
+  assert.equal(canCompleteBackorderRefund(accountant), true)
+  assert.equal(canReviewBackorderRefund(admin), false)
+  assert.equal(canCompleteBackorderRefund(admin), false)
 })

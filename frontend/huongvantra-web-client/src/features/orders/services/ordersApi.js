@@ -19,6 +19,7 @@ export function mapPayment(item) {
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     paidAt: item.paidAt ?? item.PaidAt ?? null,
     codDebtSettlementJson: item.codDebtSettlementJson ?? item.CodDebtSettlementJson ?? null,
+    paymentPurpose: normalizeEnum(item.paymentPurpose ?? item.PaymentPurpose ?? 'Full'),
   }
 }
 
@@ -34,6 +35,9 @@ export function mapOrderItem(item) {
     unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? 0),
     subTotal: Number(item.subTotal ?? item.SubTotal ?? 0),
     isGift: Boolean(item.isGift ?? item.IsGift ?? false),
+    immediateFulfilledQuantity: Number(item.immediateFulfilledQuantity ?? item.ImmediateFulfilledQuantity ?? 0),
+    reservedFinishedQuantity: Number(item.reservedFinishedQuantity ?? item.ReservedFinishedQuantity ?? 0),
+    backorderQuantity: Number(item.backorderQuantity ?? item.BackorderQuantity ?? 0),
   }
 }
 
@@ -46,6 +50,9 @@ function mapStockHandlingLine(item) {
     orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
     finishedDeductedQuantity: Number(item.finishedDeductedQuantity ?? item.FinishedDeductedQuantity ?? 0),
     pendingBomQuantity: Number(item.pendingBomQuantity ?? item.PendingBomQuantity ?? 0),
+    warehouseDeductedQuantity: Number(
+      item.warehouseDeductedQuantity ?? item.WarehouseDeductedQuantity ?? 0,
+    ),
   }
 }
 
@@ -92,6 +99,7 @@ export function mapOrderSummary(item) {
     hasActiveStockReservation: Boolean(
       item.hasActiveStockReservation ?? item.HasActiveStockReservation ?? false,
     ),
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
   }
 }
 
@@ -135,6 +143,38 @@ export function mapOrderDetail(item) {
     contractPaymentTermDaysSnapshot:
       item.contractPaymentTermDaysSnapshot ?? item.ContractPaymentTermDaysSnapshot ?? null,
     dueDate: item.dueDate ?? item.DueDate ?? null,
+    backorderAcceptedAt: item.backorderAcceptedAt ?? item.BackorderAcceptedAt ?? null,
+    backorderMinLeadDaysSnapshot:
+      item.backorderMinLeadDaysSnapshot ?? item.BackorderMinLeadDaysSnapshot ?? null,
+    backorderMaxLeadDaysSnapshot:
+      item.backorderMaxLeadDaysSnapshot ?? item.BackorderMaxLeadDaysSnapshot ?? null,
+    estimatedReadyFrom: item.estimatedReadyFrom ?? item.EstimatedReadyFrom ?? null,
+    estimatedReadyTo: item.estimatedReadyTo ?? item.EstimatedReadyTo ?? null,
+    fulfillmentPreference: normalizeEnum(item.fulfillmentPreference ?? item.FulfillmentPreference),
+    refundStatus: normalizeEnum(item.refundStatus ?? item.RefundStatus ?? 'NotRequired'),
+    refundAmount: Number(item.refundAmount ?? item.RefundAmount ?? 0),
+    refundMethod: item.refundMethod ?? item.RefundMethod ?? '',
+    refundEvidence: item.refundEvidence ?? item.RefundEvidence ?? '',
+    cancellationReason: item.cancellationReason ?? item.CancellationReason ?? '',
+    cancellationRequestedAt: item.cancellationRequestedAt ?? item.CancellationRequestedAt ?? null,
+    cancellationRequestedBy: item.cancellationRequestedBy ?? item.CancellationRequestedBy ?? null,
+    cancellationRequestedByName:
+      item.cancellationRequestedByName ?? item.CancellationRequestedByName ?? '',
+    refundApprovedAt: item.refundApprovedAt ?? item.RefundApprovedAt ?? null,
+    refundApprovedBy: item.refundApprovedBy ?? item.RefundApprovedBy ?? null,
+    refundApprovedByName: item.refundApprovedByName ?? item.RefundApprovedByName ?? '',
+    refundedAt: item.refundedAt ?? item.RefundedAt ?? null,
+    refundedBy: item.refundedBy ?? item.RefundedBy ?? null,
+    refundedByName: item.refundedByName ?? item.RefundedByName ?? '',
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
+    pickupNote: item.pickupNote ?? item.PickupNote ?? '',
+    deliveredAt: item.deliveredAt ?? item.DeliveredAt ?? null,
+    deliveredByName: item.deliveredByName ?? item.DeliveredByName ?? '',
+    pickupContactName: item.pickupContactName ?? item.PickupContactName ?? '',
+    pickupContactPhone: item.pickupContactPhone ?? item.PickupContactPhone ?? '',
+    pickupCode: item.pickupCode ?? item.PickupCode ?? '',
+    depositAmount: Number(item.depositAmount ?? item.DepositAmount ?? 0),
+    remainingAmountDue: Number(item.remainingAmountDue ?? item.RemainingAmountDue ?? 0),
   }
 }
 
@@ -285,6 +325,13 @@ export function buildCreateOrderBody(payload) {
     paidAmount: Number(payload.paidAmount ?? 0),
     transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
+    acceptBackorder: Boolean(payload.acceptBackorder),
+    fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
+    pickupDate: payload.pickupDate || null,
+    pickupNote: payload.pickupNote?.trim() || null,
+    pickupContactName: payload.pickupContactName?.trim() || null,
+    pickupContactPhone: payload.pickupContactPhone?.trim() || null,
+    depositAmount: payload.depositAmount != null ? Number(payload.depositAmount) : null,
     codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
     payments: Array.isArray(payload.payments)
       ? payload.payments
@@ -373,12 +420,67 @@ export async function cancelOrder(id, reason = '') {
   })
 }
 
+export async function requestBackorderCancellation(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/backorder-cancellation`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+  return mapOrderDetail(data)
+}
+
+export async function reviewBackorderCancellation(id, approved, note = '') {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/backorder-cancellation/review`, {
+    method: 'POST',
+    body: JSON.stringify({ approved: Boolean(approved), note: note?.trim() || null }),
+  })
+  return mapOrderDetail(data)
+}
+
+export async function completeBackorderRefund(
+  id,
+  refundMethod,
+  refundEvidence,
+  immediateItemsReturned = false,
+) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/backorder-refund/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ refundMethod, refundEvidence, immediateItemsReturned }),
+  })
+  return mapOrderDetail(data)
+}
+
 export async function shipOrder(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/ship`, { method: 'POST' })
 }
 
 export async function completeOrder(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/complete`, { method: 'POST' })
+}
+
+export async function markOrderDelivered(id) {
+  return apiRequestAuth(`/api/v1/orders/${id}/mark-delivered`, { method: 'POST' })
+}
+
+// POS-06 (cọc): thu phần tiền còn lại khi khách tới nhận, rồi chuyển đơn sang Hoàn tất.
+export async function collectRemainingAndDeliver(id, payload) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/collect-and-deliver`, {
+    method: 'POST',
+    body: JSON.stringify({
+      paymentMethod: payload.paymentMethod,
+      amount: Number(payload.amount ?? 0),
+      transactionRef: payload.transactionRef?.trim() || null,
+    }),
+  })
+  return mapOrderDetail(data)
+}
+
+// POS-06 (cọc): Manager hủy đơn quá hạn nhận hàng 7 ngày, giữ lại tiền cọc.
+export async function cancelOverdueDepositOrder(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/orders/${id}/cancel-overdue-deposit`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+  return mapOrderDetail(data)
 }
 
 function mapReturnOrderLine(item) {

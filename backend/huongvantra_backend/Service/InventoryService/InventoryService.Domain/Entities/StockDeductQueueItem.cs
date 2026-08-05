@@ -13,6 +13,13 @@ public class StockDeductQueueItem
     public int? OrderedQuantity { get; set; }
     public int? FinishedDeductedQuantity { get; set; }
     public int? PendingBomQuantity { get; set; }
+
+    /// <summary>
+    /// POS-06 (KB2/KB3): phần hàng phải điều chuyển từ Kho thành phẩm về Kệ khi Thủ kho xác nhận.
+    /// Tách khỏi FinishedDeductedQuantity vì phần này CHƯA bị trừ lúc thanh toán.
+    /// </summary>
+    public int? WarehouseTransferQuantity { get; set; }
+
     public string? MaterialRequirementSnapshotJson { get; set; }
     public string? StockHandlingMode { get; set; }
 

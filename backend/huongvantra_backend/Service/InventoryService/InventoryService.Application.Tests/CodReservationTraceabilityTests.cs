@@ -69,6 +69,7 @@ public sealed class CodReservationTraceabilityTests
             Mock.Of<IInventoryEventPublisher>(),
             new PassThroughUnitOfWork(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),

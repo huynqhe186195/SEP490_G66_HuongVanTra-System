@@ -21,7 +21,16 @@ public class SalesStatisticsResponse
     public decimal TotalCostOfGoods { get; set; }
 
     public decimal GrossProfit { get; set; }
-    
+
+    /// <summary>
+    /// Tiền cọc bị mất từ đơn backorder đã hủy. Là thu nhập khác, không phải doanh thu bán hàng
+    /// (không có hàng giao), nên không cộng vào GrossRevenue/NetRevenue/GrossProfit.
+    /// </summary>
+    public decimal ForfeitedDepositIncome { get; set; }
+
+    /// <summary>Số đơn đã hủy bị giữ cọc trong kỳ.</summary>
+    public int ForfeitedDepositOrders { get; set; }
+
     public double GrossProfitMargin { get; set; }
     public decimal AverageOrderValue { get; set; }
     public decimal TotalDiscountAmount { get; set; }

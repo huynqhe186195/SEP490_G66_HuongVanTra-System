@@ -758,8 +758,8 @@ function InventoryStocktakePage() {
   const canCreateShelf = canCreateShelfStocktake(session)
   const canCreate = canCreateWarehouse || canCreateShelf
   const canReview = canReviewStocktake(session)
-  // Quản lý chỉ theo dõi kiểm kê Kệ Hàng; kiểm kê Kho thuộc Thủ kho.
-  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf || canReview ? 'Shelf' : null
+  // Thủ kho chỉ thấy Kho; Manager (canReview) thấy tất cả để duyệt cả 2 loại; còn lại khoá vào Kệ.
+  const fixedLocation = canCreateWarehouse ? 'Warehouse' : (canCreateShelf && !canReview) ? 'Shelf' : null
   const canReopenDay = isBranchManager(session)
 
   const loadShelfDay = useCallback(async () => {

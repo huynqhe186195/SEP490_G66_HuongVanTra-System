@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -13,31 +13,26 @@ import {
   canCancelProductionOrder,
   canCompleteProductionOrder,
   canCreateProductionOrder,
-  canReviewProductionOrder,
-  canSubmitProductionOrder,
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
+import { ProductionOrderDocument, SlipActionButtons, SlipPrintStyles } from '../components/InventorySlipDocument.jsx'
 import {
-  approveProductionOrder,
   cancelProductionOrder,
   completeProductionOrder,
   fetchProductionOrders,
   PRODUCTION_STATUS_CLASS,
   PRODUCTION_STATUS_LABEL,
-  rejectProductionOrder,
-  submitProductionOrder,
 } from '../services/productionOrderApi.js'
 
 const STATUS_TABS = [
   { value: '', label: 'Tất cả' },
-  { value: 'PendingApproval', label: 'Chờ duyệt' },
-  { value: 'Draft', label: 'Chờ xác nhận' },
-  { value: 'Approved', label: 'Đã duyệt' },
+  { value: 'Draft', label: 'Chờ hoàn thành' },
   { value: 'Completed', label: 'Hoàn thành' },
-  { value: 'Rejected', label: 'Bị từ chối' },
   { value: 'Cancelled', label: 'Đã hủy' },
 ]
+
+const PENDING_COMPLETION_STATUSES = ['Draft', 'PendingApproval', 'Approved', 'Rejected']
 
 function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', reasonSuggestions = [], onConfirm, onCancel }) {
   const [reason, setReason] = useState('')
@@ -97,12 +92,6 @@ function StatusChip({ status }) {
 function getConfirmActionMessage(action) {
   const code = action?.order?.productionCode ?? ''
   switch (action?.type) {
-    case 'submit':
-      return `Gửi duyệt lệnh sản xuất "${code}"? Lệnh sẽ chờ Manager xác nhận.`
-    case 'approve':
-      return `Duyệt lệnh sản xuất "${code}"? Sau khi duyệt, thủ kho mới có thể hoàn thành và ghi nhận tồn kho.`
-    case 'reject':
-      return `Từ chối lệnh sản xuất "${code}"? Vui lòng nhập lý do để người tạo chỉnh sửa.`
     case 'complete':
       return `Hoàn thành lệnh sản xuất "${code}"? Hệ thống sẽ xuất nguyên liệu theo FIFO và nhập thành phẩm theo nơi nhập đã chọn.`
     case 'cancel':
@@ -151,11 +140,9 @@ function getFinishedGoodsLots(outputLines) {
 function ProductionOrdersPage() {
   const session = loadAuthSession()
   const canCreate = canCreateProductionOrder(session)
-  const canSubmit = canSubmitProductionOrder(session)
-  const canReview = canReviewProductionOrder(session)
   const canComplete = canCompleteProductionOrder(session)
   const canCancel = canCancelProductionOrder(session)
-  const [activeTab, setActiveTab] = useState('PendingApproval')
+  const [activeTab, setActiveTab] = useState('Draft')
   const [orders, setOrders] = useState([])
   const [statusCounts, setStatusCounts] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -168,6 +155,7 @@ function ProductionOrdersPage() {
     if (page > totalPages) setPage(totalPages)
   }, [totalCount, pageSize, page])
   const [expandedId, setExpandedId] = useState(null)
+  const printRef = useRef(null)
   const [actingId, setActingId] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
 
@@ -217,15 +205,6 @@ function ProductionOrdersPage() {
       if (type === 'complete') {
         await completeProductionOrder(order.id)
         showSuccess(`Hoàn thành lệnh sản xuất ${order.productionCode}. Tồn kho đã được cập nhật.`)
-      } else if (type === 'submit') {
-        await submitProductionOrder(order.id)
-        showSuccess(`Đã gửi duyệt lệnh sản xuất ${order.productionCode}.`)
-      } else if (type === 'approve') {
-        await approveProductionOrder(order.id)
-        showSuccess(`Đã duyệt lệnh sản xuất ${order.productionCode}.`)
-      } else if (type === 'reject') {
-        await rejectProductionOrder(order.id, reason)
-        showSuccess(`Đã từ chối lệnh sản xuất ${order.productionCode}.`)
       } else if (type === 'cancel') {
         await cancelProductionOrder(order.id, reason)
         showSuccess(`Đã hủy lệnh sản xuất ${order.productionCode}.`)
@@ -239,11 +218,7 @@ function ProductionOrdersPage() {
   }
 
   function handleCreated(order) {
-    if (order.status === 'PendingApproval') {
-      showSuccess(`Đã tạo và gửi duyệt lệnh sản xuất ${order.productionCode}.`)
-    } else {
-      showSuccess(`Đã lưu nháp lệnh sản xuất ${order.productionCode}.`)
-    }
+    showSuccess(`Đã tạo lệnh sản xuất ${order.productionCode}. Bấm Hoàn thành khi sản xuất xong.`)
     setPage(1)
     loadOrders()
   }
@@ -271,29 +246,11 @@ function ProductionOrdersPage() {
   }
 
   function renderOrderActions(order) {
-    const actionsByStatus = {
-      Draft: [
-        ['submit', 'Gửi duyệt', 'primary'],
-        ['cancel', 'Hủy', 'secondary'],
-      ],
-      Rejected: [
-        ['submit', 'Gửi duyệt lại', 'primary'],
-      ],
-      PendingApproval: [
-        ['approve', 'Duyệt', 'primary'],
-        ['reject', 'Từ chối', 'danger'],
-      ],
-      Approved: [
-        ['complete', 'Hoàn thành', 'primary'],
-      ],
-    }
-    const actions = (actionsByStatus[order.status] ?? []).filter(([type]) => {
-      if (type === 'submit') return canSubmit
-      if (type === 'approve' || type === 'reject') return canReview
-      if (type === 'complete') return canComplete
-      if (type === 'cancel') return canCancel
-      return false
-    })
+    if (!PENDING_COMPLETION_STATUSES.includes(order.status)) return null
+    const actions = [
+      ['complete', 'Hoàn thành', 'primary'],
+      ['cancel', 'Hủy', 'secondary'],
+    ].filter(([type]) => (type === 'complete' ? canComplete : canCancel))
     if (actions.length === 0) return null
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -355,7 +312,7 @@ function ProductionOrdersPage() {
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
                   <p className="font-semibold text-slate-700">Chưa có lệnh sản xuất.</p>
-                  <p className="mt-1 text-xs text-slate-400">Bấm Tạo lệnh sản xuất để bắt đầu Workflow 1.</p>
+                  <p className="mt-1 text-xs text-slate-400">Bấm Tạo lệnh sản xuất để bắt đầu.</p>
                 </td>
               </tr>
             ) : (
@@ -415,93 +372,17 @@ function ProductionOrdersPage() {
                   {expandedId === order.id && (
                     <tr key={`${order.id}-detail`} className="bg-slate-50/40">
                       <td colSpan={6} className="px-6 py-4">
-                        <div className="mb-4 rounded-xl border border-slate-100 bg-white p-4">
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Chi tiết lệnh sản xuất</p>
-                              <p className="mt-1 font-mono text-sm font-bold text-[#356647]">{order.productionCode}</p>
-                            </div>
-                            <StatusChip status={order.status} />
-                          </div>
-                          <div className="grid gap-3 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
-                            <div>
-                              <p className="font-semibold text-[#717971]">Ngày tạo</p>
-                              <p className="mt-1 text-slate-800">{order.createdAt ? formatVietnamDateTime(order.createdAt) : '-'}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Hoàn thành</p>
-                              <p className="mt-1 text-slate-800">{order.completedAt ? formatVietnamDateTime(order.completedAt) : '-'}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Người tạo</p>
-                              <p className="mt-1 text-slate-800">{order.createdByName || order.createdBy || '-'}</p>
-                              {order.createdByRoleName && (
-                                <p className="text-[11px] text-slate-500">{order.createdByRoleName}</p>
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Tổng SKU / SL</p>
-                              <p className="mt-1 text-slate-800">
-                                {outputLines.length} SKU · {formatQuantity(totalOutputQuantity)} đơn vị
-                              </p>
-                            </div>
-                            {order.note && (
-                              <div className="sm:col-span-2 lg:col-span-4">
-                                <p className="font-semibold text-[#717971]">Ghi chú</p>
-                                <p className="mt-1 italic text-slate-800">{order.note}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mb-4 rounded-xl border border-slate-100 bg-white">
-                          <div className="border-b border-slate-100 px-4 py-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-left text-xs">
-                              <thead className="bg-slate-50 text-[#717971]">
-                                <tr>
-                                  <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
-                                  <th className="px-4 py-2 text-right font-semibold">Số lượng SX</th>
-                                  <th className="px-4 py-2 font-semibold">Nơi nhập</th>
-                                  <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
-                                  <th className="px-4 py-2 font-semibold">Lô thành phẩm sinh ra</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {outputLines.map((line) => (
-                                  <tr key={line.id}>
-                                    <td className="px-4 py-2">
-                                      <p className="font-medium text-slate-800">{getOutputName(line)}</p>
-                                      <p className="font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
-                                    </td>
-                                    <td className="px-4 py-2 text-right font-semibold text-slate-800">
-                                      {formatQuantity(line.plannedQuantity)}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      {formatDestinationLocation(line.destinationLocation)}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      {line.expiresAt ? formatVietnamDate(line.expiresAt) : '-'}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
-                                      {line.warehouseBatchId ? (
-                                        <span className="block break-all text-[11px] text-slate-400">
-                                          WarehouseBatchId: {line.warehouseBatchId}
-                                        </span>
-                                      ) : null}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                        <SlipPrintStyles />
+                        <SlipActionButtons
+                          documentRef={printRef}
+                          filename={`${order.productionCode || 'lenh-san-xuat'}.pdf`}
+                        />
+                        <div ref={printRef} className="mb-4">
+                          <ProductionOrderDocument order={order} statusLabel={PRODUCTION_STATUS_LABEL[order.status] || order.status} />
                         </div>
 
                         {finishedGoodsLots.length > 0 && (
-                          <div className="mb-4 rounded-xl border border-emerald-100 bg-white">
+                          <div className="no-print mb-4 rounded-xl border border-emerald-100 bg-white">
                             <div className="border-b border-emerald-100 px-4 py-3">
                               <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Lô thành phẩm sinh ra</p>
                               <p className="mt-1 text-xs text-slate-500">
@@ -541,7 +422,7 @@ function ProductionOrdersPage() {
                         )}
 
                         {order.lines.length > 0 && (
-                          <div className="rounded-xl border border-slate-100 bg-white">
+                          <div className="no-print rounded-xl border border-slate-100 bg-white">
                             <div className="border-b border-slate-100 px-4 py-3">
                               <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất theo BOM</p>
                             </div>
@@ -570,7 +451,7 @@ function ProductionOrdersPage() {
                             </div>
                           </div>
                         )}
-                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
+                        <div className="no-print mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
                           {order.completedAt && <span>Hoàn thành: {formatVietnamDateTime(order.completedAt)}</span>}
                         </div>
                       </td>
@@ -604,11 +485,9 @@ function ProductionOrdersPage() {
       {confirmAction && (
         <ConfirmDialog
           message={getConfirmActionMessage(confirmAction)}
-          requiresReason={['reject', 'cancel'].includes(confirmAction.type)}
-          reasonLabel={confirmAction.type === 'reject' ? 'Lý do từ chối' : 'Lý do hủy'}
-          reasonSuggestions={getReasonSuggestions(
-            confirmAction.type === 'reject' ? 'productionReject' : 'productionCancel',
-          )}
+          requiresReason={confirmAction.type === 'cancel'}
+          reasonLabel="Lý do hủy"
+          reasonSuggestions={getReasonSuggestions('productionCancel')}
           onConfirm={(reason) => handleAction(confirmAction.type, confirmAction.order, reason)}
           onCancel={() => setConfirmAction(null)}
         />

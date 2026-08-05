@@ -19,6 +19,10 @@ export const ORDER_STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
   { value: 'PendingPayment', label: 'Chờ thanh toán' },
   { value: 'Processing', label: 'Đang xử lý' },
+  { value: 'WaitingTransfer', label: 'Chờ điều chuyển' },
+  { value: 'WaitingProduction', label: 'Chờ sản xuất' },
+  { value: 'WaitingMaterials', label: 'Chờ nguyên liệu' },
+  { value: 'ReadyToDeliver', label: 'Sẵn sàng giao' },
   { value: 'Shipping', label: 'Đang giao' },
   { value: 'Completed', label: 'Hoàn tất' },
   { value: 'Cancelled', label: 'Đã hủy' },
@@ -49,14 +53,19 @@ export const PAYMENT_METHOD_OPTIONS = [
 ]
 
 export function getOrderStatusLabel(status) {
-  const key = normalizeOrderKey(status)
+  const key = normalizeOrderKey(status).toLowerCase()
   const map = {
-    Draft: 'Nháp',
-    PendingPayment: 'Chờ thanh toán',
-    Processing: 'Đang xử lý',
-    Shipping: 'Đang giao',
-    Completed: 'Hoàn tất',
-    Cancelled: 'Đã hủy',
+    draft: 'Nháp',
+    pendingpayment: 'Chờ thanh toán',
+    waitingmaterials: 'Chờ nguyên liệu',
+    waitingtransfer: 'Chờ điều chuyển',
+    waitingproduction: 'Chờ sản xuất',
+    readytodeliver: 'Sẵn sàng giao',
+    cancellationrequested: 'Chờ duyệt hủy/hoàn tiền',
+    processing: 'Đang xử lý',
+    shipping: 'Đang giao',
+    completed: 'Hoàn tất',
+    cancelled: 'Đã hủy',
   }
   return map[key] || status || '—'
 }
@@ -142,6 +151,7 @@ export function getPaymentStatusLabel(status) {
     Success: 'Thành công',
     Failed: 'Thất bại',
     Deferred: 'Ghi nợ theo hợp đồng',
+    Refunded: 'Đã hoàn tiền',
   }
   return map[key] || status || '—'
 }
@@ -203,6 +213,16 @@ export function resolveOrderPaymentDisplay(order) {
   const amountCaption =
     collectedAmount > 0 ? 'Đã thu' : isTransfer && paymentStatus === 'pending' ? 'Số tiền cần thu' : 'Số tiền'
   const displayAmount = collectedAmount > 0 ? collectedAmount : expectedAmount
+
+  if (normalizeOrderKey(order?.refundStatus) === 'Completed' || paymentStatus === 'refunded') {
+    return {
+      label: 'Đã hoàn tiền',
+      className: getPaymentStatusClass('Refunded'),
+      detail: order?.refundEvidence ? `Bằng chứng: ${order.refundEvidence}` : null,
+      amountCaption: 'Đã hoàn',
+      displayAmount: Number(order?.refundAmount || expectedAmount),
+    }
+  }
 
   if (orderStatus === 'Cancelled') {
     if (collectedAmount > 0) {
@@ -321,6 +341,17 @@ export function getInventorySyncLabel(status) {
   return map[key] || status || '—'
 }
 
+export function getRefundStatusLabel(status) {
+  const map = {
+    NotRequired: 'Không cần hoàn tiền',
+    PendingApproval: 'Chờ Quản lý duyệt',
+    Approved: 'Đã duyệt, chờ hoàn tiền',
+    Completed: 'Đã hoàn tiền',
+    Rejected: 'Từ chối hoàn tiền',
+  }
+  return map[normalizeOrderKey(status)] || 'Không cần hoàn tiền'
+}
+
 export function resolveInventorySyncMeta(order) {
   const orderStatus = normalizeOrderKey(order?.orderStatus)
   const syncStatus = normalizeOrderKey(order?.inventorySyncStatus)
@@ -355,6 +386,18 @@ export function getOrderStatusClass(status) {
   if (key === 'pendingpayment' || key.includes('chothanhtoan')) {
     return 'text-amber-700 bg-amber-100 border border-amber-300'
   }
+  if (key === 'waitingmaterials') {
+    return 'text-violet-700 bg-violet-100 border border-violet-300'
+  }
+  if (key === 'waitingtransfer' || key === 'waitingproduction') {
+    return 'text-indigo-700 bg-indigo-100 border border-indigo-300'
+  }
+  if (key === 'readytodeliver') {
+    return 'text-teal-700 bg-teal-100 border border-teal-300'
+  }
+  if (key === 'cancellationrequested') {
+    return 'text-rose-700 bg-rose-100 border border-rose-300'
+  }
   return 'border border-slate-200 bg-slate-100 text-slate-600'
 }
 
@@ -363,6 +406,7 @@ export function getPaymentStatusClass(status) {
   if (key === 'Success') return 'bg-emerald-50 text-emerald-700'
   if (key === 'Failed') return 'bg-red-50 text-red-600'
   if (key === 'Deferred') return 'bg-indigo-50 text-indigo-700'
+  if (key === 'Refunded') return 'bg-violet-50 text-violet-700'
   return 'bg-amber-50 text-amber-700'
 }
 
@@ -402,8 +446,21 @@ export function getManualDiscountAmount(order) {
   return Math.max(0, total - promotion)
 }
 
+const BACKORDER_REFUND_GUARDED_STATUSES = new Set([
+  'WaitingMaterials',
+  'WaitingTransfer',
+  'WaitingProduction',
+  'ReadyToDeliver',
+])
+
 export function canEditOrderMeta(order) {
-  return Boolean(order && !isOrderTerminal(order))
+  const status = normalizeOrderKey(order?.orderStatus)
+  return Boolean(
+    order
+    && !isOrderTerminal(order)
+    && !BACKORDER_REFUND_GUARDED_STATUSES.has(status)
+    && status !== 'CancellationRequested'
+  )
 }
 
 export function getOrderEditBlockedMessage(order) {
@@ -453,12 +510,57 @@ export function canShipOrder(order) {
 
 export function canCompleteOrder(order) {
   const status = normalizeOrderKey(order?.orderStatus)
-  if (status === 'Cancelled' || status === 'Completed') return false
+  if (status === 'Cancelled' || status === 'Completed'
+    || status === 'WaitingMaterials' || status === 'CancellationRequested'
+    // POS-06: 3 trạng thái chờ mới do Thủ kho/Sale đẩy tiếp, không cho hoàn tất thủ công.
+    || status === 'WaitingTransfer' || status === 'WaitingProduction'
+    || status === 'ReadyToDeliver') return false
   // Đơn hợp đồng bắt buộc qua bước kho xác nhận xuất hàng trước khi ghi nợ.
   if (isContractOrder(order) && status !== 'Shipping') return false
   if (isPendingTransferPayment(order)) return false
   if (canVerifyCod(order)) return false
   return true
+}
+
+// POS-06 (KB4): đơn đã đủ hàng, chờ Sale xác nhận khách quay lại lấy.
+export function canMarkDelivered(order) {
+  return normalizeOrderKey(order?.orderStatus) === 'ReadyToDeliver'
+}
+
+// POS-06 (KB4): cảnh báo hạn giao dựa trên ngày hẹn; không tự động hủy đơn.
+// Badge hiện từ lúc đơn còn chờ hàng để Manager/Sale kịp liên hệ khách, không chỉ khi đã sẵn sàng giao.
+const PICKUP_DUE_STATUSES = new Set([
+  'WaitingMaterials',
+  'WaitingTransfer',
+  'WaitingProduction',
+  'ReadyToDeliver',
+])
+
+export function getPickupDueBadge(order) {
+  if (!PICKUP_DUE_STATUSES.has(normalizeOrderKey(order?.orderStatus)) || !order?.pickupDate) return null
+  const due = new Date(order.pickupDate)
+  if (Number.isNaN(due.getTime())) return null
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((due - today) / 86400000)
+  if (diffDays > 0) return null
+  if (diffDays === 0) {
+    return { label: 'Hôm nay cần giao', className: 'text-amber-700 bg-amber-100 border border-amber-300' }
+  }
+  const overdueDays = Math.abs(diffDays)
+  // Quá 7 ngày: Manager được phép hủy đơn và giữ lại tiền cọc.
+  if (overdueDays >= 7) {
+    return {
+      label: `Quá hạn ${overdueDays} ngày`,
+      className: 'text-red-700 bg-red-100 border border-red-300',
+      canCancelOverdue: true,
+    }
+  }
+  return {
+    label: `Quá hạn ${overdueDays} ngày`,
+    className: 'text-amber-700 bg-amber-100 border border-amber-300',
+  }
 }
 
 export function isContractOrder(order) {
@@ -549,10 +651,13 @@ export function getStockStatusLabel(status) {
   const map = {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
+    pending_warehouse_transfer: 'Chờ điều chuyển từ Kho',
     deducted: 'Đã trừ tồn quầy',
     synced: 'Đã trừ tồn quầy',
+    restored: 'Đã hoàn tồn',
     waiting_stock: 'Chờ hàng',
     cancelled: 'Đã hủy',
+    cancelled_after_shipping: 'Đã hủy sau khi giao',
   }
   return map[key] || status || '—'
 }
@@ -573,6 +678,8 @@ export function getStockStatusClass(status) {
   if (key === 'deducted' || key === 'synced') return 'bg-[#b9d4b0]/30 text-[#538463]'
   if (key === 'pending_bom_reconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
   if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
-  if (key === 'cancelled') return 'bg-red-50 text-red-600'
+  if (key === 'pending_warehouse_transfer') return 'bg-sky-50 text-sky-700'
+  if (key === 'restored') return 'bg-slate-100 text-slate-600'
+  if (key === 'cancelled' || key === 'cancelled_after_shipping') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'
 }

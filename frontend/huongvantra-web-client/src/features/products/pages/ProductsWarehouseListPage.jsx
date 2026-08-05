@@ -31,7 +31,7 @@ import InventorySimulationBanner from '../../inventory/components/InventorySimul
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import {
   formatProductPrice,
-  formatStockQuantity,
+  formatQuantityWithUnit,
   getProductStatusMeta,
   pickProductImageUrl,
   summarizeProductVariants,
@@ -785,7 +785,7 @@ export default function ProductsWarehouseListPage() {
                               }`}
                               onClick={() => toggleExpand(row.rowKey)}
                             >
-                              {selectedVariant ? formatStockQuantity(stockQty) : '—'}
+                              {selectedVariant ? formatQuantityWithUnit(stockQty, product.inventoryUnit) : '—'}
                               {selectedVariant && stockQty <= 0 && !product.isDeleted ? (
                                 <Link
                                   to="/inventory/import/create"
@@ -861,7 +861,7 @@ export default function ProductsWarehouseListPage() {
                                 {!product.isDeleted && canCreate ? (
                                   <button
                                     type="button"
-                                    title="Master data chỉ sửa qua workflow phê duyệt"
+                                    title="Dữ liệu gốc chỉ sửa qua quy trình phê duyệt"
                                     className="rounded-full p-1.5 text-slate-400"
                                     onClick={() => showError('Sửa Product/SKU/BOM trực tiếp đã bị khóa. Vui lòng tạo yêu cầu Product Creation mới nếu cần thay đổi master data.')}
                                   >

@@ -54,9 +54,9 @@ export function mapProductionOrder(row) {
 }
 
 export const PRODUCTION_STATUS_LABEL = {
-  Draft: 'Chờ xác nhận',
-  PendingApproval: 'Chờ duyệt',
-  Approved: 'Đã duyệt',
+  Draft: 'Chờ hoàn thành',
+  PendingApproval: 'Chờ hoàn thành',
+  Approved: 'Chờ hoàn thành',
   Completed: 'Hoàn thành',
   Rejected: 'Bị từ chối',
   Cancelled: 'Đã hủy',
@@ -64,8 +64,8 @@ export const PRODUCTION_STATUS_LABEL = {
 
 export const PRODUCTION_STATUS_CLASS = {
   Draft: 'bg-amber-50 text-amber-700 border border-amber-200',
-  PendingApproval: 'bg-sky-50 text-sky-700 border border-sky-200',
-  Approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  PendingApproval: 'bg-amber-50 text-amber-700 border border-amber-200',
+  Approved: 'bg-amber-50 text-amber-700 border border-amber-200',
   Completed: 'bg-green-50 text-green-700 border border-green-200',
   Rejected: 'bg-red-50 text-red-700 border border-red-200',
   Cancelled: 'bg-slate-100 text-slate-500 border border-slate-200',

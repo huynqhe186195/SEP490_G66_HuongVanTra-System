@@ -7,6 +7,7 @@ import OrderOfferModal from "../components/OrderOfferModal.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
 import PosPaymentConfirmModal from "../components/PosPaymentConfirmModal.jsx";
+import BackorderConfirmModal from "../components/BackorderConfirmModal.jsx";
 import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
 import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
 import CustomScrollArea from "../../../components/shared/CustomScrollArea.jsx";
@@ -15,8 +16,8 @@ import {
   formatCategoryFilterSummary,
 } from '../../products/utils/categoryTreeUtils.js'
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
-import { formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { fetchCustomerOpenDebts } from '../../customers/services/customersApi.js'
+import { formatVietnamDate, formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import { createCustomerForOrder, fetchCustomerByPhone, fetchCustomerOpenDebts } from '../../customers/services/customersApi.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
 import {
   clampDebtSettlement,
@@ -329,6 +330,7 @@ function PosPage() {
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
   const [isPaymentConfirmOpen, setIsPaymentConfirmOpen] = useState(false)
+  const [backorderPrompt, setBackorderPrompt] = useState(null)
   const [customerOpenDebts, setCustomerOpenDebts] = useState([])
   const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
   const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
@@ -1690,9 +1692,13 @@ function PosPage() {
     invoiceCode,
     orderTotal,
     changeAmount = displayChange,
+    backorderResult = null,
   }) => {
     const receiptTotal = orderTotal ?? total
     const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
+    const fulfillmentBySku = new Map(
+      (backorderResult?.items ?? []).map((item) => [String(item.sku || ''), item]),
+    )
     return {
       orderCode: orderCode || activeTab.label,
       invoiceCode: invoiceCode || undefined,
@@ -1706,13 +1712,19 @@ function PosPage() {
       createdAtLabel: vietnamNowLabel(),
       sellerName: seller.name,
       sellerRole: seller.role,
-      items: cartItems.map((item) => ({
-        sku: item.sku,
-        name: item.name,
-        qty: item.qty,
-        price: item.price,
-        total: getLineTotal(item),
-      })),
+      items: cartItems.map((item) => {
+        const fulfillment = fulfillmentBySku.get(String(item.sku || ''))
+        return {
+          sku: item.sku,
+          name: item.name,
+          qty: item.qty,
+          price: item.price,
+          total: getLineTotal(item),
+          immediateFulfilledQuantity: Number(fulfillment?.immediateFulfilledQuantity || 0),
+          reservedFinishedQuantity: Number(fulfillment?.reservedFinishedQuantity || 0),
+          backorderQuantity: Number(fulfillment?.backorderQuantity || 0),
+        }
+      }),
       grossSubtotal,
       totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
       total: receiptTotal,
@@ -1722,6 +1734,20 @@ function PosPage() {
       debtAmount: isRecordedPayment ? debtAmount : 0,
       isDebtSale: method === 'CASH' && isDebtSale,
       isPartialCashPayment: isRecordedPayment && isPartialPayment,
+      isBackorder: Boolean(backorderResult?.backorderAcceptedAt),
+      fulfillmentPreference: backorderResult?.fulfillmentPreference || null,
+      estimatedReadyFromLabel: backorderResult?.estimatedReadyFrom
+        ? formatVietnamDateTimeMinute(backorderResult.estimatedReadyFrom)
+        : '',
+      estimatedReadyToLabel: backorderResult?.estimatedReadyTo
+        ? formatVietnamDateTimeMinute(backorderResult.estimatedReadyTo)
+        : '',
+      pickupCode: backorderResult?.pickupCode || '',
+      pickupContactName: backorderResult?.pickupContactName || '',
+      pickupContactPhone: backorderResult?.pickupContactPhone || '',
+      pickupDateLabel: backorderResult?.pickupDate
+        ? formatVietnamDate(backorderResult.pickupDate)
+        : '',
     }
   }
 
@@ -1785,20 +1811,36 @@ function PosPage() {
     createOrder,
     debtSettlement = null,
     idempotencyKey,
+    acceptBackorder = false,
+    fulfillmentPreference = 'PartialDelivery',
+    pickupDate = null,
+    pickupNote = null,
+    pickupContactName = null,
+    pickupContactPhone = null,
+    depositAmount = null,
   }) => {
     const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
     const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
     const backendDebtSettlementJson = debtApplyAmount > 0
       ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: method })
       : null
+    // Đơn đặt cọc chỉ thu trước phần cọc; phần còn lại thu khi khách tới nhận hàng.
+    const collectedNow = depositAmount ?? recordedPaymentAmount
     const payload = buildOrderPayload(
       method,
-      recordedPaymentAmount,
+      collectedNow,
       backendDebtSettlementJson,
     )
+    payload.acceptBackorder = acceptBackorder
+    payload.fulfillmentPreference = fulfillmentPreference
+    payload.pickupDate = pickupDate
+    payload.pickupNote = pickupNote
+    payload.pickupContactName = pickupContactName
+    payload.pickupContactPhone = pickupContactPhone
+    payload.depositAmount = depositAmount
     const result = await createOrder(payload, { idempotencyKey })
 
-    if (method === 'CASH' && recordedPaymentAmount > 0) {
+    if (method === 'CASH' && collectedNow > 0) {
       await recordCashSale()
     }
 
@@ -1806,7 +1848,11 @@ function PosPage() {
             ? ` Â· ${result.stockHandlingSummary.message}`
             : "";
 
-        if (recordedPaymentAmount >= total) {
+        if (depositAmount != null) {
+            showSuccess(
+                `Đã nhận cọc ${formatMoney(depositAmount)} đ cho đơn ${result.orderCode}. Còn lại ${formatMoney(Math.max(0, total - depositAmount))} đ thu khi khách nhận hàng.${stockNote}`,
+            );
+        } else if (recordedPaymentAmount >= total) {
             const debtNote =
                 debtApplyAmount > 0 ? ` · Trừ nợ ${formatMoney(debtApplyAmount)} đ tại backend`
                 : changeAfterDebt > 0 ? ` · Thừa ${formatMoney(changeAfterDebt)} đ`
@@ -1831,6 +1877,7 @@ function PosPage() {
                 method,
                 invoiceCode: result.invoiceCode,
                 changeAmount: changeAfterDebt,
+                backorderResult: result,
             }),
         ];
 
@@ -1948,6 +1995,7 @@ function PosPage() {
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
                 method: "TRANSFER",
+                backorderResult: result,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -2009,7 +2057,17 @@ function PosPage() {
         printReceiptFromData(receipt);
     };
 
-    const executePayment = async (debtSettlement = null, idempotencyKey) => {
+    const executePayment = async (
+        debtSettlement = null,
+        idempotencyKey,
+        acceptBackorder = false,
+        fulfillmentPreference = 'PartialDelivery',
+        pickupDate = null,
+        pickupNote = null,
+        pickupContactName = null,
+        pickupContactPhone = null,
+        depositAmount = null,
+    ) => {
         if (isTakeaway) {
             await handleTakeawayPayment(debtSettlement, idempotencyKey);
             return;
@@ -2020,13 +2078,20 @@ function PosPage() {
             const backendDebtSettlementJson = debtApplyAmount > 0
                 ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: "VietQR" })
                 : null;
-            const transferAppliedToOrder = Math.min(transferQrAmount, total);
+            const transferAppliedToOrder = depositAmount ?? Math.min(transferQrAmount, total);
             const actualQrAmount = transferAppliedToOrder + debtApplyAmount;
             const payload = buildOrderPayload(
                 "TRANSFER",
                 transferAppliedToOrder,
                 backendDebtSettlementJson,
             );
+            payload.acceptBackorder = acceptBackorder;
+            payload.fulfillmentPreference = fulfillmentPreference;
+            payload.pickupDate = pickupDate;
+            payload.pickupNote = pickupNote;
+            payload.pickupContactName = pickupContactName;
+            payload.pickupContactPhone = pickupContactPhone;
+            payload.depositAmount = depositAmount;
             const result = await createPosOrderOnline(payload, {
                 qrAmount: actualQrAmount,
                 idempotencyKey,
@@ -2041,6 +2106,7 @@ function PosPage() {
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
                 method: "TRANSFER",
+                backorderResult: result,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -2072,10 +2138,26 @@ function PosPage() {
             createOrder: createPosOrderOffline,
             debtSettlement,
             idempotencyKey,
+            acceptBackorder,
+            fulfillmentPreference,
+            pickupDate,
+            pickupNote,
+            pickupContactName,
+            pickupContactPhone,
+            depositAmount,
         });
     };
 
-    const submitCheckoutAttempt = (activeDebtSettlement = null) =>
+    const submitCheckoutAttempt = (
+        activeDebtSettlement = null,
+        acceptBackorder = false,
+        fulfillmentPreference = 'PartialDelivery',
+        pickupDate = null,
+        pickupNote = null,
+        pickupContactName = null,
+        pickupContactPhone = null,
+        depositAmount = null,
+    ) =>
         checkoutAttemptRef.current.submit(
             {
                 salesMode,
@@ -2092,8 +2174,25 @@ function PosPage() {
                 shippingAddress,
                 orderNote,
                 debtSettlement: activeDebtSettlement,
+                acceptBackorder,
+                fulfillmentPreference,
+                pickupDate,
+                pickupNote,
+                pickupContactName,
+                pickupContactPhone,
+                depositAmount,
             },
-            (idempotencyKey) => executePayment(activeDebtSettlement, idempotencyKey),
+            (idempotencyKey) => executePayment(
+                activeDebtSettlement,
+                idempotencyKey,
+                acceptBackorder,
+                fulfillmentPreference,
+                pickupDate,
+                pickupNote,
+                pickupContactName,
+                pickupContactPhone,
+                depositAmount,
+            ),
         );
 
     const handlePayment = async () => {
@@ -2210,15 +2309,83 @@ function PosPage() {
 
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
+        if (!navigator.onLine) {
+            showError(
+                "Cần kết nối mạng để kiểm tra Kệ/Kho/BOM và xác nhận khách có đồng ý chờ hàng trước khi thu tiền.",
+            );
+            return;
+        }
         setIsSubmitting(true);
         try {
             await submitCheckoutAttempt(debtSettlement);
+            setIsPaymentConfirmOpen(false);
+        } catch (error) {
+            if (error?.body?.requiresBackorderConfirmation) {
+                setIsPaymentConfirmOpen(false);
+                setBackorderPrompt({
+                    message: error.body.backorderMessage || "Sản phẩm tạm thời hết hàng.",
+                    lines: error.body.lines || [],
+                    availableQuantity: Number(error.body.availableQuantity || 0),
+                    backorderQuantity: Number(error.body.backorderQuantity || 0),
+                    estimatedReadyFrom: error.body.estimatedReadyFrom || null,
+                });
+                return;
+            }
+            showError(error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleBackorderAccept = async ({
+        fulfillmentPreference,
+        pickupDate,
+        pickupNote,
+        pickupContactName,
+        pickupContactPhone,
+        depositAmount,
+    }) => {
+        if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
+        setIsSubmitting(true);
+        try {
+            await submitCheckoutAttempt(
+                debtSettlement,
+                true,
+                fulfillmentPreference,
+                pickupDate,
+                pickupNote,
+                pickupContactName,
+                pickupContactPhone,
+                depositAmount,
+            );
+            // Khách vãng lai đặt đơn chờ hàng sẽ quay lại lấy — lưu thành hồ sơ để lần sau tra được.
+            // Thất bại (trùng SĐT, mất mạng) không được ảnh hưởng đơn vừa tạo.
+            if (!selectedCustomer?.customerId && pickupContactName && pickupContactPhone) {
+                try {
+                    const existing = await fetchCustomerByPhone(pickupContactPhone).catch(() => null);
+                    if (!existing?.customerId) {
+                        await createCustomerForOrder({
+                            fullName: pickupContactName,
+                            phone: pickupContactPhone,
+                        });
+                        showSuccess(`Đã lưu khách hàng ${pickupContactName} vào hồ sơ.`);
+                    }
+                } catch (customerError) {
+                    showInfo(`Đơn đã tạo nhưng chưa lưu được hồ sơ khách: ${customerError.message}`);
+                }
+            }
+            setBackorderPrompt(null);
             setIsPaymentConfirmOpen(false);
         } catch (error) {
             showError(error.message);
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleBackorderDecline = () => {
+        setBackorderPrompt(null);
+        setIsPaymentConfirmOpen(false);
     };
 
     const handleOverpaymentDebtConfirm = async (result) => {
@@ -3202,6 +3369,22 @@ function PosPage() {
         appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
       />
+
+      {backorderPrompt ? (
+        <BackorderConfirmModal
+          isOpen
+          message={backorderPrompt.message}
+          lines={backorderPrompt.lines || []}
+          availableQuantity={backorderPrompt.availableQuantity || 0}
+          backorderQuantity={backorderPrompt.backorderQuantity || 0}
+          estimatedReadyFrom={backorderPrompt.estimatedReadyFrom || null}
+          selectedCustomer={selectedCustomer}
+          orderTotal={total}
+          isSubmitting={isSubmitting}
+          onAccept={handleBackorderAccept}
+          onDecline={handleBackorderDecline}
+        />
+      ) : null}
 
             <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
                 <div className="flex items-end justify-between gap-4">

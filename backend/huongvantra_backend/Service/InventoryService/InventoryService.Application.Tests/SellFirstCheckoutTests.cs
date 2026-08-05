@@ -4,6 +4,7 @@ using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
 using InventoryService.Domain.Entities;
+using InventoryService.Domain.Enums;
 using InventoryService.Domain.Exceptions;
 using InventoryService.Infrastructure.Data;
 using InventoryService.Infrastructure.Repositories;
@@ -67,10 +68,12 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<ISupplierReceiptRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             catalogClient ?? Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
@@ -152,9 +155,10 @@ public sealed class SellFirstCheckoutTests
 
         var logic = BuildLogic(db, catalogClient.Object);
         // available=1, order 2 → BOM for 1 unit, warehouse material=0 → shortage → exception
-        var ex = await Assert.ThrowsAsync<InsufficientStockException>(() =>
-            logic.PreparePosStockDeductionAsync(Req(Guid.NewGuid(), (finishedSku, 2)), Guid.NewGuid(), null));
-        Assert.NotEmpty(ex.Message);
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (finishedSku, 2)), Guid.NewGuid(), null);
+        Assert.True(result.BackorderRequired);
+        Assert.Empty(result.QueueIds);
 
         // Shelf stock must NOT have been mutated (all-or-nothing)
         var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
@@ -230,8 +234,10 @@ public sealed class SellFirstCheckoutTests
 
         var logic = BuildLogic(db, catalogClient.Object);
 
-        await Assert.ThrowsAsync<InsufficientStockException>(() =>
-            logic.PreparePosStockDeductionAsync(Req(Guid.NewGuid(), (finishedSku, 3)), Guid.NewGuid(), null));
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (finishedSku, 3)), Guid.NewGuid(), null);
+        Assert.True(result.BackorderRequired);
+        Assert.Empty(result.QueueIds);
 
         // Stock must NOT have been mutated
         var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
@@ -321,6 +327,244 @@ public sealed class SellFirstCheckoutTests
         Assert.Equal(3, line.PendingBomQuantity);
     }
 
+    [Fact]
+    public async Task ZeroShelf_SufficientWarehouse_QueuesWarehouseTransfer()
+    {
+        await using var db = NewDb();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 0, code: "FINISH-WH", warehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (sku, 5)), Guid.NewGuid(), null);
+
+        var line = Assert.Single(result.Lines);
+        Assert.Equal("WarehouseTransferPending", result.StockHandlingMode);
+        Assert.Single(result.QueueIds);
+        Assert.Equal(0, line.FinishedDeductedQuantity);
+        Assert.Equal(5, line.WarehouseDeductedQuantity);
+        Assert.Equal(0, line.PendingBomQuantity);
+        // POS-06 (KB2): Kho chưa bị trừ ở checkout, chờ Thủ kho xác nhận điều chuyển.
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == sku);
+        Assert.Equal(0, stock.QuantityOnHand);
+        Assert.Equal(10, stock.WarehouseQuantityOnHand);
+        var queueItem = await db.StockDeductQueueItems.AsNoTracking().SingleAsync(i => i.SkuId == sku);
+        Assert.Equal(5, queueItem.WarehouseTransferQuantity);
+    }
+
+    [Fact]
+    public async Task PartialShelf_PartialWarehouse_DeductsShelfAndQueuesTransfer()
+    {
+        await using var db = NewDb();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 3, code: "FINISH-MIX", warehouseQty: 5);
+
+        var logic = BuildLogic(db);
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (sku, 7)), Guid.NewGuid(), null);
+
+        var line = Assert.Single(result.Lines);
+        Assert.Equal("WarehouseTransferPending", result.StockHandlingMode);
+        Assert.Equal(3, line.FinishedDeductedQuantity);
+        Assert.Equal(4, line.WarehouseDeductedQuantity);
+        Assert.Equal(0, line.PendingBomQuantity);
+        Assert.Single(result.QueueIds);
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == sku);
+        Assert.Equal(0, stock.QuantityOnHand);
+        Assert.Equal(5, stock.WarehouseQuantityOnHand);
+    }
+
+    [Fact]
+    public async Task ShelfAndWarehouseInsufficient_RemainingQuantityUsesBomQueue()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 2, code: "FINISH-THREE-TIER", warehouseQty: 3);
+        await SeedAsync(db, materialSku, onHand: 0, code: "MAT-THREE-TIER", warehouseQty: 10);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(client => client.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (finishedSku, 7)), Guid.NewGuid(), null);
+
+        var line = Assert.Single(result.Lines);
+        Assert.Equal("PartialOrFullPendingBomReconciliation", result.StockHandlingMode);
+        Assert.Equal(2, line.FinishedDeductedQuantity);
+        Assert.Equal(3, line.WarehouseDeductedQuantity);
+        Assert.Equal(2, line.PendingBomQuantity);
+        Assert.Single(result.QueueIds);
+    }
+
+    [Fact]
+    public async Task MultipleSkus_UseWarehouseIndependently()
+    {
+        await using var db = NewDb();
+        var firstSku = Guid.NewGuid();
+        var secondSku = Guid.NewGuid();
+        await SeedAsync(db, firstSku, onHand: 0, code: "FINISH-WH-1", warehouseQty: 5);
+        await SeedAsync(db, secondSku, onHand: 1, code: "FINISH-WH-2", warehouseQty: 4);
+
+        var logic = BuildLogic(db);
+        var result = await logic.PreparePosStockDeductionAsync(
+            Req(Guid.NewGuid(), (firstSku, 3), (secondSku, 4)), Guid.NewGuid(), null);
+
+        Assert.Equal(2, result.Lines.Count);
+        Assert.Equal(3, result.Lines.Single(line => line.SkuId == firstSku).WarehouseDeductedQuantity);
+        Assert.Equal(3, result.Lines.Single(line => line.SkuId == secondSku).WarehouseDeductedQuantity);
+        Assert.All(result.Lines, line => Assert.Equal(0, line.PendingBomQuantity));
+        // POS-06 (KB2): cả 2 SKU đều cần điều chuyển nên gom vào 1 queue chờ Thủ kho.
+        Assert.Single(result.QueueIds);
+        Assert.Equal(2, await db.StockDeductQueueItems.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
+    public async Task AcceptBackorder_CreatesInsufficientQueue_DeductsAvailableStock()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 1, code: "FINISH-BO");
+        await SeedAsync(db, materialSku, onHand: 0, code: "MAT-BO", warehouseQty: 0);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(client => client.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var request = Req(Guid.NewGuid(), (finishedSku, 3)) with { AcceptBackorder = true };
+        var result = await logic.PreparePosStockDeductionAsync(request, Guid.NewGuid(), null);
+
+        Assert.Equal("BackorderAccepted", result.StockHandlingMode);
+        Assert.False(result.BackorderRequired);
+        var queueId = Assert.Single(result.QueueIds);
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking()
+            .Include(item => item.Items)
+            .SingleAsync(item => item.Id == queueId);
+        Assert.Equal(QueueStatus.Insufficient, queue.QueueStatus);
+        Assert.Equal("waiting_materials", queue.OrderStockStatus);
+        Assert.Equal(1, Assert.Single(queue.Items).FinishedDeductedQuantity);
+        Assert.Equal(2, Assert.Single(queue.Items).PendingBomQuantity);
+
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == finishedSku);
+        Assert.Equal(0, stock.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task AcceptBackorder_ZeroAvailableStock_CreatesInsufficientQueueWithoutDeduction()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 0, code: "FINISH-BO-ZERO");
+        await SeedAsync(db, materialSku, onHand: 0, code: "MAT-BO-ZERO", warehouseQty: 0);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(client => client.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var request = Req(Guid.NewGuid(), (finishedSku, 2)) with { AcceptBackorder = true };
+        var result = await logic.PreparePosStockDeductionAsync(request, Guid.NewGuid(), null);
+
+        Assert.Equal("BackorderAccepted", result.StockHandlingMode);
+        var queueId = Assert.Single(result.QueueIds);
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking()
+            .Include(item => item.Items)
+            .SingleAsync(item => item.Id == queueId);
+        Assert.Equal(QueueStatus.Insufficient, queue.QueueStatus);
+        Assert.Equal(0, Assert.Single(queue.Items).FinishedDeductedQuantity);
+        Assert.Equal(2, Assert.Single(queue.Items).PendingBomQuantity);
+
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == finishedSku);
+        Assert.Equal(0, stock.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task AcceptBackorder_PreviewOnly_HasNoStockOrQueueSideEffects()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 1, code: "FINISH-PREVIEW");
+        await SeedAsync(db, materialSku, onHand: 0, code: "MAT-PREVIEW", warehouseQty: 0);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(client => client.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var request = Req(Guid.NewGuid(), (finishedSku, 2)) with
+        {
+            AcceptBackorder = true,
+            PreviewOnly = true
+        };
+        var result = await logic.PreparePosStockDeductionAsync(request, Guid.NewGuid(), null);
+
+        Assert.Equal("BackorderAccepted", result.StockHandlingMode);
+        Assert.Empty(result.QueueIds);
+        Assert.Empty(await db.Set<StockDeductQueue>().AsNoTracking().ToListAsync());
+        var stock = await db.SkuStocks.AsNoTracking().SingleAsync(item => item.SkuId == finishedSku);
+        Assert.Equal(1, stock.QuantityOnHand);
+    }
+
+    [Theory]
+    [InlineData("CompleteDelivery")]
+    [InlineData("PartialDelivery")]
+    public async Task Backorder_Cancellation_RestoresFinishedStockAfterRequiredReturn(
+        string fulfillmentPreference)
+    {
+        await using var db = NewDb();
+        var orderId = Guid.NewGuid();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 1, code: "FINISH-HOLD");
+        await SeedAsync(db, materialSku, onHand: 0, code: "MAT-HOLD", warehouseQty: 0);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(client => client.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var request = Req(orderId, (finishedSku, 2)) with
+        {
+            AcceptBackorder = true,
+            FulfillmentPreference = fulfillmentPreference
+        };
+        await logic.PreparePosStockDeductionAsync(request, Guid.NewGuid(), null);
+        Assert.Equal(0, (await db.SkuStocks.AsNoTracking()
+            .SingleAsync(item => item.SkuId == finishedSku)).QuantityOnHand);
+
+        await logic.HandleOrderCancelledAsync(new OrderCancelledEvent
+        {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
+            OrderId = orderId,
+            OrderCode = "BACKORDER-HOLD",
+            PreviousOrderStatus = "WaitingMaterials",
+            Items = []
+        });
+
+        Assert.Equal(1, (await db.SkuStocks.AsNoTracking()
+            .SingleAsync(item => item.SkuId == finishedSku)).QuantityOnHand);
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking()
+            .SingleAsync(item => item.OrderId == orderId);
+        Assert.Equal(QueueStatus.Cancelled, queue.QueueStatus);
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private static ProductCatalogSnapshot BuildCatalogWithBom(
@@ -328,21 +572,23 @@ public sealed class SellFirstCheckoutTests
     {
         var materialVariant = new CatalogVariant(
             materialSku, Guid.NewGuid(), "MAT-CODE", "Nguyên liệu",
-            IsActive: true, IsSellable: false, HasBom: false, BomLineCount: 0, BomLines: []);
+            IsActive: true, IsSellable: false, HasBom: false, BomLineCount: 0, BomLines: [],
+            CanBeBomComponent: true);
         var materialProduct = new CatalogProduct(
-            Guid.NewGuid(), "Nguyên liệu", "material", "gram", "gram",
+            Guid.NewGuid(), "Nguyên liệu", "NGUYEN_LIEU", "gram", "gram",
             IsActive: true, Variants: [materialVariant]);
 
         var bomLine = new CatalogBomLine(
             materialProduct.Id, "Nguyên liệu", "gram", bomQty,
             ComponentVariantId: materialSku, ComponentSkuCode: "MAT-CODE",
-            ComponentVariantName: "Nguyên liệu", IsRequiredBaseComponent: true);
+            ComponentVariantName: "Nguyên liệu", IsRequiredBaseComponent: false);
 
         var finishedVariant = new CatalogVariant(
             finishedSku, Guid.NewGuid(), "FINISH-CODE", "Thành phẩm",
-            IsActive: true, IsSellable: true, HasBom: true, BomLineCount: 1, BomLines: [bomLine]);
+            IsActive: true, IsSellable: true, HasBom: true, BomLineCount: 1, BomLines: [bomLine],
+            CanHaveBom: true);
         var finishedProduct = new CatalogProduct(
-            Guid.NewGuid(), "Thành phẩm", "finished", "cái", "cái",
+            Guid.NewGuid(), "Thành phẩm", "THANH_PHAM", "cái", "cái",
             IsActive: true, Variants: [finishedVariant]);
 
         return new ProductCatalogSnapshot([finishedProduct, materialProduct]);

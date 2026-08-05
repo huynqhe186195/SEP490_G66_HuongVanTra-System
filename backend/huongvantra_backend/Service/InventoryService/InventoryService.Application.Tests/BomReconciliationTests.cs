@@ -69,10 +69,12 @@ public sealed class BomReconciliationTests
             Mock.Of<ISupplierReceiptRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
@@ -255,5 +257,182 @@ public sealed class BomReconciliationTests
         var logic = BuildLogic(db);
         await Assert.ThrowsAsync<InventoryService.Domain.Exceptions.InventoryValidationException>(() =>
             logic.CancelQueueAsync(queue.Id, new CancelStockDeductRequest(null), Guid.NewGuid(), null));
+    }
+
+    // ── POS-06 (KB2/KB3): queue chờ điều chuyển Kho → Kệ ─────────────────────
+
+    /// <summary>
+    /// Seeds a queue mixing a warehouse-transfer portion (KB2) with an optional BOM portion (KB3).
+    /// </summary>
+    private static async Task<(StockDeductQueue queue, SkuStock finishedStock)> SeedTransferQueueAsync(
+        InventoryDbContext db,
+        Guid finishedSkuId,
+        int transferQty,
+        int finishedWarehouseQty,
+        Guid? materialSkuId = null,
+        int bomQty = 0,
+        int materialWarehouseQty = 0)
+    {
+        string? snapshotJson = null;
+        if (materialSkuId.HasValue && bomQty > 0)
+        {
+            snapshotJson = JsonSerializer.Serialize(
+                new[]
+                {
+                    new
+                    {
+                        materialProductId = Guid.NewGuid(),
+                        materialSkuId = materialSkuId.Value,
+                        materialSkuCode = "MAT-TRANSFER",
+                        materialName = "Nguyên liệu điều chuyển",
+                        unitName = "gram",
+                        requiredQuantity = bomQty,
+                        availableAtCheckout = materialWarehouseQty,
+                        reservedByOtherPendingAtCheckout = 0,
+                    }
+                },
+                WebJson);
+
+            db.SkuStocks.Add(new SkuStock
+            {
+                SkuId = materialSkuId.Value,
+                SkuCode = "MAT-TRANSFER",
+                QuantityOnHand = 0,
+                WarehouseQuantityOnHand = materialWarehouseQty,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
+        var queue = new StockDeductQueue
+        {
+            Id = Guid.NewGuid(),
+            OrderId = Guid.NewGuid(),
+            OrderCode = "HVT-TRANSFER-001",
+            OrderPaymentStatus = "completed",
+            OrderStockStatus = bomQty > 0 ? "pending_bom_reconciliation" : "pending_warehouse_transfer",
+            QueueStatus = QueueStatus.Waiting,
+            TotalAmount = 100m,
+            IsDeducted = false,
+            CreatedAt = DateTime.UtcNow,
+            Items =
+            [
+                new StockDeductQueueItem
+                {
+                    Id = Guid.NewGuid(),
+                    SkuId = finishedSkuId,
+                    SkuSnapshotName = "Thành phẩm điều chuyển",
+                    SkuSnapshotCode = "FINISH-TRANSFER",
+                    Quantity = transferQty + bomQty,
+                    OrderedQuantity = transferQty + bomQty,
+                    FinishedDeductedQuantity = 0,
+                    PendingBomQuantity = bomQty,
+                    WarehouseTransferQuantity = transferQty,
+                    StockHandlingMode = bomQty > 0 ? "PartialFinishedDeductedBomPending" : "WarehouseTransferPending",
+                    MaterialRequirementSnapshotJson = snapshotJson,
+                }
+            ]
+        };
+
+        var finishedStock = new SkuStock
+        {
+            SkuId = finishedSkuId,
+            SkuCode = "FINISH-TRANSFER",
+            QuantityOnHand = 0,
+            WarehouseQuantityOnHand = finishedWarehouseQty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        db.Set<StockDeductQueue>().Add(queue);
+        db.SkuStocks.Add(finishedStock);
+        await db.SaveChangesAsync();
+        return (queue, finishedStock);
+    }
+
+    [Fact]
+    public async Task ConfirmTransferQueue_SufficientWarehouse_MovesStockAndConfirms()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var (queue, _) = await SeedTransferQueueAsync(
+            db, finishedSku, transferQty: 4, finishedWarehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        Assert.Equal("confirmed", result.QueueStatus);
+        Assert.True(result.CanDeduct);
+
+        // Kho giảm 4, phần về Kệ được xuất bán ngay nên tồn Kệ trở lại 0.
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(6, stock.WarehouseQuantityOnHand);
+        Assert.Equal(0, stock.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task ConfirmTransferQueue_InsufficientWarehouse_MarksInsufficient_NoMovement()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var (queue, _) = await SeedTransferQueueAsync(
+            db, finishedSku, transferQty: 7, finishedWarehouseQty: 3);
+
+        var logic = BuildLogic(db);
+        var result = await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        Assert.Equal("insufficient", result.QueueStatus);
+        Assert.False(result.CanDeduct);
+        Assert.NotEmpty(result.Shortages ?? []);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(3, stock.WarehouseQuantityOnHand);
+        Assert.Equal(0, stock.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task ConfirmMixedTransferAndBomQueue_ProducesAndTransfers()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        var (queue, _) = await SeedTransferQueueAsync(
+            db, finishedSku, transferQty: 2, finishedWarehouseQty: 5,
+            materialSkuId: materialSku, bomQty: 3, materialWarehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        Assert.Equal("confirmed", result.QueueStatus);
+        Assert.True(result.CanDeduct);
+
+        // Nguyên liệu bị trừ theo BOM.
+        var material = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == materialSku);
+        Assert.Equal(7, material.WarehouseQuantityOnHand);
+
+        // Kho thành phẩm: 5 + 3 sản xuất - 5 điều chuyển = 3; phần về Kệ đã xuất bán hết.
+        var finished = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(3, finished.WarehouseQuantityOnHand);
+        Assert.Equal(0, finished.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task CancelTransferQueue_LeavesWarehouseUntouched()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var (queue, _) = await SeedTransferQueueAsync(
+            db, finishedSku, transferQty: 4, finishedWarehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.CancelQueueAsync(
+            queue.Id, new CancelStockDeductRequest("Khách đổi ý"), Guid.NewGuid(), null);
+
+        Assert.Equal("cancelled", result.QueueStatus);
+
+        // KB2: chưa trừ Kho lúc checkout nên hủy không hoàn gì, tồn giữ nguyên.
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(10, stock.WarehouseQuantityOnHand);
+        Assert.Equal(0, stock.QuantityOnHand);
     }
 }

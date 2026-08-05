@@ -26,11 +26,11 @@ export default function SupplierReceiptDocument({ receipt }) {
   )
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-5 text-slate-800">
+    <article className="inventory-slip-print rounded-xl border border-slate-200 bg-white p-5 text-slate-800">
       <header className="border-b border-slate-200 pb-4 text-center">
         <h2 className="text-2xl font-black tracking-wide">PHIẾU NHẬP KHO</h2>
         <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{receipt.receiptCode}</p>
-        <p className="mt-1 text-xs text-slate-500">Kho nhập: {receipt.warehouseLocation === 'Warehouse' ? 'Kho' : receipt.warehouseLocation || 'Kho'}</p>
+        <p className="mt-1 text-xs text-slate-500">Kho nhập: {receipt.warehouseLocation === 'Shelf' ? 'Kệ hàng' : 'Kho'}</p>
       </header>
 
       <section className="grid grid-cols-1 gap-x-6 gap-y-3 border-b border-slate-100 py-4 text-sm md:grid-cols-3">

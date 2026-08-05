@@ -77,13 +77,15 @@ function historySourceLabel(sourceType) {
 function historyStatusLabel(item) {
   if (item.type === 'RetailPrice') return null
   if (item.wasApplied === true) return 'Đã áp dụng'
-  if (String(item.processingResult).toLowerCase() === 'superseded') {
-    return 'Không áp dụng — Sự kiện cũ hơn'
+  const labels = {
+    applied: 'Đã áp dụng',
+    superseded: 'Không áp dụng — Sự kiện cũ hơn',
+    waiting_sequence: 'Đang chờ đủ thứ tự dòng',
+    sequence_incomplete: 'Đang chờ đủ thứ tự dòng',
+    sequence_invalid: 'Thứ tự dòng không hợp lệ',
+    reconciliation_required: 'Cần đối soát lại giá vốn',
   }
-  if (String(item.processingResult).toLowerCase() === 'waiting_sequence') {
-    return 'Đang chờ đủ thứ tự dòng'
-  }
-  return item.processingResult || 'Không áp dụng'
+  return labels[String(item.processingResult).toLowerCase()] || 'Không áp dụng'
 }
 
 function PriceDraftInput({ value, onChange }) {

@@ -15,6 +15,7 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateSupplierReceipt, canReviewSupplierReceipt } from '../../auth/utils/permissions.js'
 import SupplierReceiptDocument from '../components/SupplierReceiptDocument.jsx'
+import { SlipActionButtons, SlipPrintStyles } from '../components/InventorySlipDocument.jsx'
 import {
   approveSupplierReceipt,
   cancelSupplierReceipt,
@@ -237,6 +238,7 @@ function SupplierReceiptsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
   const [detailReceipt, setDetailReceipt] = useState(null)
+  const detailPrintRef = useRef(null)
   const [detailError, setDetailError] = useState('')
   const [isDetailLoading, setIsDetailLoading] = useState(Boolean(receiptId))
   const session = loadAuthSession()
@@ -375,7 +377,16 @@ function SupplierReceiptsPage() {
             {detailError || 'Không tìm thấy Phiếu nhập nguồn.'}
           </p>
         ) : (
-          <SupplierReceiptDocument receipt={detailReceipt} />
+          <>
+            <SlipPrintStyles />
+            <SlipActionButtons
+              documentRef={detailPrintRef}
+              filename={`${detailReceipt.receiptCode || 'phieu-nhap'}.pdf`}
+            />
+            <div ref={detailPrintRef}>
+              <SupplierReceiptDocument receipt={detailReceipt} />
+            </div>
+          </>
         )}
       </PageShell>
     )

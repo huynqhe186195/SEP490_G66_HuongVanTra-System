@@ -120,6 +120,20 @@ export const REASON_SUGGESTIONS = {
     'Đóng ngày nhầm',
     'Có đơn chưa ghi nhận',
   ],
+  backorderCustomerCancel: [
+    'Khách đổi ý, không mua nữa',
+    'Khách không chờ được thời gian hẹn',
+    'Khách đã mua ở nơi khác',
+    'Khách đặt nhầm sản phẩm / số lượng',
+    'Khách yêu cầu hủy qua điện thoại',
+  ],
+  backorderOverdueCancel: [
+    'Khách không tới nhận quá 7 ngày',
+    'Không liên lạc được với khách',
+    'Khách hẹn lại nhiều lần nhưng không đến',
+    'Khách từ chối nhận hàng',
+    'Hàng đã quá hạn lưu giữ tại kệ',
+  ],
   receiptReprint: [
     'Khách xin bản in thêm',
     'Máy in lỗi / giấy mờ',

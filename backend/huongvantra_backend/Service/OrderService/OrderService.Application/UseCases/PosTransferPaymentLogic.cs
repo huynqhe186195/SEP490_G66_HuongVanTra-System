@@ -250,7 +250,93 @@ public class PosTransferPaymentLogic(
 
     private static Payment? GetTransferPayment(Order order) =>
         order.Payments?.FirstOrDefault(p =>
-            p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+            p.PaymentPurpose != PaymentPurpose.RemainingAtPickup
+            && p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+
+    /// POS-06 (cọc): QR thu nốt phần còn lại khi khách quay lại nhận hàng.
+    /// Dùng chung hạn 5 phút và webhook SePay như QR bán hàng ở POS.
+    public async Task<TransferQrResponse> GetRemainingBalanceQrAsync(
+        Guid orderId, OrderAccessContext access, bool forceRefresh, CancellationToken ct = default)
+    {
+        var order = await orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        EnsureCanCollectAtCounter(order, access);
+
+        var remaining = GetRemainingBalance(order);
+        if (remaining <= 0)
+            throw new OrderValidationException("Đơn không còn khoản phải thu.");
+
+        var payment = GetRemainingPayment(order);
+        if (payment is null)
+        {
+            var now = DateTime.UtcNow;
+            payment = new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                PaymentMethod = PaymentMethod.VietQR,
+                Amount = remaining,
+                PaymentStatus = PaymentStatus.Pending,
+                PaymentPurpose = PaymentPurpose.RemainingAtPickup,
+                TransferQrExpiresAtUtc = now.AddMinutes(GetExpiryMinutes()),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            order.Payments?.Add(payment);
+            await orderRepo.SaveChangesAsync(ct);
+        }
+        else if (payment.PaymentStatus == PaymentStatus.Success)
+        {
+            throw new OrderValidationException("Khách đã thanh toán phần còn lại.");
+        }
+        else if (forceRefresh || !payment.TransferQrExpiresAtUtc.HasValue
+                 || payment.TransferQrExpiresAtUtc.Value <= DateTime.UtcNow)
+        {
+            payment.PaymentMethod = PaymentMethod.VietQR;
+            payment.Amount = remaining;
+            payment.TransferQrExpiresAtUtc = DateTime.UtcNow.AddMinutes(GetExpiryMinutes());
+            payment.UpdatedAt = DateTime.UtcNow;
+            await orderRepo.SaveChangesAsync(ct);
+        }
+
+        return CreateTransferQrResponse(
+            order.OrderCode,
+            ApplyTestQrAmount(remaining),
+            payment.TransferQrExpiresAtUtc!.Value);
+    }
+
+    public async Task<PosOrderPaymentStatusResponse> GetRemainingBalanceStatusAsync(
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
+    {
+        var order = await orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        EnsureCanCollectAtCounter(order, access);
+
+        var payment = GetRemainingPayment(order);
+        var isPaid = order.OrderStatus == OrderStatus.Completed
+            || payment?.PaymentStatus == PaymentStatus.Success;
+
+        return new PosOrderPaymentStatusResponse(
+            order.Id,
+            order.OrderCode,
+            (payment?.PaymentStatus ?? PaymentStatus.Pending).ToString(),
+            order.OrderStatus.ToString(),
+            isPaid,
+            null,
+            order.OrderCode,
+            ApplyTestQrAmount(GetRemainingBalance(order)));
+    }
+
+    private static Payment? GetRemainingPayment(Order order) =>
+        order.Payments?.FirstOrDefault(p => p.PaymentPurpose == PaymentPurpose.RemainingAtPickup);
+
+    private static decimal GetRemainingBalance(Order order)
+    {
+        var collected = (order.Payments ?? [])
+            .Where(p => p.PaymentStatus == PaymentStatus.Success)
+            .Sum(p => p.Amount);
+        return Math.Max(0, order.FinalAmount - collected);
+    }
 
     private static void EnsureTransferPaymentPending(Order order, Payment payment)
     {
@@ -375,7 +461,16 @@ public class PosTransferPaymentLogic(
         }
 
         var payment = order.Payments?.FirstOrDefault(p =>
-            p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+            p.PaymentPurpose != PaymentPurpose.RemainingAtPickup
+            && p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+
+        // POS-06 (cọc): đơn đã cọc và đang chờ khách tới lấy — tiền về là phần còn lại.
+        if (order.OrderStatus == OrderStatus.ReadyToDeliver && GetRemainingPayment(order) is not null)
+        {
+            await HandleRemainingBalanceWebhookAsync(order, receivedAmount, payload, ct);
+            return;
+        }
+
         if (payment is null)
         {
             logger.LogWarning("SePay webhook ignored: order {OrderCode} has no transfer payment.", orderCode);
@@ -445,9 +540,63 @@ public class PosTransferPaymentLogic(
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
     }
 
-    private static void EnsureCanModify(Order order, OrderAccessContext access)
+    private async Task HandleRemainingBalanceWebhookAsync(
+        Order order, long receivedAmount, SepayWebhookPayload payload, CancellationToken ct)
     {
+        var payment = GetRemainingPayment(order)!;
+        if (payment.PaymentStatus == PaymentStatus.Success)
+            return;
+
+        // Mã VietQR tĩnh không thể thu hồi ở phía ngân hàng: khách vẫn quét được ảnh cũ.
+        // Tiền đã về thì phải ghi nhận, hạn 5 phút chỉ điều khiển việc hiển thị/làm mới QR.
+        if (payment.TransferQrExpiresAtUtc.HasValue
+            && payment.TransferQrExpiresAtUtc.Value <= DateTime.UtcNow)
+        {
+            logger.LogWarning(
+                "SePay webhook: remaining-balance QR for {OrderCode} was expired but payment arrived — accepting.",
+                order.OrderCode);
+        }
+
+        var remaining = GetRemainingBalance(order);
+        var expected = (long)Math.Round(ApplyTestQrAmount(remaining), MidpointRounding.AwayFromZero);
+        var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
+        if (receivedAmount <= 0
+            || receivedAmount > expected + tolerance
+            || receivedAmount < expected - tolerance)
+        {
+            logger.LogWarning(
+                "SePay webhook ignored: remaining-balance amount mismatch for {OrderCode}. Expected {Expected}, got {Received}.",
+                order.OrderCode,
+                expected,
+                receivedAmount);
+            return;
+        }
+
+        payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
+        payment.Amount = remaining;
+        payment.PaymentStatus = PaymentStatus.Success;
+        payment.PaidAt = DateTime.UtcNow;
+        payment.UpdatedAt = DateTime.UtcNow;
+        await orderRepo.SaveChangesAsync(ct);
+
+        await orderLogic.MarkDeliveredAsync(
+            order.Id,
+            new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
+            actorName: "SePay Webhook",
+            ct: ct);
+        logger.LogInformation("SePay webhook collected remaining balance for {OrderCode}.", order.OrderCode);
+    }
+
+    private static void EnsureCanModify(Order order, OrderAccessContext access)    {
         if (!access.CanModifyOrder(order))
+            throw new OrderForbiddenException();
+    }
+
+    /// Thu tiền tại quầy không phụ thuộc người tạo đơn: khách quay lại nhận hàng
+    /// có thể gặp bất kỳ thu ngân nào đang trực.
+    private static void EnsureCanCollectAtCounter(Order order, OrderAccessContext access)
+    {
+        if (!access.CanViewOrder(order))
             throw new OrderForbiddenException();
     }
 

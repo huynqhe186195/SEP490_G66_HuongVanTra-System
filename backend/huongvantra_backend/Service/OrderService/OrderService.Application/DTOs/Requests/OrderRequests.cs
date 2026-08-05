@@ -20,8 +20,22 @@ public record CreateOrderRequest(
     OrderKind OrderKind = OrderKind.Sale,
     List<CreateCustomBundleRequest>? CustomBundles = null,
     List<CreatePaymentAllocationRequest>? Payments = null,
-    Guid? ContractId = null
+    Guid? ContractId = null,
+    bool AcceptBackorder = false,
+    FulfillmentPreference FulfillmentPreference = FulfillmentPreference.PartialDelivery,
+    // POS-06 (KB4): thu ngân nhập ngày hẹn khách quay lại lấy hàng khi chấp nhận backorder.
+    DateTime? PickupDate = null,
+    string? PickupNote = null,
+    string? PickupContactName = null,
+    string? PickupContactPhone = null,
+    // POS-06 (cọc): tiền cọc thu trước, tối thiểu 50% FinalAmount khi chấp nhận backorder.
+    decimal? DepositAmount = null
 );
+
+public record CollectRemainingRequest(
+    PaymentMethod PaymentMethod,
+    decimal Amount,
+    string? TransactionRef = null);
 
 public record CreatePaymentAllocationRequest(
     PaymentMethod PaymentMethod,
@@ -64,6 +78,13 @@ public record UpdateOrderRequest(
 );
 
 public record CancelOrderRequest(string? Reason);
+
+public record ReviewBackorderCancellationRequest(bool Approved, string? Note = null);
+
+public record CompleteBackorderRefundRequest(
+    string RefundMethod,
+    string RefundEvidence,
+    bool ImmediateItemsReturned = false);
 
 public record VerifyCodPaymentRequest(
     string? TransactionRef,

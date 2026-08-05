@@ -507,7 +507,7 @@ function ApprovalProductPreview({ product, categories = [] }) {
             <tr>
               <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
               <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-              <th className="px-4 py-3 text-center font-semibold">BOM</th>
+              <th className="px-4 py-3 text-center font-semibold">Định mức nguyên liệu</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -716,7 +716,7 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
               <p className="mt-1 font-semibold text-slate-800">{variants.length}</p>
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Định mức nguyên liệu</p>
               <p className="mt-1 font-semibold text-slate-800">{totalBomLines} dòng</p>
             </div>
           </div>
@@ -727,7 +727,7 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
                 <tr>
                   <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                  <th className="px-4 py-3 text-center font-semibold">BOM</th>
+                  <th className="px-4 py-3 text-center font-semibold">Định mức nguyên liệu</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -2156,7 +2156,7 @@ function ProductFormPage({ mode }) {
                   <tr>
                     <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                     <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                    <th className="px-4 py-3 text-center font-semibold">BOM</th>
+                    <th className="px-4 py-3 text-center font-semibold">Định mức nguyên liệu</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

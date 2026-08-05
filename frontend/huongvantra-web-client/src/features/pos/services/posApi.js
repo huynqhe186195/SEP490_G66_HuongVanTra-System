@@ -140,6 +140,13 @@ function buildOrderRequestFromPosPayload(
     paidAmount: paidAmount ?? 0,
     transferQrAmount: transferQrAmount ?? 0,
     paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
+    acceptBackorder: Boolean(payload.acceptBackorder),
+    fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
+    pickupDate: payload.pickupDate || null,
+    pickupNote: payload.pickupNote || null,
+    pickupContactName: payload.pickupContactName || null,
+    pickupContactPhone: payload.pickupContactPhone || null,
+    depositAmount: payload.depositAmount ?? null,
     payments: (payload.payments ?? []).map((allocation) => ({
       paymentMethod: mapPaymentMethod(allocation.paymentMethod),
       amount: Number(allocation.amount ?? 0),
@@ -180,6 +187,14 @@ function mapOrderDetailToPosResult(order) {
     invoiceCode: null,
     createdAt: order.createdAt,
     stockHandlingSummary: order.stockHandlingSummary ?? null,
+    backorderAcceptedAt: order.backorderAcceptedAt ?? null,
+    estimatedReadyFrom: order.estimatedReadyFrom ?? null,
+    estimatedReadyTo: order.estimatedReadyTo ?? null,
+    fulfillmentPreference: order.fulfillmentPreference ?? null,
+    pickupDate: order.pickupDate ?? null,
+    pickupContactName: order.pickupContactName ?? '',
+    pickupContactPhone: order.pickupContactPhone ?? '',
+    pickupCode: order.pickupCode ?? '',
     items: (order.items ?? []).map((row) => ({
       productId: row.skuId,
       productName: row.skuSnapshotName,
@@ -188,6 +203,9 @@ function mapOrderDetailToPosResult(order) {
       quantity: row.quantity,
       lineTotal: row.subTotal,
       isGift: row.isGift ? 1 : 0,
+      immediateFulfilledQuantity: Number(row.immediateFulfilledQuantity ?? 0),
+      reservedFinishedQuantity: Number(row.reservedFinishedQuantity ?? 0),
+      backorderQuantity: Number(row.backorderQuantity ?? 0),
     })),
   }
 }
@@ -213,6 +231,14 @@ export function mapPosOrderResult(item) {
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     stockHandlingSummary: item.stockHandlingSummary ?? item.StockHandlingSummary ?? null,
+    backorderAcceptedAt: item.backorderAcceptedAt ?? item.BackorderAcceptedAt ?? null,
+    estimatedReadyFrom: item.estimatedReadyFrom ?? item.EstimatedReadyFrom ?? null,
+    estimatedReadyTo: item.estimatedReadyTo ?? item.EstimatedReadyTo ?? null,
+    fulfillmentPreference: item.fulfillmentPreference ?? item.FulfillmentPreference ?? null,
+    pickupDate: item.pickupDate ?? item.PickupDate ?? null,
+    pickupContactName: item.pickupContactName ?? item.PickupContactName ?? '',
+    pickupContactPhone: item.pickupContactPhone ?? item.PickupContactPhone ?? '',
+    pickupCode: item.pickupCode ?? item.PickupCode ?? '',
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
       productName: row.productName ?? row.ProductName ?? '',
@@ -220,6 +246,9 @@ export function mapPosOrderResult(item) {
       unitPrice: Number(row.unitPrice ?? row.UnitPrice ?? 0),
       quantity: Number(row.quantity ?? row.Quantity ?? 0),
       lineTotal: Number(row.lineTotal ?? row.LineTotal ?? 0),
+      immediateFulfilledQuantity: Number(row.immediateFulfilledQuantity ?? row.ImmediateFulfilledQuantity ?? 0),
+      reservedFinishedQuantity: Number(row.reservedFinishedQuantity ?? row.ReservedFinishedQuantity ?? 0),
+      backorderQuantity: Number(row.backorderQuantity ?? row.BackorderQuantity ?? 0),
       isGift: row.isGift ?? row.IsGift ?? 0,
     })),
   }
@@ -279,6 +308,22 @@ export async function fetchOrderTransferQrByOrderId(orderId) {
 export async function refreshOrderTransferQr(orderId) {
   const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/transfer-qr/refresh`, { method: 'POST' })
   return mapTransferQrResponse(qr)
+}
+
+/** POS-06 (cọc): QR thu nốt phần còn lại khi khách tới nhận hàng. */
+export async function fetchOrderRemainingQr(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-qr`, { method: 'GET' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function refreshOrderRemainingQr(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-qr/refresh`, { method: 'POST' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function fetchOrderRemainingPaymentStatus(orderId) {
+  const data = await apiRequestAuth(`/api/pos/orders/${orderId}/remaining-status`, { method: 'GET' })
+  return mapPosPaymentStatus(data)
 }
 
 export async function fetchOrderTransferQr({ orderCode, amount, orderId }) {

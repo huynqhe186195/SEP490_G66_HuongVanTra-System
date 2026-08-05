@@ -105,7 +105,22 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var keyValues)
             ? keyValues.FirstOrDefault()
             : null;
-        var result = await orderLogic.CreateAsync(request, AccessContext(), actorId, actorName, idempotencyKey, ct);
+        OrderService.Application.DTOs.Responses.OrderResponse result;
+        try
+        {
+            result = await orderLogic.CreateAsync(request, AccessContext(), actorId, actorName, idempotencyKey, ct);
+        }
+        catch (OrderService.Application.Interfaces.BackorderConfirmationRequiredException ex)
+        {
+            return Conflict(new
+            {
+                requiresBackorderConfirmation = true,
+                backorderMessage = ex.Message,
+                availableQuantity = ex.Lines.Sum(line => line.FinishedDeductedQuantity),
+                backorderQuantity = ex.Lines.Sum(line => line.PendingBomQuantity),
+                lines = ex.Lines
+            });
+        }
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
@@ -143,6 +158,42 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/backorder-cancellation")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> RequestBackorderCancellation(
+        Guid id,
+        [FromBody] CancelOrderRequest request,
+        CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.RequestBackorderCancellationAsync(
+            id, AccessContext(), request.Reason, actorId, actorName, ct));
+    }
+
+    [HttpPost("{id:guid}/backorder-cancellation/review")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ReviewBackorderCancellation(
+        Guid id,
+        [FromBody] ReviewBackorderCancellationRequest request,
+        CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.ReviewBackorderCancellationAsync(
+            id, request, AccessContext() with { CanViewAllOrders = true }, actorId, actorName, ct));
+    }
+
+    [HttpPost("{id:guid}/backorder-refund/complete")]
+    [Authorize(Roles = "Manager,Accountant")]
+    public async Task<IActionResult> CompleteBackorderRefund(
+        Guid id,
+        [FromBody] CompleteBackorderRefundRequest request,
+        CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CompleteBackorderRefundAsync(
+            id, request, AccessContext() with { CanViewAllOrders = true }, actorId, actorName, ct));
+    }
+
     [HttpPost("{id:guid}/ship")]
     [Authorize(Policy = PermissionNames.ShipOrderAccess)]
     public async Task<IActionResult> Ship(Guid id, CancellationToken ct)
@@ -159,6 +210,32 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         var (actorId, actorName) = Actor();
         await orderLogic.CompleteAsync(id, AccessContext(), actorId, actorName, ct: ct);
         return NoContent();
+    }
+
+    [HttpPost("{id:guid}/mark-delivered")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> MarkDelivered(Guid id, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        await orderLogic.MarkDeliveredAsync(id, AccessContext(), actorId, actorName, ct);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/collect-and-deliver")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> CollectAndDeliver(Guid id, [FromBody] CollectRemainingRequest request, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CollectRemainingAndDeliverAsync(id, request, AccessContext(), actorId, actorName, ct));
+    }
+
+    [HttpPost("{id:guid}/cancel-overdue-deposit")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> CancelOverdueDeposit(Guid id, [FromBody] CancelOrderRequest request, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CancelOverdueDepositAsync(
+            id, AccessContext() with { CanViewAllOrders = true }, request.Reason, actorId, actorName, ct));
     }
 
     [HttpPost("{id:guid}/return")]

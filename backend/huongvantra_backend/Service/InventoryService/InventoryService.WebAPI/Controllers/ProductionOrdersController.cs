@@ -88,8 +88,8 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
 
         var current = await _logic.GetProductionOrderByIdAsync(id, ct);
         if (current == null) return NotFound();
-        if (!string.Equals(current.Status, "Draft", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { message = "Chỉ được hủy lệnh sản xuất ở trạng thái Draft." });
+        if (string.Equals(current.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Không thể hủy lệnh sản xuất đã hoàn thành." });
 
         var result = await _logic.CancelProductionOrderAsync(id, User.GetUserId(), false, User.ToCreatorSnapshot(), request, ct);
         return Ok(result);

@@ -74,19 +74,23 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, CancellationToken ct = default) =>
         GetAvailableItemsForSkuAsync(skuId, WarehouseLocation, ct);
 
-    public Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, string location, CancellationToken ct = default) =>
-        _db.WarehouseBatchItems
+    public Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, string location, CancellationToken ct = default)
+    {
+        var today = DateTime.UtcNow.Date;
+        return _db.WarehouseBatchItems
             .Include(i => i.Batch)
             .Where(i =>
                 i.SkuId == skuId &&
                 i.QuantityOnHand > 0 &&
                 i.Batch != null &&
                 i.Batch.Status == "active" &&
-                i.Batch.Location == location)
+                i.Batch.Location == location &&
+                (i.Batch.ExpiresAt == null || i.Batch.ExpiresAt >= today))
             .OrderBy(i => i.Batch!.ExpiresAt ?? DateTime.MaxValue)
             .ThenBy(i => i.Batch!.CreatedAt)
             .ThenBy(i => i.CreatedAt)
             .ToListAsync(ct);
+    }
 
     public Task<bool> ExistsLotCodeAsync(string lotCode, Guid? excludeId = null, CancellationToken ct = default)
     {
@@ -109,15 +113,21 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public Task<int> SumQuantityOnHandAsync(Guid skuId, CancellationToken ct = default) =>
         SumQuantityOnHandAsync(skuId, WarehouseLocation, ct);
 
-    public Task<int> SumQuantityOnHandAsync(Guid skuId, string location, CancellationToken ct = default) =>
-        _db.WarehouseBatchItems
+    public Task<int> SumQuantityOnHandAsync(Guid skuId, string location, CancellationToken ct = default)
+    {
+        var today = DateTime.UtcNow.Date;
+        return _db.WarehouseBatchItems
             .Where(i => i.SkuId == skuId)
             .Join(
-                _db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == location),
+                _db.WarehouseBatches.Where(b =>
+                    b.Status == "active"
+                    && b.Location == location
+                    && (b.ExpiresAt == null || b.ExpiresAt >= today)),
                 i => i.WarehouseBatchId,
                 b => b.Id,
                 (i, _) => i.QuantityOnHand)
             .SumAsync(ct);
+    }
 
     public async Task<decimal> CalculateMovingAverageCostAsync(Guid skuId, CancellationToken ct = default)
     {
@@ -137,9 +147,13 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
 
     public async Task<Dictionary<Guid, int>> GetQuantitySumsBySkuAsync(CancellationToken ct = default)
     {
+        var today = DateTime.UtcNow.Date;
         var rows = await _db.WarehouseBatchItems
             .Join(
-                _db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == WarehouseLocation),
+                _db.WarehouseBatches.Where(b =>
+                    b.Status == "active"
+                    && b.Location == WarehouseLocation
+                    && (b.ExpiresAt == null || b.ExpiresAt >= today)),
                 i => i.WarehouseBatchId,
                 b => b.Id,
                 (i, _) => new { i.SkuId, i.QuantityOnHand })

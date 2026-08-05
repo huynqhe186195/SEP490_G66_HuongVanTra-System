@@ -107,6 +107,7 @@ public class SupplierReturnSingleStepTests
             eventPublisher,
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
+            Mock.Of<IStockTransferRepository>(),
             new FakeCatalogClient(BuildCatalog()),
             new SupplierRepository(db),
             new SupplierProductRepository(db),

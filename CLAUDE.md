@@ -111,70 +111,105 @@ Official quantity principles:
 
 ### Phase G — POS-05 Transactional Outbox/Inbox
 
-Completed:
+Completed: G1–G7.
 
-- G1 — OrderService Outbox schema.
-- G2 — Outbox Writer.
-- G3 — Integration event contract metadata.
-
-Current baseline includes:
-
-- `OrderPlacedEvent`
-- `StockDeductedEvent`
-- `OrderCancelledEvent`
-- `OrderReturnedEvent`
-- `OrderCompletedEvent`
-
-Each relevant event has:
-
-- `EventId`
-- `OccurredAtUtc`
+- G1 — OrderService Outbox schema (`OutboxMessages` table, migration `20260723192707_AddOrderOutboxMessages`).
+- G2 — Outbox Writer (`IOrderOutboxWriter` / `OrderOutboxWriter`, does not call SaveChanges).
+- G3 — Integration event contract metadata (`OrderPlacedEvent`, `OrderCancelledEvent`, `OrderReturnedEvent`, `OrderCompletedEvent`, `OrderShippedEvent` — all with `EventId` + `OccurredAtUtc`).
+- G4 — `OutboxOrderEventPublisher` wires `IOrderEventPublisher` → `IOrderOutboxWriter`; publisher calls precede `SaveChangesAsync` in all four handlers (Create, Cancel, Complete, Return).
+- G5 — `OutboxDispatcherHostedService` running as background service; `OutboxDispatchProcessor` with exponential backoff; `IOutboxStore` atomic lease claim via raw SQL `UPDATE … LIMIT`.
+- G6 — InventoryService consumers (`OrderPlacedConsumer`, `OrderCancelledConsumer`, `OrderShippedConsumer`, `OrderReturnedConsumer`) use two-tier dedup: `ExistsByEventIdAsync` (EventId) + `ExistsAsync` (business key). Inbox record (`ProcessedIntegrationEvent`) committed atomically with stock mutation via shared DbContext.
+- G7 — `OutboxMessagesController` at `api/outbox-messages`: paged list, stats, detail, manual retry. Guarded by `PermissionNames.MonitorOutbox`.
 
 Not completed:
 
-- G4 — Write integration events to Outbox in the same Order transaction.
-- G5 — Outbox Dispatcher.
-- G6 — Inventory Inbox and idempotent consumers.
-- G7 — Monitoring and manual retry.
-- G8 — End-to-end verification.
+- G8 — End-to-end runtime verification (Docker UAT).
 
 ### Phase H — POS-04 COD Stock Reservation
 
+Completed: H1–H6 (infrastructure already implemented).
+
+Key implementation:
+
+- `SkuStock.ReservedQuantity` — reservation counter per SKU.
+- `StockDeductQueueItem.ReservationStatus` (`None/Active/Released/Deducted`) + per-line `ReservedQuantity`, `ReservedAt`, `ReleasedAt`, `DeductedAt`.
+- `StockDeductQueue.IsReserved` — idempotency guard.
+- `ReplaceCodReservationAsync` — atomic release-old + re-reserve-new when COD order items are edited.
+- Available-stock at Shelf = `SkuStock.QuantityOnHand - SkuStock.ReservedQuantity`.
+- All read/trace endpoints present (`/reservations/by-order`, `/by-sku`, `/active-orders`).
+
 Not completed:
 
-- H1–H6.
-
-Business rules:
-
-- Draft COD does not reserve stock.
-- Confirmed COD reserves Shelf stock.
-- Available quantity equals Shelf OnHand minus Reserved.
-- Editing a reserved order must atomically release and re-reserve.
-- Cancellation before dispatch releases the reservation.
-- Dispatch commits physical stock export.
-- Failure or return after dispatch follows the return flow.
-- Reservation is independent from payment collection.
-- No partial delivery in phase 1.
+- H7 — End-to-end runtime verification (Docker UAT).
 
 ### Phase I — POS-06 Sell-first Reconciliation
 
-Not completed:
+Completed: I1–I7.
 
-- I1–I7.
+Implemented in commits 6cb76c3, 4ad8cb5, 456879a.
 
-Business rules:
+Deduction priority order at checkout:
 
-- No second-person approval before serving the customer.
-- A valid sale completes immediately when total available sources are sufficient.
-- Shelf stock is deducted immediately where available.
-- A reconciliation queue is created only for the missing Shelf portion.
-- Total source insufficiency at checkout blocks the order.
-- Queue confirmation occurs manually after sale.
-- Warehouse, Manager, or Admin may confirm.
-- Confirmation deducts raw materials and packaging from Warehouse using FEFO.
+1. Shelf (Kệ Hàng) finished goods
+2. Warehouse (Kho) finished goods
+3. Warehouse raw materials / packaging — only when both Shelf and Warehouse finished goods are exhausted
+
+Business rules (confirmed 2026-08-04, partially implemented — see gaps below):
+
+**Scenario 1 — Shelf sufficient:**
+- Deduct Shelf, order Completed immediately. No Thủ kho action needed.
+
+**Scenario 2 — Shelf insufficient, Warehouse finished goods covers the rest:**
+- Sale confirms payment → order status: WaitingTransfer (Chờ điều chuyển), customer waits.
+- Thủ kho confirms once → system auto-generates Transfer Slip (Kho → Kệ).
+- Order → Completed, hand goods to customer.
+
+**Scenario 3 — Shelf + Warehouse finished goods insufficient, raw materials sufficient:**
+- Sale confirms payment → order status: WaitingProduction (Chờ sản xuất), reconciliation queue created.
+- Thủ kho confirms once → system auto-generates simultaneously:
+  - Production Order (records raw material → finished goods conversion)
+  - Transfer Slip (Kho → Kệ)
+- Order → Completed, hand goods to customer.
+
+**Scenario 4 — All sources insufficient (Backorder):**
+- See Phase I — POS-06a below.
+
+General rules:
 - Confirmation is all-or-nothing.
 - Insufficient confirmation must not create partial or negative stock.
 - Rejecting or cancelling reconciliation never cancels the completed customer order.
+
+Known gaps (not yet implemented — scenarios 2 and 3 require rework):
+
+- Scenario 2: currently deducts Warehouse finished goods and completes order immediately — must be changed to WaitingTransfer + auto Transfer Slip on Thủ kho confirmation.
+- Scenario 3: currently creates reconciliation queue and completes order immediately — must be changed to WaitingProduction + auto Production Order + Transfer Slip on single Thủ kho confirmation.
+- FEFO batch-level deduction path (SimulateWarehouse=false) not exercised in unit tests.
+
+### Phase I — POS-06a Backorder on Material Shortage (Mentor requirement, 2026-08-04)
+
+Not completed.
+
+Mentor feedback: instead of blocking the order when Warehouse materials are insufficient,
+the system should present the customer with a backorder option.
+
+New business rules:
+
+- When checkout detects total material shortage, do NOT block the order.
+- Return a backorder signal to POS with message: "Sản phẩm này tạm thời hết hàng, sẽ có sau 3–5 ngày nữa."
+- Cashier presents the customer with a yes/no choice.
+- If customer declines: order is not saved (same as current block behaviour).
+- If customer accepts: order is saved and payment proceeds normally.
+- Order receives a new status indicating backorder (e.g. WaitingMaterials or BackOrdered).
+- Reconciliation queue is created immediately with status Insufficient.
+- When materials are restocked, Thủ kho confirms the queue normally (existing confirm flow).
+- Cancelling a backorder order releases the queue without any stock movement.
+
+Design constraints:
+
+- Change is isolated to: InventoryService PreparePosStockDeductionAsync response,
+  OrderService handling of the new response mode, and POS confirmation dialog.
+- Do not change the Confirm/Cancel queue path — it already handles Insufficient queues.
+- Do not change non-POS channels (COD, B2B still use event-driven path).
 
 ### Phase J — Return Inspection Safety
 

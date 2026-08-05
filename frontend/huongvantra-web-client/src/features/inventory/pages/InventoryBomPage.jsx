@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatProductPrice } from '../../products/utils/productDisplay.js'
@@ -76,7 +77,7 @@ function BomDetailModal({ row, onClose }) {
         <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
           <div>
             <h2 id="bom-detail-title" className="text-base font-bold text-slate-800 sm:text-lg">
-              Định mức BOM: <span className="font-mono text-[#356647]">{row.skuCode}</span>
+              Định mức nguyên liệu: <span className="font-mono text-[#356647]">{row.skuCode}</span>
             </h2>
             <p className="mt-1 text-xs text-slate-500">
               {[row.productName, row.variantName].filter(Boolean).join(' - ')}
@@ -95,7 +96,7 @@ function BomDetailModal({ row, onClose }) {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {row.bomLines.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              SKU Sản phẩm kệ này chưa có BOM.
+              Sản phẩm kệ này chưa có định mức nguyên liệu.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -136,7 +137,7 @@ function BomDetailModal({ row, onClose }) {
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-          <span className="text-xs text-slate-500">{row.bomLines.length} component trong BOM</span>
+          <span className="text-xs text-slate-500">{row.bomLines.length} nguyên liệu trong định mức</span>
           <button
             type="button"
             onClick={onClose}
@@ -157,6 +158,8 @@ function InventoryBomPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [handledOpenBomParam, setHandledOpenBomParam] = useState('')
   const [viewBomRow, setViewBomRow] = useState(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
 
   const loadRows = useCallback(async () => {
     setIsLoading(true)
@@ -185,6 +188,18 @@ function InventoryBomPage() {
     })
   }, [rows, searchInput])
 
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const pagedRows = useMemo(
+    () => filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredRows, safePage, pageSize],
+  )
+
+  function handleSearchChange(value) {
+    setSearchInput(value)
+    setPage(1)
+  }
+
   useEffect(() => {
     const variantId = searchParams.get('variantId')
     const openBom = searchParams.get('openBom')
@@ -198,7 +213,7 @@ function InventoryBomPage() {
       setHandledOpenBomParam(paramKey)
       const row = rows.find((item) => String(item.variantId) === String(variantId))
       if (!row) {
-        showError('Không tìm thấy SKU Sản phẩm kệ để cấu hình BOM.')
+        showError('Không tìm thấy sản phẩm kệ để xem định mức.')
         setSearchParams({}, { replace: true })
         return
       }
@@ -218,59 +233,50 @@ function InventoryBomPage() {
     <PageShell>
       <PageHeader
         compact
-        title="Định mức BOM"
-        titleInfo="Cấu hình nguyên liệu / bao bì tiêu hao cho từng SKU Sản phẩm kệ."
-        searchPlaceholder="Tìm theo SKU hoặc tên Sản phẩm kệ..."
+        title="Định mức nguyên liệu"
+        titleInfo="Cấu hình nguyên liệu / bao bì tiêu hao cho từng sản phẩm kệ."
+        searchPlaceholder="Tìm theo mã SKU hoặc tên sản phẩm kệ..."
         searchValue={searchInput}
-        onSearchChange={setSearchInput}
+        onSearchChange={handleSearchChange}
       />
 
       <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
-        <div className="mb-4 rounded-xl border border-[#538463]/15 bg-[#f3f7f4] px-4 py-3 text-sm text-[#356647]">
-          <p className="font-semibold">BOM được lưu theo finished ProductVariant/SKU.</p>
-          <p className="mt-1 text-xs text-[#4d6f58]">
-            Khi tạo lệnh sản xuất, hệ thống đọc định mức của SKU Sản phẩm kệ để tính tổng nguyên liệu / bao bì cần xuất.
-          </p>
-        </div>
-
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-800">Danh sách SKU Sản phẩm kệ & định mức BOM</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Mỗi dòng là một SKU Sản phẩm kệ. BOM hiện chỉ được cập nhật qua workflow phê duyệt Product Creation Request.
-          </p>
+          <h2 className="text-lg font-bold text-slate-800">Danh sách sản phẩm kệ &amp; định mức nguyên liệu</h2>
         </div>
 
         {isLoading ? (
           <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-            Đang tải BOM...
+            Đang tải định mức...
           </p>
         ) : filteredRows.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-            Không có finished SKU phù hợp.
+            Không có sản phẩm kệ phù hợp.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-x-auto">
             <table className="min-w-full table-fixed text-left text-sm">
               <colgroup>
-                <col style={{ width: '31%' }} />
-                <col style={{ width: '12%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '9%' }} />
                 <col style={{ width: '10%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '29%' }} />
                 <col style={{ width: '10%' }} />
+                <col style={{ width: '41%' }} />
+                <col style={{ width: '15%' }} />
               </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                   <th className="px-4 py-3 font-semibold">Biến thể</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                  <th className="px-4 py-3 text-center font-semibold">Số component</th>
+                  <th className="px-4 py-3 text-center font-semibold">Số nguyên liệu</th>
                   <th className="px-4 py-3 font-semibold">Nguyên liệu / Bao bì</th>
                   <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredRows.map((row) => (
+                {pagedRows.map((row) => (
                   <tr key={row.variantId} className="hover:bg-slate-50/70">
                     <td className="px-4 py-3 align-top">
                       <div className="font-medium text-slate-900">{row.productName}</div>
@@ -296,7 +302,7 @@ function InventoryBomPage() {
                         </div>
                       ) : (
                         <span className="inline-flex rounded-full border border-dashed border-slate-200 px-2.5 py-1 text-slate-400">
-                          Chưa có BOM. Tạo Product Creation Request để bổ sung nguyên liệu / bao bì.
+                          Chưa có định mức. Gửi yêu cầu tạo sản phẩm để bổ sung nguyên liệu / bao bì.
                         </span>
                       )}
                     </td>
@@ -304,16 +310,25 @@ function InventoryBomPage() {
                       <button
                         type="button"
                         onClick={() => openBomModal(row)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
                       >
                         <span className="material-symbols-outlined text-[16px]">visibility</span>
-                        Xem BOM
+                        Xem định mức
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
+            <TablePagination
+              page={safePage}
+              pageSize={pageSize}
+              totalCount={filteredRows.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="sản phẩm kệ"
+            />
           </div>
         )}
       </section>

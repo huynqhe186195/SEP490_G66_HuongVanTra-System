@@ -15,6 +15,7 @@ public class Payment : BaseEntity
     public DateTime? PaidAt { get; set; }
     public DateTime? TransferQrExpiresAtUtc { get; set; }
     public string? CodDebtSettlementJson { get; set; }
+    public PaymentPurpose PaymentPurpose { get; set; } = PaymentPurpose.Full;
 
     public Order Order { get; set; } = null!;
 }

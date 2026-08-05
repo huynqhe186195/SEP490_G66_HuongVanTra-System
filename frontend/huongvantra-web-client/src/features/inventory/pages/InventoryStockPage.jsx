@@ -9,7 +9,7 @@ import { canEditWarehouseThreshold, canWriteInventory } from '../../auth/utils/p
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
-import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { formatQuantityWithUnit } from '../../products/utils/productDisplay.js'
 import { fetchSkuStocks, updateWarehouseLowStockThreshold } from '../services/inventoryStockApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
@@ -52,6 +52,7 @@ function InventoryStockPage() {
           skuCode: sku.skuCode,
           productName: productNameById.get(sku.productId) || '—',
           packagingType: sku.packagingType || '',
+          inventoryUnit: sku.inventoryUnit || 'Piece',
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
           quantityOnHand: stock?.quantityOnHand ?? 0,
           warehouseLowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
@@ -255,7 +256,7 @@ function InventoryStockPage() {
                       ) : null}
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-800">
-                      {formatStockQuantity(row.warehouseQuantityOnHand)}
+                      {formatQuantityWithUnit(row.warehouseQuantityOnHand, row.inventoryUnit)}
                     </td>
                     <td className="px-4 py-4 text-slate-600">
                       {row.activeLotCount > 0 ? (
@@ -268,7 +269,7 @@ function InventoryStockPage() {
                     </td>
                     <td className="px-4 py-4">{renderThresholdCell(row)}</td>
                     <td className="px-4 py-4 font-semibold text-slate-800">
-                      {formatStockQuantity(row.quantityOnHand)}
+                      {formatQuantityWithUnit(row.quantityOnHand, row.inventoryUnit)}
                     </td>
                   </tr>
                 ))

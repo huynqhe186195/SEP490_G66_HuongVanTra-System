@@ -8,13 +8,14 @@ function OrderProductsSection({
   constrained = false,
   orderId,
   timelineRefreshKey,
+  className = 'lg:col-span-2',
 }) {
   const showTimeline = constrained && orderId
   const itemCount = orderLines.reduce((sum, { line }) => sum + (line.quantity || 0), 0)
 
   return (
     <section
-      className={`flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-2 ${
+      className={`flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm ${className} ${
         showTimeline
           ? 'max-h-[min(520px,calc(100dvh-11rem))] p-4'
           : constrained
@@ -94,6 +95,21 @@ function OrderProductsSection({
                   {display.weightLabel ? (
                     <p className={`text-slate-500 ${constrained ? 'text-[10px]' : 'text-xs'}`}>
                       {display.weightLabel}
+                    </p>
+                  ) : null}
+                  {Number(line.immediateFulfilledQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                      Giao ngay: {line.immediateFulfilledQuantity}
+                    </p>
+                  ) : null}
+                  {Number(line.reservedFinishedQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-blue-700">
+                      Đã giữ: {line.reservedFinishedQuantity}
+                    </p>
+                  ) : null}
+                  {Number(line.backorderQuantity || 0) > 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-violet-700">
+                      Chờ nguyên liệu: {line.backorderQuantity}
                     </p>
                   ) : null}
                 </td>

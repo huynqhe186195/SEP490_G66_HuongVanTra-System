@@ -41,7 +41,36 @@ public record OrderResponse(
     string? ContractCodeSnapshot = null,
     decimal? ContractDiscountPercentSnapshot = null,
     int? ContractPaymentTermDaysSnapshot = null,
-    DateTime? DueDate = null
+    DateTime? DueDate = null,
+    DateTime? BackorderAcceptedAt = null,
+    int? BackorderMinLeadDaysSnapshot = null,
+    int? BackorderMaxLeadDaysSnapshot = null,
+    DateTime? EstimatedReadyFrom = null,
+    DateTime? EstimatedReadyTo = null,
+    string? FulfillmentPreference = null,
+    string RefundStatus = "NotRequired",
+    decimal? RefundAmount = null,
+    string? RefundMethod = null,
+    string? RefundEvidence = null,
+    string? CancellationReason = null,
+    DateTime? CancellationRequestedAt = null,
+    Guid? CancellationRequestedBy = null,
+    string? CancellationRequestedByName = null,
+    DateTime? RefundApprovedAt = null,
+    Guid? RefundApprovedBy = null,
+    string? RefundApprovedByName = null,
+    DateTime? RefundedAt = null,
+    Guid? RefundedBy = null,
+    string? RefundedByName = null,
+    DateTime? PickupDate = null,
+    string? PickupNote = null,
+    DateTime? DeliveredAt = null,
+    string? DeliveredByName = null,
+    string? PickupContactName = null,
+    string? PickupContactPhone = null,
+    string? PickupCode = null,
+    decimal? DepositAmount = null,
+    decimal? RemainingAmountDue = null
 );
 
 public record StockHandlingLineResponse(    Guid SkuId,
@@ -49,7 +78,8 @@ public record StockHandlingLineResponse(    Guid SkuId,
     string SkuName,
     int OrderedQuantity,
     int FinishedDeductedQuantity,
-    int PendingBomQuantity);
+    int PendingBomQuantity,
+    int WarehouseDeductedQuantity = 0);
 
 public record StockHandlingSummaryResponse(
     bool HasPendingStockReconciliation,
@@ -66,7 +96,10 @@ public record OrderDetailResponse(
     int ReturnedQuantity,
     decimal UnitPrice,
     decimal SubTotal,
-    bool IsGift
+    bool IsGift,
+    int ImmediateFulfilledQuantity = 0,
+    int ReservedFinishedQuantity = 0,
+    int BackorderQuantity = 0
 );
 
 public record ReturnOrderResponse(
@@ -139,7 +172,8 @@ public record PaymentResponse(
     bool IsCodVerified,
     DateTime? CodWarningDate,
     DateTime? PaidAt,
-    string? CodDebtSettlementJson = null
+    string? CodDebtSettlementJson = null,
+    string PaymentPurpose = "Full"
 );
 
 public record OrderSummaryResponse(
@@ -163,7 +197,9 @@ public record OrderSummaryResponse(
     int TotalQuantity = 0,
     // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
     bool HasActiveStockReservation = false,
-    string? EmployeeSnapshotName = null
+    string? EmployeeSnapshotName = null,
+    // POS-06 (KB4): dùng để hiện badge hạn giao ngoài danh sách đơn.
+    DateTime? PickupDate = null
 );
 
 public record CustomBundleIngredientResponse(

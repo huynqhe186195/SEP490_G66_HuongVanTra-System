@@ -20,7 +20,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.OrderChannel).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.OrderKind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(OrderKind.Sale).IsRequired();
         builder.HasIndex(e => e.OrderKind);
-        builder.Property(e => e.OrderStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.OrderStatus).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.InventorySyncStatus).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.DiscountAmount).HasColumnType("decimal(18,2)").IsRequired();
@@ -32,6 +32,23 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.IdempotencyKey).HasMaxLength(100);
         builder.HasIndex(e => e.IdempotencyKey).IsUnique().HasFilter("`IdempotencyKey` IS NOT NULL");
+        builder.Property(e => e.FulfillmentPreference).HasConversion<string>().HasMaxLength(30);
+        builder.Property(e => e.RefundStatus).HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(BackorderRefundStatus.NotRequired).IsRequired();
+        builder.Property(e => e.RefundAmount).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.RefundMethod).HasMaxLength(30);
+        builder.Property(e => e.RefundEvidence).HasMaxLength(1000);
+        builder.Property(e => e.CancellationReason).HasMaxLength(500);
+        builder.Property(e => e.CancellationRequestedByName).HasMaxLength(100);
+        builder.Property(e => e.RefundApprovedByName).HasMaxLength(100);
+        builder.Property(e => e.RefundedByName).HasMaxLength(100);
+        builder.Property(e => e.PickupNote).HasMaxLength(500);
+        builder.Property(e => e.PickupContactName).HasMaxLength(100);
+        builder.Property(e => e.PickupContactPhone).HasMaxLength(20);
+        builder.Property(e => e.PickupCode).HasMaxLength(10);
+        builder.HasIndex(e => e.PickupCode);
+        builder.Property(e => e.DeliveredByName).HasMaxLength(100);
+        builder.Property(e => e.DepositAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.ContractCodeSnapshot).HasMaxLength(50);
         builder.Property(e => e.ContractDiscountPercentSnapshot).HasColumnType("decimal(5,2)");
         builder.HasIndex(e => e.ContractId);
@@ -106,6 +123,9 @@ public class OrderDetailConfiguration : IEntityTypeConfiguration<OrderDetail>
         builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SubTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.IsGift).HasDefaultValue(false).IsRequired();
+        builder.Property(e => e.ImmediateFulfilledQuantity).HasDefaultValue(0).IsRequired();
+        builder.Property(e => e.ReservedFinishedQuantity).HasDefaultValue(0).IsRequired();
+        builder.Property(e => e.BackorderQuantity).HasDefaultValue(0).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }
@@ -141,6 +161,8 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.TransactionRef).HasMaxLength(100);
         builder.Property(e => e.CodDebtSettlementJson).HasMaxLength(4000);
         builder.Property(e => e.TransferQrExpiresAtUtc);
+        builder.Property(e => e.PaymentPurpose).HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(PaymentPurpose.Full).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }

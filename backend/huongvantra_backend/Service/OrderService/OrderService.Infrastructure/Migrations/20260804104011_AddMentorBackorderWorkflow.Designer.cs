@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OrderService.Infrastructure.Data;
 
@@ -10,9 +11,11 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    partial class OrderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804104011_AddMentorBackorderWorkflow")]
+    partial class AddMentorBackorderWorkflow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -161,19 +164,6 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
-                    b.Property<DateTime?>("DeliveredAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<Guid?>("DeliveredBy")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("DeliveredByName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<decimal?>("DepositAmount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -237,25 +227,6 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
-
-                    b.Property<string>("PickupCode")
-                        .HasMaxLength(10)
-                        .HasColumnType("varchar(10)");
-
-                    b.Property<string>("PickupContactName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("PickupContactPhone")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
-
-                    b.Property<DateTime?>("PickupDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("PickupNote")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("PromotionCode")
                         .HasMaxLength(50)
@@ -333,8 +304,6 @@ namespace OrderService.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("OrderKind");
-
-                    b.HasIndex("PickupCode");
 
                     b.HasIndex("PromotionId");
 
@@ -597,13 +566,6 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
-
-                    b.Property<string>("PaymentPurpose")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)")
-                        .HasDefaultValue("Full");
 
                     b.Property<string>("PaymentStatus")
                         .IsRequired()

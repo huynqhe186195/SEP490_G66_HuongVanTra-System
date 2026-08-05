@@ -95,6 +95,8 @@ builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(
     builder.Configuration.GetSection(SepayOptions.SectionName));
+builder.Services.Configure<BackorderOptions>(
+    builder.Configuration.GetSection(BackorderOptions.SectionName));
 
 builder.Services.Configure<EmailOptions>(options => 
 {

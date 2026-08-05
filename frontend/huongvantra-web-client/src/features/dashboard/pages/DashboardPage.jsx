@@ -211,6 +211,14 @@ function DashboardPage() {
                         <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
                         <MetricCard title="Tổng chiết khấu" value={formatCurrency(stats?.totalDiscountAmount)} icon="local_offer" colorClass="text-teal-600" bgClass="bg-teal-50" />
                         <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
+                        <MetricCard
+                            title="Thu nhập từ cọc bị mất"
+                            value={formatCurrency(stats?.forfeitedDepositIncome)}
+                            subtitle={`${stats?.forfeitedDepositOrders || 0} đơn hủy giữ cọc`}
+                            icon="savings"
+                            colorClass="text-amber-700"
+                            bgClass="bg-amber-50"
+                        />
                     </>
                 ) : null}
             </div>
@@ -633,7 +641,7 @@ function DashboardPage() {
     );
 }
 
-function MetricCard({ title, value, icon, colorClass, bgClass }) {
+function MetricCard({ title, value, icon, colorClass, bgClass, subtitle }) {
     return (
         <div className="flex flex-col gap-2 rounded-2xl border border-[#c1c9c0]/50 bg-white p-5 shadow-sm transition-all hover:shadow-md">
             <div className="flex items-center gap-3">
@@ -643,6 +651,7 @@ function MetricCard({ title, value, icon, colorClass, bgClass }) {
                 <p className="font-medium text-[#424941]">{title}</p>
             </div>
             <p className="mt-2 text-2xl font-bold tracking-tight text-[#1b1c17]">{value}</p>
+            {subtitle ? <p className="text-xs text-[#717971]">{subtitle}</p> : null}
         </div>
     );
 }

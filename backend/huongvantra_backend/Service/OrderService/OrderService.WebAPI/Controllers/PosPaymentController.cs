@@ -53,6 +53,21 @@ public class PosPaymentController(
     public async Task<IActionResult> GetOrderPaymentStatus(Guid orderId, CancellationToken ct) =>
         Ok(await posPaymentLogic.GetOrderPaymentStatusAsync(orderId, AccessContext(), ct));
 
+    [HttpGet("orders/{orderId:guid}/remaining-qr")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetRemainingQr(Guid orderId, CancellationToken ct) =>
+        Ok(await posPaymentLogic.GetRemainingBalanceQrAsync(orderId, AccessContext(), forceRefresh: false, ct));
+
+    [HttpPost("orders/{orderId:guid}/remaining-qr/refresh")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> RefreshRemainingQr(Guid orderId, CancellationToken ct) =>
+        Ok(await posPaymentLogic.GetRemainingBalanceQrAsync(orderId, AccessContext(), forceRefresh: true, ct));
+
+    [HttpGet("orders/{orderId:guid}/remaining-status")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetRemainingStatus(Guid orderId, CancellationToken ct) =>
+        Ok(await posPaymentLogic.GetRemainingBalanceStatusAsync(orderId, AccessContext(), ct));
+
     [HttpPost("orders/{orderId:guid}/transfer-payment/cancel")]
     [Authorize]
     public async Task<IActionResult> CancelPendingTransfer(Guid orderId, CancellationToken ct)

@@ -7,7 +7,32 @@ public enum OrderStatus
     Processing,
     Shipping,
     Completed,
-    Cancelled
+    Cancelled,
+    WaitingMaterials,
+    CancellationRequested,
+
+    // POS-06: append cuối enum để không đổi giá trị số của các trạng thái đang lưu trong DB.
+    /// <summary>KB2: chờ Thủ kho điều chuyển thành phẩm từ Kho lên Kệ.</summary>
+    WaitingTransfer,
+    /// <summary>KB3: chờ Thủ kho sản xuất từ nguyên liệu rồi điều chuyển lên Kệ.</summary>
+    WaitingProduction,
+    /// <summary>KB4: hàng đã sẵn sàng, chờ khách quay lại lấy và Sale xác nhận đã giao.</summary>
+    ReadyToDeliver
+}
+
+public enum FulfillmentPreference
+{
+    PartialDelivery,
+    CompleteDelivery
+}
+
+public enum BackorderRefundStatus
+{
+    NotRequired,
+    PendingApproval,
+    Approved,
+    Completed,
+    Rejected
 }
 
 public enum OrderChannel
@@ -49,11 +74,19 @@ public enum PaymentStatus
     Pending,
     Success,
     Failed,
-    Deferred
+    Deferred,
+    Refunded
 }
 
 public enum PosCashSessionStatus
 {
     Open,
     Closed
+}
+
+public enum PaymentPurpose
+{
+    Full,
+    Deposit,
+    RemainingAtPickup
 }
