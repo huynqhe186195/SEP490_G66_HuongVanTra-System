@@ -40,7 +40,8 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             restrictToOrderIds);
 
         var total = await query.CountAsync(ct);
-         var items = await query
+        var items = await query
+            .AsSplitQuery()
             .Include(o => o.Payments)
             .Include(o => o.OrderDetails)
             .OrderByDescending(o => o.CreatedAt)
@@ -83,7 +84,7 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
         IReadOnlyCollection<Guid>? restrictToOrderIds)
     {
-        var query = _db.Orders.AsQueryable();
+        var query = _db.Orders.AsNoTracking().AsQueryable();
 
         // POS-04 (truy vết giữ chỗ): tập OrderId đang giữ chỗ do InventoryService trả về qua service client.
         if (restrictToOrderIds != null)

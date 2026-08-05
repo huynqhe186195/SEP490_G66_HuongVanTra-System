@@ -40,7 +40,6 @@ public class AuthLogic(
         user.LastLoginAt = DateTime.UtcNow;
         userRepo.Update(user);
         await userRepo.SaveChangesAsync();
-        await refreshTokenRepo.SaveChangesAsync();
 
         return await IssueTokensAsync(user);
     }
@@ -126,7 +125,10 @@ public class AuthLogic(
 
     private async Task<LoginResponse> IssueTokensAsync(User user)
     {
-        var roles = await roleRepo.GetByUserIdAsync(user.Id);
+        var roles = user.UserRoles.Count > 0
+            ? user.UserRoles.Select(ur => ur.Role).OfType<Role>()
+            : await roleRepo.GetByUserIdAsync(user.Id);
+
         var roleNames = roles
             .Select(r => r.RoleName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
