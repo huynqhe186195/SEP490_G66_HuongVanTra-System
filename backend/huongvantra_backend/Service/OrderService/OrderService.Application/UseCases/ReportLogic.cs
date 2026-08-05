@@ -1,3 +1,4 @@
+using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
 
@@ -43,5 +44,10 @@ public class ReportLogic(IReportRepository reportRepository) : IReportLogic
     public Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
     {
         return reportRepository.GetOrderCountTimeSeriesAsync(quarter, month, year, cancellationToken);
+    }
+
+    public Task<DailyCashReconciliationResponse> GetDailyCashReconciliationAsync(DailyReportFilter filter, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetDailyCashReconciliationAsync(filter, cancellationToken);
     }
 }

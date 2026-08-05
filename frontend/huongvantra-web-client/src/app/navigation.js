@@ -14,7 +14,6 @@ const ROLE_GROUPS = {
 
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng / khi đã tách rõ với kiểm kê. */
 const SIDEBAR_DISABLED_MODULES = new Set([
-  'reports',
   'integrations',
   'inventory_reports',
 ])
@@ -37,7 +36,6 @@ const HOME_MODULE_PRIORITY = [
 
 // --- Tạm ẩn (chưa xử lý backend) ---
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-// { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
 
 export const navigationItems = [
@@ -101,7 +99,7 @@ export const navigationItems = [
   { label: 'Sản phẩm theo nhà cung cấp', path: '/inventory/supplier-products', module: 'supplier_receipts', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['agencyManager', 'inventoryManager'] },
-  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
+  { label: 'Kiểm kê kệ hàng', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
   { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Quản lý lệnh sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Nhật ký kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
@@ -222,6 +220,21 @@ export const navigationItems = [
     })),
   },
   {
+    label: 'Báo cáo',
+    path: '/reports',
+    module: 'reports',
+    icon: 'description',
+    roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+    children: [
+      {
+        label: 'Báo cáo cuối ngày',
+        path: '/reports/end-of-day',
+        module: 'reports',
+        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+      },
+    ],
+  },
+  {
     label: 'Tài khoản',
     path: '/admin/users',
     module: 'users_admin',
@@ -261,7 +274,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory', label: 'Kho' },
       { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
-      { path: '/inventory/stocktake' },
+      { path: '/inventory/stocktake', label: 'Kiểm kê tồn kho' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-transfers', label: 'Điều chuyển Kho → Kệ' },
     ],
@@ -475,7 +488,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-transfers', 'Phiếu điều chuyển Kho → Kệ'],
       ['/inventory/shelf-replenishment-suggestions', 'Gợi ý bổ sung Kệ Hàng'],
@@ -486,7 +499,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-requests', 'Yêu cầu bổ sung Kệ Hàng'],
     ]
