@@ -21,6 +21,7 @@ const ROLE_MODULE_MAP = {
     'membership_tiers_admin',
     'promotions_admin',
     'system_activity_log',
+    'inventory_sync_monitor',
     'users_admin',
     'phan_quyen_admin',
     'supplier_receipts',
@@ -175,6 +176,7 @@ export async function changePassword(currentPassword, newPassword) {
   return apiRequestAuth('/api/auth/change-password', {
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword }),
+    silentAuthErrors: true,
   })
 }
 

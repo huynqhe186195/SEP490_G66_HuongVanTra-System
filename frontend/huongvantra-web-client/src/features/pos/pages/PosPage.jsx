@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { showError, showInfo, showSuccess } from "../../../app/toast.js";
 import AddCustomerModal from "../components/AddCustomerModal.jsx";
 import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
@@ -33,6 +33,7 @@ import {
   fetchApplicablePromotions,
   fetchPosCustomerContext,
   fetchPosCustomers,
+  fetchPosOrderPaymentStatus,
   fetchPosProducts,
   resolvePosStoreId,
 } from '../services/posApi.js'
@@ -249,6 +250,7 @@ function createEmptySession(mode = "counter") {
 
 function PosPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const authSession = useAuthSession()
   const authUserId = authSession?.userId ? String(authSession.userId) : null
   const canSyncCatalog = canUsePosCounterMode(authSession)
@@ -545,6 +547,89 @@ function PosPage() {
             return { ...ws, sessions: { ...ws.sessions, [ws.activeTabId]: nextSession } };
         });
     };
+
+    const pendingQrSignature = useMemo(
+        () => JSON.stringify(
+            Object.entries(workspaceByMode).flatMap(([mode, modeWorkspace]) =>
+                Object.entries(modeWorkspace.sessions || {})
+                    .filter(([, tabSession]) => tabSession?.pendingQrOrderId)
+                    .map(([tabId, tabSession]) => [mode, tabId, tabSession.pendingQrOrderId]),
+            ),
+        ),
+        [workspaceByMode],
+    );
+
+    useEffect(() => {
+        if (!authUserId || !location.state?.syncPosWorkspace) return undefined
+
+        let cancelled = false
+        loadPersistedPosWorkspace(authUserId)
+            .then((stored) => {
+                if (cancelled) return
+                setWorkspaceByMode(stored.workspaceByMode)
+                setSalesMode(clampPosSalesMode(stored.salesMode, allowedSalesModeIds))
+                setRestoredOrderIds(stored.restoredOrderIds)
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    navigate('/pos', { replace: true, state: null })
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [allowedSalesModeIds, authUserId, location.state?.syncPosWorkspace, navigate])
+
+    useEffect(() => {
+        if (!authUserId || !isWorkspaceReady || pendingQrSignature === '[]') return undefined
+
+        const pendingEntries = JSON.parse(pendingQrSignature).map(([mode, tabId, orderId]) => ({
+            mode,
+            tabId: Number(tabId),
+            orderId: String(orderId),
+        }))
+
+        let cancelled = false
+
+        Promise.all(
+            pendingEntries.map(async ({ mode, tabId, orderId }) => {
+                try {
+                    const status = await fetchPosOrderPaymentStatus(orderId)
+                    const orderStatus = String(status.orderStatus || '').toLowerCase()
+                    const isStillPending = orderStatus === 'pendingpayment' || orderStatus === 'processing'
+                    if (status.isPaid || !isStillPending) {
+                        return { mode, tabId }
+                    }
+                } catch {
+                    // ignore transient lookup errors
+                }
+                return null
+            }),
+        ).then((results) => {
+            if (cancelled) return
+            const clears = results.filter(Boolean)
+            if (!clears.length) return
+
+            setWorkspaceByMode((current) => {
+                const next = { ...current }
+                for (const entry of clears) {
+                    const modeWorkspace = { ...next[entry.mode] }
+                    const sessions = { ...modeWorkspace.sessions }
+                    const tabSession = sessions[entry.tabId]
+                    if (!tabSession?.pendingQrOrderId) continue
+                    sessions[entry.tabId] = { ...tabSession, pendingQrOrderId: null }
+                    modeWorkspace.sessions = sessions
+                    next[entry.mode] = modeWorkspace
+                }
+                return next
+            })
+        })
+
+        return () => {
+            cancelled = true
+        }
+    }, [authUserId, isWorkspaceReady, pendingQrSignature])
 
     useEffect(() => {
         let mounted = true;

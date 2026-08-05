@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
 
 namespace OrderService.WebAPI.Controllers;
@@ -17,6 +19,70 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
                User.HasClaim("permission", PermissionNames.ViewAllCustomers);
     }
 
+    private Guid? GetPersonalStatsEmployeeId()
+    {
+        if (CanViewRevenue()) return null;
+
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("nameid");
+        return Guid.TryParse(raw, out var userId) ? userId : null;
+    }
+
+    private static void MaskRevenueFields(SalesStatisticsResponse stats)
+    {
+        stats.GrossRevenue = 0;
+        stats.NetRevenue = 0;
+        stats.TotalCostOfGoods = 0;
+        stats.GrossProfit = 0;
+        stats.GrossProfitMargin = 0;
+        stats.AverageOrderValue = 0;
+        stats.TotalDiscountAmount = 0;
+        stats.PrevGrossRevenue = 0;
+        stats.GrossRevenueGrowthRate = 0;
+        stats.PrevNetRevenue = 0;
+        stats.NetRevenueGrowthRate = 0;
+        stats.PrevGrossProfit = 0;
+        stats.GrossProfitGrowthRate = 0;
+        stats.PrevAverageOrderValue = 0;
+        stats.AverageOrderValueGrowthRate = 0;
+        stats.PrevTotalDiscountAmount = 0;
+        stats.TotalDiscountGrowthRate = 0;
+        stats.RefundAmount = 0;
+    }
+
+    private static void MaskRevenueFields(IEnumerable<TopProductDto> items)
+    {
+        foreach (var item in items)
+        {
+            item.TotalRevenue = 0;
+            item.TotalCostPrice = 0;
+            item.GrossProfit = 0;
+            item.GrossProfitMargin = 0;
+        }
+    }
+
+    private static void MaskRevenueFields(IEnumerable<CategorySalesDto> items)
+    {
+        foreach (var item in items)
+        {
+            item.TotalRevenue = 0;
+            item.TotalCostPrice = 0;
+            item.GrossProfit = 0;
+            item.GrossProfitMargin = 0;
+        }
+    }
+
+    private static void MaskRevenueFields(IEnumerable<RevenueProfitTimeSeriesPointDto> points)
+    {
+        foreach (var point in points)
+        {
+            point.GrossRevenue = 0;
+            point.NetRevenue = 0;
+            point.GrossProfit = 0;
+        }
+    }
+
     [HttpGet("sales-statistics")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetSalesStatistics(
@@ -25,27 +91,10 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year,
         CancellationToken ct)
     {
-        var stats = await reportLogic.GetSalesStatisticsAsync(quarter, month, year, ct);
+        var stats = await reportLogic.GetSalesStatisticsAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         if (!CanViewRevenue())
         {
-            stats.GrossRevenue = 0;
-            stats.NetRevenue = 0;
-            stats.TotalCostOfGoods = 0;
-            stats.GrossProfit = 0;
-            stats.GrossProfitMargin = 0;
-            stats.AverageOrderValue = 0;
-            stats.TotalDiscountAmount = 0;
-            stats.PrevGrossRevenue = 0;
-            stats.GrossRevenueGrowthRate = 0;
-            stats.PrevNetRevenue = 0;
-            stats.NetRevenueGrowthRate = 0;
-            stats.PrevGrossProfit = 0;
-            stats.GrossProfitGrowthRate = 0;
-            stats.PrevAverageOrderValue = 0;
-            stats.AverageOrderValueGrowthRate = 0;
-            stats.PrevTotalDiscountAmount = 0;
-            stats.TotalDiscountGrowthRate = 0;
-            stats.RefundAmount = 0;
+            MaskRevenueFields(stats);
         }
         return Ok(stats);
     }
@@ -60,16 +109,10 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, sortBy, quarter, month, year, ct);
+        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, sortBy, quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         if (!CanViewRevenue())
         {
-            foreach(var item in topProducts)
-            {
-                item.TotalRevenue = 0;
-                item.TotalCostPrice = 0;
-                item.GrossProfit = 0;
-                item.GrossProfitMargin = 0;
-            }
+            MaskRevenueFields(topProducts);
         }
         return Ok(topProducts);
     }
@@ -82,16 +125,10 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var categorySales = await reportLogic.GetSalesByCategoryAsync(quarter, month, year, ct);
+        var categorySales = await reportLogic.GetSalesByCategoryAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         if (!CanViewRevenue())
         {
-            foreach(var item in categorySales)
-            {
-                item.TotalRevenue = 0;
-                item.TotalCostPrice = 0;
-                item.GrossProfit = 0;
-                item.GrossProfitMargin = 0;
-            }
+            MaskRevenueFields(categorySales);
         }
         return Ok(categorySales);
     }
@@ -104,7 +141,7 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var points = await reportLogic.GetCustomerGrowthTimeSeriesAsync(quarter, month, year, ct);
+        var points = await reportLogic.GetCustomerGrowthTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         return Ok(points);
     }
 
@@ -116,7 +153,7 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var points = await reportLogic.GetRevenueTimeSeriesAsync(quarter, month, year, ct);
+        var points = await reportLogic.GetRevenueTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         return Ok(points);
     }
 
@@ -128,15 +165,10 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var points = await reportLogic.GetRevenueProfitTimeSeriesAsync(quarter, month, year, ct);
+        var points = await reportLogic.GetRevenueProfitTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         if (!CanViewRevenue())
         {
-            foreach (var point in points)
-            {
-                point.GrossRevenue = 0;
-                point.NetRevenue = 0;
-                point.GrossProfit = 0;
-            }
+            MaskRevenueFields(points);
         }
         return Ok(points);
     }
@@ -149,7 +181,11 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var channelSales = await reportLogic.GetSalesByChannelAsync(quarter, month, year, ct);
+        var channelSales = await reportLogic.GetSalesByChannelAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
+        if (!CanViewRevenue())
+        {
+            MaskRevenueFields(channelSales);
+        }
         return Ok(channelSales);
     }
 
@@ -161,7 +197,7 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var points = await reportLogic.GetOrderCountTimeSeriesAsync(quarter, month, year, ct);
+        var points = await reportLogic.GetOrderCountTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         return Ok(points);
     }
 }

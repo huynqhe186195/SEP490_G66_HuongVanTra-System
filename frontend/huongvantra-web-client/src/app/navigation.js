@@ -209,6 +209,13 @@ export const navigationItems = [
     roles: ['admin'],
   },
   {
+    label: 'Đồng bộ Outbox',
+    path: '/admin/inventory-sync',
+    module: 'inventory_sync_monitor',
+    icon: 'sync_alt',
+    roles: ['admin'],
+  },
+  {
     label: 'Thống kê bán hàng',
     path: '/dashboard',
     module: 'dashboard',
@@ -519,7 +526,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
   }
 
   if (isAdmin) {
-    for (const path of ['/inventory/statistics', '/inventory/stock-requests', '/admin/inventory-sync', '/inventory/returns']) {
+    for (const path of ['/inventory/statistics', '/inventory/stock-requests', '/inventory/returns']) {
       if (byPath.has(path)) consumed.add(path)
     }
   }
@@ -596,6 +603,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/admin/membership-tiers', 'Hạng khách hàng'],
       ['/admin/promotions', 'Mã giảm giá'],
       ['/admin/system-activities', 'Nhật ký hệ thống'],
+      ['/admin/inventory-sync', 'Đồng bộ Outbox'],
     ])
     if (systemChildren.length) {
       result.push({
@@ -928,6 +936,15 @@ export function canAccessModule(session, module) {
       && (canViewAll || session.permissions.includes('CREATE_POS_ORDER'))
   }
 
+  if (String(module).toLowerCase() === 'inventory_sync_monitor') {
+    if (
+      session?.permissions?.includes('MONITOR_OUTBOX')
+      || session?.permissions?.includes('MANAGE_ROLE')
+    ) {
+      return true
+    }
+  }
+
   if (String(module).toLowerCase() === 'supplier_receipt_create') {
     if (!session?.roles?.length) return false
     return (
@@ -1066,6 +1083,9 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
+  }
+  if (module === 'inventory_sync_monitor') {
+    return 'Chỉ Admin (hoặc tài khoản có quyền MONITOR_OUTBOX) mới được theo dõi đồng bộ Outbox.'
   }
   if (module === 'users_admin' || module === 'phan_quyen_admin') {
     return 'Chỉ Quản trị viên mới được quản lý tài khoản và phân quyền.'

@@ -32,39 +32,11 @@ const ORDER_STATUS_CHIPS = [
   { value: 'Cancelled', label: 'Đã hủy' },
 ]
 
-const ORDER_CHANNEL_CHIPS = [
-  { value: '', label: 'Mọi kênh' },
-  { value: 'POS', label: 'POS' },
-  { value: 'B2B', label: 'B2B / Hợp đồng' },
-  { value: 'Website', label: 'Website' },
-  { value: 'Zalo', label: 'Zalo' },
-  { value: 'Phone', label: 'Điện thoại' },
-]
-
-const QUICK_DATE_CHIPS = [
-  { value: '', label: 'Mọi ngày' },
-  { value: 'today', label: 'Hôm nay' },
-  { value: 'last7', label: '7 ngày' },
-  { value: 'thisMonth', label: 'Tháng này' },
-  { value: 'lastMonth', label: 'Tháng trước' },
-]
-
 const initialFilters = {
   search: '',
   status: '',
-  channel: '',
   fromDate: '',
   toDate: '',
-  // POS-04 (truy vết giữ chỗ): chỉ hiển thị đơn đang giữ chỗ tồn Kệ Hàng.
-  hasActiveReservation: false,
-}
-
-function toDateInputValue(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
 }
 
 function toLocalDayStartIso(value) {
@@ -79,42 +51,12 @@ function toLocalDayEndIso(value) {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
-function getQuickDateRange(type) {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  if (type === 'today') {
-    const value = toDateInputValue(today)
-    return { fromDate: value, toDate: value }
-  }
-
-  if (type === 'last7') {
-    const from = new Date(today)
-    from.setDate(from.getDate() - 6)
-    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(today) }
-  }
-
-  if (type === 'thisMonth') {
-    const from = new Date(today.getFullYear(), today.getMonth(), 1)
-    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(today) }
-  }
-
-  if (type === 'lastMonth') {
-    const from = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-    const to = new Date(today.getFullYear(), today.getMonth(), 0)
-    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(to) }
-  }
-
-  return { fromDate: '', toDate: '' }
-}
-
 function OrdersPage() {
   const session = loadAuthSession()
   const canManage = canCreateOrder(session)
   const canManageStockDeduct = canViewStockDeductOps(session)
 
   const [filters, setFilters] = useState(initialFilters)
-  const [quickDateKey, setQuickDateKey] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
@@ -137,12 +79,10 @@ function OrdersPage() {
     () => ({
       search: filters.search.trim() || undefined,
       status: filters.status || undefined,
-      channel: filters.channel || undefined,
-      excludeChannel: filters.channel ? undefined : 'COD',
+      excludeChannel: 'COD',
       excludeOrderKind: 'Exchange',
       fromDate: toLocalDayStartIso(filters.fromDate),
       toDate: toLocalDayEndIso(filters.toDate),
-      hasActiveReservation: filters.hasActiveReservation || undefined,
       page,
       pageSize,
     }),
@@ -187,13 +127,7 @@ function OrdersPage() {
     }
   }, [queryParams])
 
-  const hasActiveFilters =
-    filters.status ||
-    filters.channel ||
-    filters.search ||
-    filters.fromDate ||
-    filters.toDate ||
-    filters.hasActiveReservation
+  const hasActiveFilters = filters.status || filters.fromDate || filters.toDate
 
   return (
     <PageShell className="pb-8">
@@ -205,19 +139,35 @@ function OrdersPage() {
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          canManage ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
-              className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#457053]"
-              to="/pos"
+              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/orders/exchange"
             >
-              <span className="material-symbols-outlined text-lg">point_of_sale</span>
-              POS bán hàng
+              Đơn đổi
             </Link>
-          ) : null
+            {canManageStockDeduct ? (
+              <Link
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                to="/orders/stock-deduct"
+              >
+                Chờ trừ tồn
+              </Link>
+            ) : null}
+            {canManage ? (
+              <Link
+                className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#457053]"
+                to="/pos"
+              >
+                <span className="material-symbols-outlined text-lg">point_of_sale</span>
+                POS bán hàng
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
-      <section className="mb-3 space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <StatusFilterChips
           options={statusChipOptions}
           value={filters.status}
@@ -228,110 +178,45 @@ function OrdersPage() {
           className="gap-1.5"
         />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusFilterChips
-            options={QUICK_DATE_CHIPS}
-            value={quickDateKey}
-            onChange={(key) => {
-              setQuickDateKey(key)
-              setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
-              setPage(1)
-            }}
-            ariaLabel="Khoảng thời gian nhanh"
-            className="gap-1.5"
-          />
-
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          Từ
           <input
             type="date"
-            title="Từ ngày"
             aria-label="Từ ngày"
             value={filters.fromDate}
             onChange={(e) => {
-              setQuickDateKey('')
               setFilters((prev) => ({ ...prev, fromDate: e.target.value }))
               setPage(1)
             }}
-            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700 outline-none focus:border-[#538463]"
+            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-normal text-slate-700 outline-none focus:border-[#538463]"
           />
-          <span className="text-xs text-slate-400">→</span>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          Đến
           <input
             type="date"
-            title="Đến ngày"
             aria-label="Đến ngày"
             value={filters.toDate}
             onChange={(e) => {
-              setQuickDateKey('')
               setFilters((prev) => ({ ...prev, toDate: e.target.value }))
               setPage(1)
             }}
-            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700 outline-none focus:border-[#538463]"
+            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-normal text-slate-700 outline-none focus:border-[#538463]"
           />
+        </label>
 
-          <select
-            aria-label="Kênh bán"
-            value={filters.channel}
-            onChange={(e) => {
-              setFilters((prev) => ({ ...prev, channel: e.target.value }))
-              setPage(1)
-            }}
-            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-[#538463]"
-          >
-            {ORDER_CHANNEL_CHIPS.map((opt) => (
-              <option key={opt.value || 'all'} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
+        {hasActiveFilters ? (
           <button
             type="button"
             onClick={() => {
-              setFilters((prev) => ({ ...prev, hasActiveReservation: !prev.hasActiveReservation }))
+              setFilters((prev) => ({ ...prev, status: '', fromDate: '', toDate: '' }))
               setPage(1)
             }}
-            aria-pressed={filters.hasActiveReservation}
-            className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold ${
-              filters.hasActiveReservation
-                ? 'border-amber-300 bg-amber-100 text-amber-800'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
+            className="h-8 rounded-full border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
           >
-            <span className="material-symbols-outlined text-[14px]">inventory_2</span>
-            Đang giữ hàng
+            Xóa lọc
           </button>
-
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput('')
-                setQuickDateKey('')
-                setFilters(initialFilters)
-                setPage(1)
-              }}
-              className="h-8 rounded-full border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Xóa lọc
-            </button>
-          ) : null}
-
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            <Link
-              className="inline-flex h-8 items-center rounded-lg border border-[#538463]/25 bg-[#538463]/5 px-2.5 text-xs font-bold text-[#538463] hover:bg-[#538463]/10"
-              to="/orders/exchange"
-            >
-              Đơn đổi
-            </Link>
-            {canManageStockDeduct ? (
-              <Link
-                className="inline-flex h-8 items-center rounded-lg border border-[#538463]/25 bg-[#538463]/5 px-2.5 text-xs font-bold text-[#538463] hover:bg-[#538463]/10"
-                to="/orders/stock-deduct"
-              >
-                Chờ trừ tồn
-              </Link>
-            ) : null}
-          </div>
-        </div>
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-[1rem] bg-white shadow-sm">

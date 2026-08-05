@@ -41,7 +41,6 @@ function DashboardPage() {
     const isSalesStaff = roles.some((role) =>
       ['sale', 'sales staff', 'salepos', 'sale pos', 'salecod', 'sale cod', 'salesstaff'].includes(role),
     );
-    // Khớp backend ReportsController.CanViewRevenue + role vận hành trên HieuTH/HoangNL.
     const canViewRevenue =
       isSystemAdmin(session) ||
       isBranchManager(session) ||
@@ -51,9 +50,9 @@ function DashboardPage() {
       hasPermission(session, 'MANAGE_EMPLOYEE') ||
       roles.includes('admin') ||
       roles.includes('manager') ||
-      roles.includes('agency manager') ||
-      isSalesStaff;
-    const canViewCustomerGrowth = canViewRevenue;
+      roles.includes('agency manager');
+    const isPersonalStatsView = isSalesStaff && !canViewRevenue;
+    const canViewCustomerGrowth = canViewRevenue || isPersonalStatsView;
 
     const [stats, setStats] = useState(null);
     const [topProducts, setTopProducts] = useState([]);
@@ -76,6 +75,12 @@ function DashboardPage() {
     
     const [topCount, setTopCount] = useState(5); // Default top 5
     const [topProductsSortBy, setTopProductsSortBy] = useState('revenue'); // 'revenue' | 'quantity'
+
+    useEffect(() => {
+        if (isPersonalStatsView) {
+            setTopProductsSortBy('quantity');
+        }
+    }, [isPersonalStatsView]);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -313,6 +318,7 @@ function DashboardPage() {
                 <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
                     <h3 className="text-lg font-bold text-gray-800">Top Sản Phẩm Bán Chạy</h3>
                     <div className="flex flex-wrap gap-4">
+                        {canViewRevenue ? (
                         <div className="flex bg-gray-100 p-1 rounded-lg">
                             <button 
                                 onClick={() => setTopProductsSortBy('revenue')}
@@ -327,6 +333,7 @@ function DashboardPage() {
                                 Theo số lượng
                             </button>
                         </div>
+                        ) : null}
                         <div className="flex bg-gray-100 p-1 rounded-lg">
                             <button 
                                 onClick={() => setTopCount(5)}
@@ -366,7 +373,9 @@ function DashboardPage() {
                                     <tr>
                                         <th className="px-4 py-3 font-medium">Sản phẩm</th>
                                         <th className="px-4 py-3 font-medium text-right">Đã bán</th>
-                                        <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                        {canViewRevenue ? (
+                                            <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                        ) : null}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -381,7 +390,9 @@ function DashboardPage() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
-                                            <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                            {canViewRevenue ? (
+                                                <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                            ) : null}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -429,7 +440,9 @@ function DashboardPage() {
                                     <tr>
                                         <th className="px-4 py-3 font-medium">Danh mục</th>
                                         <th className="px-4 py-3 font-medium text-right">Số lượng</th>
-                                        <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                        {canViewRevenue ? (
+                                            <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                        ) : null}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -442,7 +455,9 @@ function DashboardPage() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 text-right font-medium">{c.totalQuantitySold}</td>
-                                            <td className="px-4 py-3 text-right font-medium text-blue-600">{formatCurrency(c.totalRevenue)}</td>
+                                            {canViewRevenue ? (
+                                                <td className="px-4 py-3 text-right font-medium text-blue-600">{formatCurrency(c.totalRevenue)}</td>
+                                            ) : null}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -542,7 +557,11 @@ function DashboardPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
             <PageHeader
                 title="Thống kê bán hàng"
-                titleInfo={`${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`}
+                titleInfo={
+                    isPersonalStatsView
+                        ? `${sectionLabel} — số liệu đơn hàng do bạn tạo trong kỳ đã chọn (không bao gồm doanh thu / lợi nhuận).`
+                        : `${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`
+                }
                 searchPlaceholder="Tìm kiếm..."
             />
 

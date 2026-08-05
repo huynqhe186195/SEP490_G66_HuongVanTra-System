@@ -174,6 +174,7 @@ public class PasswordResetLogic(
             throw new UserInactiveException();
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.SessionVersion = checked(user.SessionVersion + 1);
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
 
@@ -183,6 +184,7 @@ public class PasswordResetLogic(
 
         await refreshTokenRepo.RevokeAllForUserAsync(user.Id);
         await userRepo.SaveChangesAsync();
+        await refreshTokenRepo.SaveChangesAsync();
         await challengeRepo.SaveChangesAsync();
     }
 

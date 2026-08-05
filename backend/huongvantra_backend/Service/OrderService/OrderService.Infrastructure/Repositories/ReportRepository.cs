@@ -9,7 +9,7 @@ namespace OrderService.Infrastructure.Repositories;
 
 public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 {
-    public async Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .Include(o => o.OrderDetails)
@@ -17,6 +17,11 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             .Include(o => o.ReturnOrders)
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue)
         {
@@ -93,6 +98,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var prevYear = month.Value == 1 ? year.Value - 1 : year.Value;
             prevCustomerCount = await dbContext.Orders
                 .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth)
+                .Where(o => !employeeId.HasValue || o.EmployeeId == employeeId.Value)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue && quarter.HasValue)
@@ -103,12 +109,14 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var endMonth = prevQuarter * 3;
             prevCustomerCount = await dbContext.Orders
                 .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth)
+                .Where(o => !employeeId.HasValue || o.EmployeeId == employeeId.Value)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue)
         {
             prevCustomerCount = await dbContext.Orders
                 .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1)
+                .Where(o => !employeeId.HasValue || o.EmployeeId == employeeId.Value)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         
@@ -133,10 +141,15 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         };
     }
 
-    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
             .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(od => od.Order.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue)
         {
@@ -180,10 +193,15 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             .ToListAsync(ct);
     }
 
-    public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
             .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(od => od.Order.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue)
         {
@@ -216,11 +234,16 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         return categorySales;
     }
 
-    public async Task<List<TimeSeriesPointDto>> GetCustomerGrowthTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TimeSeriesPointDto>> GetCustomerGrowthTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -278,11 +301,16 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
     }
 
-    public async Task<List<TimeSeriesPointDto>> GetRevenueTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TimeSeriesPointDto>> GetRevenueTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -339,11 +367,16 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
     }
 
-    public async Task<List<RevenueProfitTimeSeriesPointDto>> GetRevenueProfitTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<RevenueProfitTimeSeriesPointDto>> GetRevenueProfitTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         if (month.HasValue) query = query.Where(o => o.CreatedAt.Month == month.Value);
@@ -435,10 +468,15 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
     }
 
-    public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         if (quarter.HasValue)
@@ -464,11 +502,16 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         return channelSales;
     }
 
-    public async Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
+        }
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         

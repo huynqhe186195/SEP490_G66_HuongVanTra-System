@@ -307,7 +307,7 @@ function PosTransferQrPage() {
         sessionSnapshot: payment.sessionSnapshot,
       })
       showSuccess(`Đã hủy thanh toán ${cancelledOrder.orderCode} và khôi phục giỏ hàng.`)
-      navigate('/pos', { replace: true })
+      navigate('/pos', { replace: true, state: { syncPosWorkspace: true } })
     } catch (error) {
       completedRef.current = false
       showError(error.message || 'Không thể hủy thanh toán chuyển khoản.')

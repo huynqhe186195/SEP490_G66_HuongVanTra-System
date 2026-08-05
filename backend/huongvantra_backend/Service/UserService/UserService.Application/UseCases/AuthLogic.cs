@@ -80,7 +80,7 @@ public class AuthLogic(
         var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
 
         if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new InvalidCredentialsException();
+            throw new UserValidationException("Mật khẩu hiện tại không đúng.");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.SessionVersion = checked(user.SessionVersion + 1);
