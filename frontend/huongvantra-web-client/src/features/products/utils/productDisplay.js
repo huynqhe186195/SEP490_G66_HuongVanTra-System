@@ -131,6 +131,16 @@ export function formatStockQuantity(value) {
   return amount.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
 }
 
+// Tồn kho nguyên liệu lưu theo gram; số hàng chục nghìn gram khó đọc nên đổi sang kg khi đủ lớn.
+export function formatQuantityWithUnit(value, inventoryUnit) {
+  const amount = Number(value) || 0
+  if (inventoryUnit !== 'Gram') {
+    return `${formatStockQuantity(amount)} ${inventoryUnit === 'Piece' ? 'cái' : ''}`.trim()
+  }
+  if (Math.abs(amount) < 1000) return `${formatStockQuantity(amount)} g`
+  return `${(amount / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kg`
+}
+
 export function summarizeProductStock(skus = [], stockBySkuId = new Map(), stockLabel = 'số lượng hiện tại') {
   if (!skus.length) {
     return { label: '—', title: '', total: 0, isLow: false, isOut: true }

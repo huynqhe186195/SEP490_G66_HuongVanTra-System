@@ -31,7 +31,7 @@ import InventorySimulationBanner from '../../inventory/components/InventorySimul
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import {
   formatProductPrice,
-  formatStockQuantity,
+  formatQuantityWithUnit,
   getProductStatusMeta,
   pickProductImageUrl,
   summarizeProductVariants,
@@ -785,7 +785,7 @@ export default function ProductsWarehouseListPage() {
                               }`}
                               onClick={() => toggleExpand(row.rowKey)}
                             >
-                              {selectedVariant ? formatStockQuantity(stockQty) : '—'}
+                              {selectedVariant ? formatQuantityWithUnit(stockQty, product.inventoryUnit) : '—'}
                               {selectedVariant && stockQty <= 0 && !product.isDeleted ? (
                                 <Link
                                   to="/inventory/import/create"
