@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -16,6 +16,7 @@ import {
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
+import { ProductionOrderDocument, SlipActionButtons, SlipPrintStyles } from '../components/InventorySlipDocument.jsx'
 import {
   cancelProductionOrder,
   completeProductionOrder,
@@ -154,6 +155,7 @@ function ProductionOrdersPage() {
     if (page > totalPages) setPage(totalPages)
   }, [totalCount, pageSize, page])
   const [expandedId, setExpandedId] = useState(null)
+  const printRef = useRef(null)
   const [actingId, setActingId] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
 
@@ -370,93 +372,17 @@ function ProductionOrdersPage() {
                   {expandedId === order.id && (
                     <tr key={`${order.id}-detail`} className="bg-slate-50/40">
                       <td colSpan={6} className="px-6 py-4">
-                        <div className="mb-4 rounded-xl border border-slate-100 bg-white p-4">
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Chi tiết lệnh sản xuất</p>
-                              <p className="mt-1 font-mono text-sm font-bold text-[#356647]">{order.productionCode}</p>
-                            </div>
-                            <StatusChip status={order.status} />
-                          </div>
-                          <div className="grid gap-3 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
-                            <div>
-                              <p className="font-semibold text-[#717971]">Ngày tạo</p>
-                              <p className="mt-1 text-slate-800">{order.createdAt ? formatVietnamDateTime(order.createdAt) : '-'}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Hoàn thành</p>
-                              <p className="mt-1 text-slate-800">{order.completedAt ? formatVietnamDateTime(order.completedAt) : '-'}</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Người tạo</p>
-                              <p className="mt-1 text-slate-800">{order.createdByName || order.createdBy || '-'}</p>
-                              {order.createdByRoleName && (
-                                <p className="text-[11px] text-slate-500">{order.createdByRoleName}</p>
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[#717971]">Tổng SKU / SL</p>
-                              <p className="mt-1 text-slate-800">
-                                {outputLines.length} SKU · {formatQuantity(totalOutputQuantity)} đơn vị
-                              </p>
-                            </div>
-                            {order.note && (
-                              <div className="sm:col-span-2 lg:col-span-4">
-                                <p className="font-semibold text-[#717971]">Ghi chú</p>
-                                <p className="mt-1 italic text-slate-800">{order.note}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mb-4 rounded-xl border border-slate-100 bg-white">
-                          <div className="border-b border-slate-100 px-4 py-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-left text-xs">
-                              <thead className="bg-slate-50 text-[#717971]">
-                                <tr>
-                                  <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
-                                  <th className="px-4 py-2 text-right font-semibold">Số lượng SX</th>
-                                  <th className="px-4 py-2 font-semibold">Nơi nhập</th>
-                                  <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
-                                  <th className="px-4 py-2 font-semibold">Lô thành phẩm sinh ra</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {outputLines.map((line) => (
-                                  <tr key={line.id}>
-                                    <td className="px-4 py-2">
-                                      <p className="font-medium text-slate-800">{getOutputName(line)}</p>
-                                      <p className="font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
-                                    </td>
-                                    <td className="px-4 py-2 text-right font-semibold text-slate-800">
-                                      {formatQuantity(line.plannedQuantity)}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      {formatDestinationLocation(line.destinationLocation)}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      {line.expiresAt ? formatVietnamDate(line.expiresAt) : '-'}
-                                    </td>
-                                    <td className="px-4 py-2 text-slate-600">
-                                      <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
-                                      {line.warehouseBatchId ? (
-                                        <span className="block break-all text-[11px] text-slate-400">
-                                          WarehouseBatchId: {line.warehouseBatchId}
-                                        </span>
-                                      ) : null}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                        <SlipPrintStyles />
+                        <SlipActionButtons
+                          documentRef={printRef}
+                          filename={`${order.productionCode || 'lenh-san-xuat'}.pdf`}
+                        />
+                        <div ref={printRef} className="mb-4">
+                          <ProductionOrderDocument order={order} statusLabel={PRODUCTION_STATUS_LABEL[order.status] || order.status} />
                         </div>
 
                         {finishedGoodsLots.length > 0 && (
-                          <div className="mb-4 rounded-xl border border-emerald-100 bg-white">
+                          <div className="no-print mb-4 rounded-xl border border-emerald-100 bg-white">
                             <div className="border-b border-emerald-100 px-4 py-3">
                               <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Lô thành phẩm sinh ra</p>
                               <p className="mt-1 text-xs text-slate-500">
@@ -496,7 +422,7 @@ function ProductionOrdersPage() {
                         )}
 
                         {order.lines.length > 0 && (
-                          <div className="rounded-xl border border-slate-100 bg-white">
+                          <div className="no-print rounded-xl border border-slate-100 bg-white">
                             <div className="border-b border-slate-100 px-4 py-3">
                               <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất theo BOM</p>
                             </div>
@@ -525,7 +451,7 @@ function ProductionOrdersPage() {
                             </div>
                           </div>
                         )}
-                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
+                        <div className="no-print mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
                           {order.completedAt && <span>Hoàn thành: {formatVietnamDateTime(order.completedAt)}</span>}
                         </div>
                       </td>

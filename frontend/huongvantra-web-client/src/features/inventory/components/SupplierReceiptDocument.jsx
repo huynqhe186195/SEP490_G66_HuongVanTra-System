@@ -26,7 +26,7 @@ export default function SupplierReceiptDocument({ receipt }) {
   )
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-5 text-slate-800">
+    <article className="inventory-slip-print rounded-xl border border-slate-200 bg-white p-5 text-slate-800">
       <header className="border-b border-slate-200 pb-4 text-center">
         <h2 className="text-2xl font-black tracking-wide">PHIẾU NHẬP KHO</h2>
         <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{receipt.receiptCode}</p>

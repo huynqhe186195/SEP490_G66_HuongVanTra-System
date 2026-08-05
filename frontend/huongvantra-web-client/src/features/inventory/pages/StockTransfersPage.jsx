@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -16,6 +16,7 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchSkuStocks } from '../services/inventoryStockApi.js'
 import { fetchStockAdjustmentRequestById } from '../services/stockAdjustmentRequestApi.js'
+import { SlipActionButtons, SlipPrintStyles, StockTransferDocument } from '../components/InventorySlipDocument.jsx'
 import {
   getStockFlowErrorMessage,
   getStockFlowStatusClass,
@@ -351,12 +352,15 @@ function TransferFormModal({
 }
 
 function TransferDetailModal({ transfer, canOperate, isCompleting, onClose, onEdit, onComplete, onCancel }) {
+  const documentRef = useRef(null)
   if (!transfer) return null
   const isDraft = transfer.status === 'draft'
+  const statusLabel = getStockTransferStatusLabel(transfer.status)
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
+      <SlipPrintStyles />
       <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+        <div className="no-print flex items-start justify-between border-b border-slate-100 px-6 py-5">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-mono text-xl font-bold text-slate-900">{transfer.transferCode}</h2>
@@ -374,49 +378,14 @@ function TransferDetailModal({ transfer, canOperate, isCompleting, onClose, onEd
           </button>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
-          <dl className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-sm md:grid-cols-3">
-            <div><dt className="text-slate-500">Người tạo</dt><dd className="font-semibold">{transfer.createdByName || '—'}</dd></div>
-            <div><dt className="text-slate-500">Thời gian tạo</dt><dd className="font-semibold">{formatVietnamDateTime(transfer.createdAt)}</dd></div>
-            <div><dt className="text-slate-500">Tổng số lượng</dt><dd className="font-semibold">{formatStockQuantity(transfer.totalQuantity)}</dd></div>
-            <div><dt className="text-slate-500">Phiếu xuất</dt><dd className="font-mono font-semibold">{transfer.exportSlipCode || '—'}</dd></div>
-            <div><dt className="text-slate-500">Phiếu nhập</dt><dd className="font-mono font-semibold">{transfer.importSlipCode || '—'}</dd></div>
-            <div><dt className="text-slate-500">Hoàn tất lúc</dt><dd className="font-semibold">{formatVietnamDateTime(transfer.completedAt)}</dd></div>
-          </dl>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Sản Phẩm</th>
-                  <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.transferQuantity}</th>
-                  <th className="px-4 py-3 text-right">Phân bổ lô</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {transfer.lines.map((line) => (
-                  <tr key={line.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-900">{line.skuNameSnapshot}</p>
-                      <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
-                    <td className="px-4 py-3 text-right">{line.batchAllocations.length || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="px-6 py-5">
+          <SlipActionButtons documentRef={documentRef} filename={`${transfer.transferCode || 'phieu-dieu-chuyen'}.pdf`} />
+          <div ref={documentRef}>
+            <StockTransferDocument transfer={transfer} statusLabel={statusLabel} />
           </div>
-
-          {transfer.note ? <p className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-700">{transfer.note}</p> : null}
-          {transfer.cancellationReason ? (
-            <p className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-800">
-              <span className="font-semibold">Lý do hủy:</span> {transfer.cancellationReason}
-            </p>
-          ) : null}
         </div>
 
-        <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 px-6 py-4">
+        <div className="no-print flex flex-wrap justify-end gap-3 border-t border-slate-100 px-6 py-4">
           {canOperate && isDraft ? (
             <>
               <button
