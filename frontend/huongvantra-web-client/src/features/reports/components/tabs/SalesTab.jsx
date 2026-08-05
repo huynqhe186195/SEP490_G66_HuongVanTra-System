@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { formatVnd } from '../../../../utils/vietnamCurrency.js'
 import { formatVietnamDateTimeMinute } from '../../../../utils/vietnamDateTime.js'
+import { getOrderStatusLabel, getOrderStatusClass } from '../../../orders/utils/orderDisplay.js'
 import { Card, DataTable } from '../reportUi.jsx'
+import OrderDetailDrawer from '../OrderDetailDrawer.jsx'
 
 function SalesTab({ report, mode }) {
   const orders = report.orders || []
+  const [selected, setSelected] = useState(null)
 
   return (
     <div className="space-y-4">
@@ -70,7 +74,7 @@ function SalesTab({ report, mode }) {
       {mode === 'detail' && (
         <Card
           title="Chi tiết từng đơn"
-          subtitle={`${orders.length} đơn trong kỳ`}
+          subtitle={`${orders.length} đơn trong kỳ · bấm vào dòng để xem chi tiết đơn`}
           icon="list_alt"
         >
           <DataTable
@@ -91,7 +95,7 @@ function SalesTab({ report, mode }) {
             ]}
             rows={orders}
             renderRow={(o) => (
-              <tr key={o.orderId}>
+              <tr key={o.orderId} onClick={() => setSelected(o)} className="cursor-pointer hover:bg-[#f6f4ec]">
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-[#356647]">
                   {o.orderCode}
                 </td>
@@ -100,7 +104,11 @@ function SalesTab({ report, mode }) {
                 <td className="px-3 py-2">{o.employeeName || '—'}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs">{o.channelLabel}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs">{o.salesModeLabel}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs">{o.orderStatus}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs">
+                  <span className={`rounded-full px-2 py-0.5 font-medium ${getOrderStatusClass(o.orderStatus)}`}>
+                    {getOrderStatusLabel(o.orderStatus)}
+                  </span>
+                </td>
                 <td className="px-3 py-2 text-center">{o.lineCount}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">{formatVnd(o.totalAmount)}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">{formatVnd(o.discountAmount)}</td>
@@ -117,6 +125,14 @@ function SalesTab({ report, mode }) {
             )}
           />
         </Card>
+      )}
+
+      {selected && (
+        <OrderDetailDrawer
+          orderId={selected.orderId}
+          orderCode={selected.orderCode}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   )

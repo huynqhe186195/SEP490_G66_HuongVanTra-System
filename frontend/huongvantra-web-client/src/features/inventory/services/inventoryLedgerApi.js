@@ -42,6 +42,7 @@ export async function fetchInventoryLedger({
   toUtc,
   page = 1,
   pageSize = 20,
+  silentAuthErrors = false,
 } = {}) {
   const params = new URLSearchParams()
   if (search?.trim()) params.set('search', search.trim())
@@ -54,7 +55,10 @@ export async function fetchInventoryLedger({
   if (toUtc) params.set('toUtc', toUtc)
   params.set('page', String(page))
   params.set('pageSize', String(pageSize))
-  const data = await apiRequestAuth(`/api/v1/inventory/ledger?${params.toString()}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/inventory/ledger?${params.toString()}`, {
+    method: 'GET',
+    silentAuthErrors,
+  })
   return {
     items: (data.items ?? data.Items ?? []).map(mapLedgerEntry),
     page: Number(data.page ?? data.Page ?? page),

@@ -3,20 +3,23 @@ import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
 import { reportsApi } from '../services/reportsApi'
-import { printCashReconciliationReport } from '../utils/printCashReconciliationReport.js'
-import { paymentMethodLabel, paymentPurposeLabel } from '../utils/cashReportLabels.js'
+import { printEndOfDayReport, exportEndOfDayPdf } from '../utils/printEndOfDayReport.js'
+import { exportEndOfDayExcel } from '../utils/exportEndOfDayExcel.js'
 import { loadPosSeller } from '../../pos/utils/posSeller.js'
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewAllOrders } from '../../auth/utils/permissions.js'
 import { fetchCustomers } from '../../customers/services/customersApi.js'
-import { formatVietnamDateTime, formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
 import ReportFilterBar from '../components/ReportFilterBar.jsx'
 import ReportKpiCards from '../components/ReportKpiCards.jsx'
 import OverviewTab from '../components/tabs/OverviewTab.jsx'
 import SalesTab from '../components/tabs/SalesTab.jsx'
 import PaymentsTab from '../components/tabs/PaymentsTab.jsx'
 import ProductsTab from '../components/tabs/ProductsTab.jsx'
-import PlaceholderTab from '../components/tabs/PlaceholderTab.jsx'
+import InventoryTab from '../components/tabs/InventoryTab.jsx'
+import ExceptionsTab from '../components/tabs/ExceptionsTab.jsx'
+import ExportReportDialog from '../components/ExportReportDialog.jsx'
 import { EmptyState } from '../components/reportUi.jsx'
 import {
   TABS,
@@ -30,7 +33,6 @@ import {
   countAdvancedFilters,
   quickRangeToDates,
 } from '../utils/endOfDayFilters.js'
-import * as XLSX from 'xlsx'
 
 const EMPTY_REPORT = {
   cashIn: [],
@@ -60,18 +62,21 @@ const EMPTY_REPORT = {
   refundedOrders: 0,
 }
 
-function formatTime(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
 function EndOfDayReportPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Bộ lọc đang áp dụng đọc từ URL; bộ lọc nháp là thứ người dùng đang chỉnh.
   const appliedFilters = useMemo(() => parseFiltersFromSearchParams(searchParams), [searchParams])
   const activeTab = parseTabFromSearchParams(searchParams)
+  const filterKey = JSON.stringify(appliedFilters)
   const [draftFilters, setDraftFilters] = useState(appliedFilters)
+  const [syncedFilterKey, setSyncedFilterKey] = useState(filterKey)
+
+  // Bộ lọc nháp bám theo URL khi người dùng bấm back/forward hoặc mở link có sẵn filter.
+  if (syncedFilterKey !== filterKey) {
+    setSyncedFilterKey(filterKey)
+    setDraftFilters(appliedFilters)
+  }
 
   const [users, setUsers] = useState([])
   const [customers, setCustomers] = useState([])
@@ -81,6 +86,8 @@ function EndOfDayReportPage() {
   const [loadedAt, setLoadedAt] = useState(null)
 
   const [sellerInfo, setSellerInfo] = useState({ name: '', role: '—' })
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const isOnline = useNetworkStatus()
   const session = loadAuthSession()
   const canFilterByEmployee = canViewAllOrders(session)
   const agencyName = session?.agency?.name || 'Chi nhánh chính'
@@ -109,11 +116,10 @@ function EndOfDayReportPage() {
   }, [])
 
   useEffect(() => {
-    if (!canFilterByEmployee) {
-      setUsers([])
-      return
-    }
+    // Không có quyền xem toàn cửa hàng thì bỏ qua, danh sách nhân viên giữ nguyên mảng rỗng.
+    if (!canFilterByEmployee) return
 
+    let cancelled = false
     const loadUsers = async () => {
       try {
         const res = await apiRequestAuth('/api/users?pageSize=100', { method: 'GET', silentAuthErrors: true })
@@ -124,18 +130,21 @@ function EndOfDayReportPage() {
           const uRoles = Array.isArray(u.roles) ? u.roles : [u.role].filter(Boolean)
           return uRoles.some((r) => allowedCompact.has(normalizeRole(typeof r === 'string' ? r : r?.name)))
         })
-        setUsers(filtered)
+        if (!cancelled) setUsers(filtered)
       } catch (err) {
         console.error('Failed to load users:', err)
-        setUsers([])
+        if (!cancelled) setUsers([])
       }
     }
 
     loadUsers()
+    return () => {
+      cancelled = true
+    }
   }, [canFilterByEmployee])
 
   // Chỉ tải lại khi bộ lọc đã áp dụng thay đổi. Đổi tab không gọi lại API.
-  const filterKey = JSON.stringify(appliedFilters)
+  const apiParams = useMemo(() => filtersToApiParams(JSON.parse(filterKey)), [filterKey])
   useEffect(() => {
     let cancelled = false
     const loadReport = async () => {
@@ -159,11 +168,6 @@ function EndOfDayReportPage() {
       cancelled = true
     }
   }, [filterKey])
-
-  // Bộ lọc nháp bám theo URL khi người dùng bấm back/forward hoặc mở link có sẵn filter.
-  useEffect(() => {
-    setDraftFilters(appliedFilters)
-  }, [appliedFilters])
 
   const handleApply = () => {
     setSearchParams(filtersToSearchParams(draftFilters, searchParams))
@@ -225,90 +229,37 @@ function EndOfDayReportPage() {
     return `Bao_cao_cuoi_ngay_${periodLabel.replace(/[^0-9]/g, '_')}_${timeStr}`
   }
 
-  const handlePrint = async () => {
-    await printCashReconciliationReport({
-      dateStr: periodLabel,
+  const exportMeta = { periodLabel, creatorName, agencyName, employeeName }
+
+  const handleExport = async ({ output, orientation }) => {
+    const payload = {
+      periodLabel,
       employeeName,
       report,
-      paperSize: 'A4',
       creatorName,
       agencyName,
+      periodStartUtc: apiParams.fromDate,
+      isMultiDay: multiDay,
+      orientation,
+      filename: getExportFilename(),
+    }
+    if (output === 'pdf') await exportEndOfDayPdf(payload)
+    else await printEndOfDayReport(payload)
+  }
+
+  const handleExportExcel = () => {
+    exportEndOfDayExcel({
+      report,
+      meta: exportMeta,
+      periodStartUtc: apiParams.fromDate,
       filename: getExportFilename(),
     })
   }
 
-  const handleExportExcel = () => {
-    const wsData = [
-      ['BÁO CÁO CUỐI NGÀY', null, null, null],
-      ['Hệ thống Quản lý Hương Vân Trà', null, null, null],
-      [`Kỳ báo cáo: ${periodLabel}`, null, null, null],
-      [`Thời gian tạo: ${formatVietnamDateTime(new Date().toISOString())}`, null, `Người tạo: ${creatorName}`, null],
-      [`Chi nhánh: ${agencyName}`, null, `Nhân viên: ${employeeName}`, null],
-      [],
-      ['1. DOANH THU GHI NHẬN', null, null, null],
-      ['Doanh thu đơn hoàn tất', null, report.salesRevenue, null],
-      ['Trừ hàng trả', null, report.returnedRevenue, null],
-      ['Doanh thu ghi nhận thuần', null, report.netRecognizedRevenue, null],
-      ['Đơn hoàn tất', report.completedOrders, null, null],
-      ['Tổng dòng hàng', report.totalLineCount, null, null],
-      ['Số SKU phát sinh', report.distinctSkuCount, null, null],
-      [],
-      ['2. TIỀN THU VÀO', null, null, null],
-      ['Loại thu', 'Số lượt', 'Số tiền', null],
-    ]
-    ;(report.cashIn || []).forEach((l) => wsData.push([l.label, l.count, l.amount, null]))
-    wsData.push(['Tổng thu vào', null, report.totalCashIn, null], [])
-
-    wsData.push(['3. TIỀN CHI RA (HOÀN TRẢ HÀNG)', null, null, null], ['Phương thức hoàn', 'Số lượt', 'Số tiền', null])
-    ;(report.cashOut || []).forEach((l) => wsData.push([l.label, l.count, l.amount, null]))
-    wsData.push(['Tổng chi ra', null, report.totalCashOut, null], [])
-
-    wsData.push(
-      ['4. TỔNG HỢP DÒNG TIỀN THEO PHƯƠNG THỨC', null, null, null],
-      ['Phương thức', 'Thu vào', 'Chi ra', 'Còn lại'],
-    )
-    ;(report.byPaymentMethod || []).forEach((l) =>
-      wsData.push([`${l.label}${l.isCash ? ' (tiền két)' : ' (tài khoản)'}`, l.amountIn, l.amountOut, l.net]),
-    )
-    wsData.push([])
-
-    const b = report.bridge || {}
-    wsData.push(
-      ['5. CẦU NỐI DOANH THU VÀ DÒNG TIỀN', null, null, null],
-      ['Doanh thu ghi nhận', null, b.recognizedRevenue, null],
-      ['(-) Doanh thu chưa thu tiền', null, b.unpaidRevenue, null],
-      ['(+) Tiền thu của đơn kỳ trước', null, b.priorPeriodCollections, null],
-      ['(+) Cọc bị giữ do hủy đơn', null, b.forfeitedDeposit, null],
-      ['(-) Hoàn tiền trả hàng', null, b.refunds, null],
-      ['= Tổng tiền thu vào', null, b.totalCashIn, null],
-      [],
-    )
-
-    wsData.push(['6. HÀNG HÓA ĐÃ BÁN', null, null, null], ['Mã SKU / Tên', 'SL bán', 'SL trả', 'Doanh thu'])
-    ;(report.products || []).forEach((p) =>
-      wsData.push([`${p.skuCode} - ${p.skuName}`, p.quantity, p.returnedQuantity, p.revenue]),
-    )
-    wsData.push([])
-
-    wsData.push(['7. CHI TIẾT CÁC KHOẢN THU', null, null, null], ['Mã đơn', 'Thời gian', 'Phương thức / Mục đích', 'Số tiền'])
-    ;(report.receipts || []).forEach((r) =>
-      wsData.push([
-        r.orderCode,
-        formatTime(r.paidAt),
-        `${paymentMethodLabel(r.paymentMethod)} / ${paymentPurposeLabel(r.paymentPurpose)}`,
-        r.amount,
-      ]),
-    )
-
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet(wsData)
-    ws['!cols'] = [{ wch: 42 }, { wch: 16 }, { wch: 22 }, { wch: 18 }]
-    XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo cuối ngày')
-    XLSX.writeFile(wb, `${getExportFilename()}.xlsx`)
-  }
-
   const renderTab = () => {
-    if (!hasData && !isLoading && !error) {
+    // Tab Kho/Kệ đọc dữ liệu riêng từ InventoryService nên vẫn có thể có số liệu
+    // dù kỳ này không phát sinh đơn hàng nào.
+    if (!hasData && !isLoading && !error && activeTab !== 'inventory') {
       return (
         <EmptyState
           text={`Không có giao dịch nào trong kỳ ${periodLabel}${
@@ -335,19 +286,9 @@ function EndOfDayReportPage() {
       case 'products':
         return <ProductsTab report={report} />
       case 'inventory':
-        return (
-          <PlaceholderTab
-            title="Kho / Kệ hàng"
-            description="Số liệu điều chuyển, sản xuất và tồn cuối kỳ sẽ được bổ sung ở đợt tiếp theo."
-          />
-        )
+        return <InventoryTab fromUtc={apiParams.fromDate} toUtc={apiParams.toDate} />
       case 'exceptions':
-        return (
-          <PlaceholderTab
-            title="Ngoại lệ cần xử lý"
-            description={`Hiện phát hiện ${exceptionCount} đơn chưa thu đủ tiền. Danh sách ngoại lệ đầy đủ sẽ được bổ sung ở đợt tiếp theo.`}
-          />
-        )
+        return <ExceptionsTab report={report} periodStartUtc={apiParams.fromDate} />
       default:
         return <OverviewTab report={report} />
     }
@@ -360,6 +301,16 @@ function EndOfDayReportPage() {
         title={multiDay ? 'Báo cáo bán hàng theo kỳ' : 'Báo cáo cuối ngày'}
         titleInfo="Chốt số liệu bán hàng, thu chi và hàng hóa trong kỳ"
       />
+
+      {!isOnline && (
+        <div className="flex items-start gap-2 rounded-2xl border border-[#7e5700]/40 bg-[#fec25b]/15 p-3">
+          <span className="material-symbols-outlined text-[18px] text-[#7e5700]">cloud_off</span>
+          <p className="text-sm text-[#7e5700]">
+            Đang mất kết nối mạng. Số liệu hiển thị là bản tải gần nhất và có thể chưa đầy đủ — không nên dùng để chốt
+            sổ cho tới khi kết nối trở lại.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[#717971]">
@@ -376,7 +327,7 @@ function EndOfDayReportPage() {
           </button>
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={() => setShowExportDialog(true)}
             className="flex items-center gap-1.5 rounded-lg border border-[#c1c9c0] bg-white px-3 py-2 text-sm font-medium text-[#414942] hover:bg-[#f6f4ec]"
           >
             <span className="material-symbols-outlined text-[18px] text-[#356647]">print</span>
@@ -449,6 +400,14 @@ function EndOfDayReportPage() {
           renderTab()
         )}
       </div>
+
+      {showExportDialog && (
+        <ExportReportDialog
+          periodLabel={periodLabel}
+          onClose={() => setShowExportDialog(false)}
+          onConfirm={handleExport}
+        />
+      )}
     </div>
   )
 }
