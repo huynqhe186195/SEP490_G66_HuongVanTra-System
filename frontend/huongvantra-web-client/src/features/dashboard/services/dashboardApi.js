@@ -43,4 +43,9 @@ export const dashboardApi = {
     const path = `/api/reports/order-count-growth${query ? `?${query}` : ''}`
     return await apiRequestAuth(path)
   },
+  getDailyCashReconciliation: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/daily-cash-reconciliation${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
 }

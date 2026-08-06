@@ -61,8 +61,8 @@ import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPag
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
-import ReportsCustomersPage from '../features/reports/pages/ReportsCustomersPage.jsx'
 import ReportsOverviewPage from '../features/reports/pages/ReportsOverviewPage.jsx'
+import EndOfDayReportPage from '../features/reports/pages/EndOfDayReportPage.jsx'
 import StaffCreatePage from '../features/staff/pages/StaffCreatePage.jsx'
 import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
 import StaffPage from '../features/staff/pages/StaffPage.jsx'
@@ -168,7 +168,7 @@ function App() {
         <Route path="/contracts/:id" element={<ContractDetailPage />} />
         <Route path="/contracts/:id/edit" element={<ContractFormPage />} />
         <Route path="/reports" element={<ReportsOverviewPage />} />
-        <Route path="/reports/customers" element={<ReportsCustomersPage />} />
+        <Route path="/reports/end-of-day" element={<EndOfDayReportPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
