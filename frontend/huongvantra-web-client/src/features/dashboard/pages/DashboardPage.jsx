@@ -6,7 +6,6 @@ import {
     LineChart, Line, CartesianGrid
 } from 'recharts';
 import PageHeader from "../../../components/shared/PageHeader.jsx";
-import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -71,8 +70,7 @@ function DashboardPage() {
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterQuarter, setFilterQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-    
+
     const [topCount, setTopCount] = useState(5); // Default top 5
     const [topProductsSortBy, setTopProductsSortBy] = useState('revenue'); // 'revenue' | 'quantity'
 
@@ -611,19 +609,7 @@ function DashboardPage() {
                         <option value={2025}>2025</option>
                     </select>
                 </label>
-
-                <div className="ml-auto">
-                    <button
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 border border-blue-200"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">assignment</span>
-                        Báo cáo doanh thu cuối ngày
-                    </button>
-                </div>
             </div>
-
-            <EndOfDayReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
 
             {isLoading ?
                 <div className="flex justify-center p-8">
