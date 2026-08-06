@@ -177,47 +177,147 @@ Read the acceptance and UAT guide here:
 
 =========================================================================================================================
 
-## Seed data mẫu (catalog + tồn kho) — sau khi pull code mới
+## Quy trình máy mới / data đang lung tung (chuẩn Hương Vân)
 
-Seed **không** chạy tự động khi `docker compose up` hay khi start service. Sau khi stack MySQL + ProductService + InventoryService đã chạy (migrate xong), người mới pull code chạy seed **một lần** (hoặc khi muốn nạp lại dữ liệu mẫu).
+Dùng khi vừa `git pull`, DB local lẫn seed cũ (`SKU-DEMO-*`, Matcha/Ceylon, đơn rác), hoặc muốn setup sạch từ đầu.
 
-### Nội dung seed
-- Danh mục / sản phẩm / SKU mã `HVT-*` (trà thành phẩm, thảo mộc, NL, bao bì…)
-- Tồn kệ + kho, lô `HVT-LOT-*` / `HVT-SHELF-*`
-- **Không** tạo tài khoản / khách / đơn — dùng user sẵn có từ UserService
-
-### Cách chạy (Windows PowerShell)
+### A. Chuẩn bị code
 
 ```powershell
-# 1) Đảm bảo Docker đang chạy và container MySQL tên hvt-mysql đang up
-# 2) Backend services đã start ít nhất 1 lần (để migrate tạo bảng)
+cd D:\SEP490_G66_HuongVanTra-System
+git pull
 
+# Frontend Cloudinary (nếu import ZIP có ảnh)
+cd frontend\huongvantra-web-client
+copy .env.example .env
+# Điền VITE_CLOUDINARY_CLOUD_NAME + VITE_CLOUDINARY_UPLOAD_PRESET
+```
+
+### B. Xóa data cũ (bắt buộc nếu DB lung tung)
+
+> Cảnh báo: mất toàn bộ MySQL/RabbitMQ local.
+
+```powershell
+cd D:\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Đợi containers `healthy` (~1–2 phút). UserService tự seed tài khoản:
+
+| User | Pass | Vai trò |
+|------|------|---------|
+| `admin` | `123456` | Admin |
+| `manager01` | `123456` | Manager |
+| `sale01` | `123456` | Sale POS |
+| `sale_cod01` | `123456` | Sale COD |
+| `warehouse01` | `123456` | Thủ kho |
+| `accountant01` | `123456` | Kế toán |
+
+CustomerService tự seed hạng thành viên (Member/Silver/Gold/Diamond).
+
+### C. Seed nền (chưa có Product/SKU)
+
+```powershell
+cd D:\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\Scripts
+.\run-seed-hvt-categories.ps1
+.\run-seed-hvt-baseline-extras.ps1
+```
+
+→ 8 danh mục HVT, 5 KH, 3 NCC, 2 promo (`HVT10` / `HVT50K`).
+
+### D. Catalog Excel (bắt buộc — không seed SQL)
+
+1. Mở FE (thường `http://localhost:5173`).
+2. Login `manager01` / `123456`.
+3. **Lịch sử tạo hàng hóa** → tải file mẫu (có dữ liệu).
+4. (Tuỳ chọn) ZIP: 1 file `.xlsx` + ảnh `HVT01.jpg`, …
+5. Import → preview → gửi duyệt → duyệt.
+6. Kiểm tra list SP có SKU kiểu `HVT-HUONGTRA-100G`, `NL-TRA-XANH-G`, `BB-HOP-GIAY-HVT`.
+
+### E. Tồn kho theo SkuCode (Phase B)
+
+```powershell
+cd D:\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\Scripts
+.\run-seed-inventory-by-sku.ps1
+```
+
+Fail nếu thiếu SkuCode → quay lại bước D.
+
+### F. Data thao tác mẫu (tuỳ chọn nhưng nên chạy demo)
+
+```powershell
+.\run-seed-hvt-sample-ops.ps1
+```
+
+Nạp: map NCC↔SKU, PN Draft/Pending/Completed, BOM, đơn mẫu, ca/quỹ, kiểm kê, trả hàng.
+
+### G. Kiểm chứng nhanh
+
+- `sale01`: quỹ đang Open (nếu đã chạy F) → POS bán `HVT-HUONGTRA-100G`.
+- `warehouse01`: tồn Kho/Kệ, phiếu NCC, kiểm kê.
+- `accountant01`: xem đơn / giá vốn (read-only).
+
+### Không chạy trên máy sạch
+
+- `run-seed-catalog-inventory.ps1` — tạo catalog Matcha/Ceylon legacy.
+- `seed-demo-data.sql` — tạo `SKU-DEMO-*` + đơn demo cũ.
+- Soft-delete từng SKU rác nếu đã `down -v` — không cần.
+
+## Nạp catalog Hương Vân bằng Excel + ZIP ảnh
+
+Catalog không tự nạp khi `docker compose up`. Luồng chuẩn là tạo danh mục trước, sau đó dùng file Excel mẫu trên màn hình **Lịch sử tạo hàng hóa** để gửi duyệt Product/SKU. Nếu có ảnh, nén Excel và ảnh thành một file ZIP; tên ảnh phải trùng **Mã sản phẩm** (`HVT01.jpg`, `HVT01_2.jpg`).
+
+Tên và giá bán trong file mẫu được tham khảo từ `https://huongvantra.vn/` (snapshot 08/2026). Giá vốn chỉ là dữ liệu demo, không phải giá vốn thực tế. Trình import yêu cầu **Quy đổi là số nguyên dương** và tự tính **giá SKU quy đổi = giá SKU cơ bản × Quy đổi**, nên các quy cách không theo tỷ lệ tuyến tính (ví dụ hũ sứ 50g) được tách thành sản phẩm riêng.
+
+### Bước 1 — tạo danh mục nền + data phụ trợ đủ dùng
+
+```powershell
+# Đảm bảo các service đã start ít nhất một lần (migrate + seed user/tier).
 cd backend\huongvantra_backend\Scripts
-.\run-seed-catalog-inventory.ps1
+.\run-seed-hvt-categories.ps1
+.\run-seed-hvt-baseline-extras.ps1
 ```
 
-Nếu tên container / mật khẩu root khác mặc định:
+`run-seed-hvt-baseline-extras.ps1` nạp **đủ dùng, không rác**: 5 khách hàng, 3 NCC, 2 khuyến mãi (`HVT10` / `HVT50K`). Không tạo Product/SKU/Order/Stock demo.
 
-```powershell
-.\run-seed-catalog-inventory.ps1 -MySqlContainer "hvt-mysql" -MySqlRootPassword "hvtroot123"
-```
+### Bước 2 — tải và import file mẫu
 
-Thành công sẽ in `Seed OK.`
+1. Đăng nhập `manager01` / `123456`.
+2. Mở **Lịch sử tạo hàng hóa** → **Tải file có dữ liệu mẫu**.
+3. Chuẩn bị ảnh: `HVT01.jpg`, `HVT01_2.jpg`, … (tối đa 5 ảnh/SP, 5MB/ảnh).
+4. Nén đúng 1 file `.xlsx` và các ảnh vào ZIP.
+5. Import ZIP, kiểm tra preview, gửi duyệt và duyệt yêu cầu.
+6. Cấu hình Cloudinary trước khi gửi duyệt nếu ZIP có ảnh.
 
-### Xem dữ liệu sau khi seed
-- Đăng nhập FE: `manager01` / `123456` hoặc `sale01` / `123456`
-- Sản phẩm / kho: tìm mã `HVT-*`
-- POS: hard refresh (Ctrl+F5); nếu dùng offline cache thì đồng bộ lại
+### Bước 3 — tồn kho (Phase B)
 
-### Tạo lại file SQL (chỉ khi sửa generator)
+Chỉ chạy **sau khi** catalog Excel đã được duyệt và Product DB có SkuCode `HVT-*` / `NL-*` / `BB-*` của file mẫu.
 
 ```powershell
 cd backend\huongvantra_backend\Scripts
-node .\generate-seed-catalog-inventory.mjs
-.\run-seed-catalog-inventory.ps1
+.\run-seed-inventory-by-sku.ps1
 ```
 
-### Lưu ý
-- Script idempotent — chạy lại được, không cần xóa DB
-- File SQL: `backend/huongvantra_backend/Scripts/seed-catalog-inventory-realistic.sql`
-- Tài khoản demo mặc định (UserService seed khi start): `admin` / `sale01` / `sale_cod01` / `manager01` — mật khẩu `123456`
+Script này:
+- **không** tạo Product/SKU;
+- lookup `ProductVariants.Id` theo `SkuCode`;
+- UPSERT `SkuStocks` + lô `HVT-LOT-*` (Kho) / `HVT-SHELF-*` (Kệ);
+- **fail rõ** nếu thiếu SkuCode (chưa import đủ Excel).
+
+Kiểm chứng: màn **Sản phẩm & Số lượng** có tồn Kho/Kệ > 0; POS bán được (ví dụ `HVT-HUONGTRA-100G`).
+
+### Bước 4 — dữ liệu thao tác mẫu (tuỳ chọn)
+
+Sau khi catalog + tồn đã có:
+
+```powershell
+cd backend\huongvantra_backend\Scripts
+.\run-seed-hvt-sample-ops.ps1
+```
+
+Nạp đủ dùng: map NCC↔SKU, phiếu nhập (Draft / PendingApproval / Completed), BOM 2 SKU, 4 đơn mẫu, ca/quỹ, kiểm kê, trả hàng NCC + trả khách. Đơn POS mẫu cũ **không trừ tồn**; PN Completed / THN Completed chỉnh tồn Kho nhẹ. Ca/quỹ seed sẵn phiên Open cho `sale01`.
+
+> Không chạy `run-seed-catalog-inventory.ps1` trên máy mới — path legacy tự tạo catalog Matcha/Ceylon và dễ trùng với Excel.
+
+Tài khoản demo mặc định do UserService seed: `admin` / `sale01` / `sale_cod01` / `manager01` — mật khẩu `123456`.

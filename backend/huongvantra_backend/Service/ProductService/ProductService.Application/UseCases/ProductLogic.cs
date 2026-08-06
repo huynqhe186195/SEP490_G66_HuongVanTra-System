@@ -160,6 +160,9 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         var productId = Guid.NewGuid();
         var (mappedVariants, _) = await MapVariantsAsync(
             productId, input.Name, variants, request.Variants, productType);
+        ApplyProductThumbnailToVariants(mappedVariants, images);
+        // Khi đã có Variants, đơn vị bán/barcode nằm ở Variant.Units (BuildVariantUnits).
+        // Không ghi thêm Product.Units cùng barcode — tránh Duplicate entry trên IX_ProductUnits_Barcode.
         var product = new Product
         {
             Id = productId,
@@ -176,7 +179,9 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             IsVariantParent = input.IsVariantParent || variants.Count > 0,
             ProductType = productType,
             Images = images.Select(MapImage).ToList(),
-            Units = units.Select(MapUnit).ToList(),
+            Units = mappedVariants.Count > 0
+                ? []
+                : units.Select(MapUnit).ToList(),
             AttributeValues = MapAttributeValues(attributes).ToList(),
             Variants = mappedVariants
         };
@@ -234,7 +239,6 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         product.UpdatedAt = DateTime.UtcNow;
 
         Replace(product.Images, images.Select(MapImage));
-        Replace(product.Units, units.Select(MapUnit));
         Replace(product.AttributeValues, MapAttributeValues(attributes));
         var (mappedVariants, retailPriceHistories) = await MapVariantsAsync(
             product.Id,
@@ -243,6 +247,9 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             request.Variants,
             product.ProductType,
             product.Variants);
+        ApplyProductThumbnailToVariants(mappedVariants, images);
+        // Cùng lý do CreateAsync: có Variants thì không giữ Product.Units legacy trùng barcode.
+        Replace(product.Units, mappedVariants.Count > 0 ? [] : units.Select(MapUnit));
         Replace(product.Variants, mappedVariants);
 
         var updated = await _productRepository.UpdateAsync(product);
@@ -864,6 +871,29 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         IsThumbnail = input.IsThumbnail
     };
 
+    /// <summary>
+    /// List SKU / POS thường đọc Variant.ImageUrl. Khi tạo từ biên bản, ảnh nằm ở Product.Images
+    /// còn variant.imageUrl để trống — sao chép thumbnail xuống mọi SKU chưa có ảnh.
+    /// </summary>
+    private static void ApplyProductThumbnailToVariants(
+        IEnumerable<ProductVariant> variants,
+        IReadOnlyList<ValidatedProductImageInput> images)
+    {
+        var thumbnailUrl = images
+            .Where(image => !string.IsNullOrWhiteSpace(image.ImageUrl))
+            .OrderByDescending(image => image.IsThumbnail)
+            .ThenBy(image => image.SortOrder)
+            .Select(image => image.ImageUrl)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(thumbnailUrl)) return;
+
+        foreach (var variant in variants)
+        {
+            if (string.IsNullOrWhiteSpace(variant.ImageUrl))
+                variant.ImageUrl = thumbnailUrl;
+        }
+    }
+
     private static ProductUnit MapUnit(ValidatedProductUnitInput input) => new()
     {
         VariantId = input.VariantId,
@@ -892,17 +922,27 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             target.Add(value);
     }
 
-    private static ProductResponse MapToResponse(Product p, CatalogViewScope scope) => new(
-        p.Id, p.CategoryId, p.Category?.Name ?? string.Empty,
-        p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
-        p.BaseUnit, p.InventoryUnit.ToString(), p.WeightValue, p.WeightUnit, p.IsVariantParent,
-        p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
-        p.ProductType.ToString(),
-        new List<ProductSkuResponse>(),
-        p.Images.Where(i => !i.IsDeleted).OrderBy(i => i.SortOrder).Select(MapImageResponse).ToList(),
-        p.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-        p.Variants.Where(v => !v.IsDeleted).Select(MapVariantResponse).ToList(),
-        p.AttributeValues.Where(v => !v.IsDeleted).OrderBy(v => v.AttributeName).Select(MapAttributeValueResponse).ToList());
+    private static ProductResponse MapToResponse(Product p, CatalogViewScope scope)
+    {
+        var productThumbnailUrl = p.Images
+            .Where(i => !i.IsDeleted && !string.IsNullOrWhiteSpace(i.ImageUrl))
+            .OrderByDescending(i => i.IsThumbnail)
+            .ThenBy(i => i.SortOrder)
+            .Select(i => i.ImageUrl)
+            .FirstOrDefault();
+
+        return new(
+            p.Id, p.CategoryId, p.Category?.Name ?? string.Empty,
+            p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
+            p.BaseUnit, p.InventoryUnit.ToString(), p.WeightValue, p.WeightUnit, p.IsVariantParent,
+            p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
+            p.ProductType.ToString(),
+            new List<ProductSkuResponse>(),
+            p.Images.Where(i => !i.IsDeleted).OrderBy(i => i.SortOrder).Select(MapImageResponse).ToList(),
+            p.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
+            p.Variants.Where(v => !v.IsDeleted).Select(v => MapVariantResponse(v, productThumbnailUrl)).ToList(),
+            p.AttributeValues.Where(v => !v.IsDeleted).OrderBy(v => v.AttributeName).Select(MapAttributeValueResponse).ToList());
+    }
 
     private static ProductImageResponse MapImageResponse(ProductImage i) => new(
         i.Id, i.ProductId, i.ImageUrl, i.AltText, i.SortOrder, i.IsThumbnail);
@@ -968,14 +1008,15 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return InventoryUnitConverter.GetDisplayUnit(material.InventoryUnit);
     }
 
-    private static ProductVariantResponse MapVariantResponse(ProductVariant v)
+    private static ProductVariantResponse MapVariantResponse(ProductVariant v, string? productThumbnailUrl = null)
     {
         var activeBomLines = v.BomLines.Where(b => !b.IsDeleted).ToList();
+        var imageUrl = !string.IsNullOrWhiteSpace(v.ImageUrl) ? v.ImageUrl : productThumbnailUrl;
 
         return new ProductVariantResponse(
             v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
             v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
-            v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
+            v.IsSellable, v.AllowRewardPoints, v.IsActive, imageUrl,
             v.UnitName,
             v.ConversionRate,
             v.BaseVariantId,

@@ -694,7 +694,7 @@ export default function ProductsWarehouseListPage() {
                         product.isDeleted,
                       )
                       const variants = product.variants ?? []
-                      const imageUrl = selectedVariant?.imageUrl || pickProductImageUrl(product)
+                      const imageUrl = pickProductImageUrl(product) || selectedVariant?.imageUrl || ''
                       const stockQty = selectedVariant ? Number(stockBySkuId.get(selectedVariant.id) ?? 0) : 0
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5

@@ -380,6 +380,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
         var requestSkuCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var requestSkuKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var requestProductNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var requestBarcodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var categoryIds = new HashSet<int>();
         var materialIds = new HashSet<Guid>();
         var componentVariantIds = new HashSet<Guid>();
@@ -469,6 +470,10 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 if (requestSkuKey is not null && !requestSkuKeys.Add(requestSkuKey))
                     errors.Add($"{row}: RequestSkuKey '{requestSkuKey}' bi trung trong cung yeu cau.");
 
+                var barcode = NormalizeText(variant.Barcode);
+                if (barcode is not null && !requestBarcodes.Add(barcode))
+                    errors.Add($"{row}: Barcode '{barcode}' bị trùng trong cùng yêu cầu.");
+
                 var bomLines = variant.BomLines ?? [];
                 if (bomLines.Count > 0
                     && !BomCapabilityRules.CanOwnBom(productType, variant.CanHaveBom ?? false, variant.IsActive))
@@ -530,6 +535,22 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 .ToListAsync(ct);
             foreach (var skuCode in existingSkuCodes.Distinct(StringComparer.OrdinalIgnoreCase))
                 errors.Add($"Mã SKU '{skuCode}' đã tồn tại.");
+        }
+
+        if (requestBarcodes.Count > 0)
+        {
+            var existingVariantBarcodes = await _db.ProductVariants.AsNoTracking()
+                .Where(x => !x.IsDeleted && x.Barcode != null && requestBarcodes.Contains(x.Barcode))
+                .Select(x => x.Barcode!)
+                .ToListAsync(ct);
+            var existingUnitBarcodes = await _db.ProductUnits.AsNoTracking()
+                .Where(x => x.Barcode != null && requestBarcodes.Contains(x.Barcode))
+                .Select(x => x.Barcode!)
+                .ToListAsync(ct);
+            foreach (var barcode in existingVariantBarcodes
+                .Concat(existingUnitBarcodes)
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+                errors.Add($"Barcode '{barcode}' đã tồn tại.");
         }
 
         if (materialIds.Count > 0)

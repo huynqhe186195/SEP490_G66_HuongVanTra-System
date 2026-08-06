@@ -1,7 +1,12 @@
 /**
- * Generates seed-catalog-inventory-realistic.sql
- * Large Hương Vân Trà catalog + inventory sample (no auth/users).
- * Run: node generate-seed-catalog-inventory.mjs
+ * [SOFT-DEPRECATED] Generates seed-catalog-inventory-realistic.sql
+ * Legacy path: tự INSERT Products/ProductVariants (Matcha/Ceylon/HVT-SEN…).
+ *
+ * Máy mới dùng Phase A (Excel) + Phase B:
+ *   node generate-seed-inventory-by-sku.mjs
+ *   .\\run-seed-inventory-by-sku.ps1
+ *
+ * Run legacy: node generate-seed-catalog-inventory.mjs
  */
 import fs from 'fs'
 import path from 'path'
