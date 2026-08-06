@@ -46,10 +46,14 @@ function downloadCsv(filename, rows) {
 function toRow(sku) {
   const retailPrice = Number(sku.retailPrice || 0)
   const averageCostPrice = Number(sku.averageCostPrice || 0)
+  // NL/BB thường giá bán = 0 (không bán trực tiếp) — không tính là "lợi nhuận âm".
+  const hasSellPrice = retailPrice > 0
+  const profit = hasSellPrice ? retailPrice - averageCostPrice : null
   return {
     ...sku,
     name: [sku.productName, sku.variantName].filter(Boolean).join(' - ') || sku.skuCode,
-    profit: retailPrice - averageCostPrice,
+    hasSellPrice,
+    profit,
   }
 }
 
@@ -187,7 +191,9 @@ export default function CostProfitReportPage() {
       const matchesReceipt = receiptFilter === 'all'
         || (receiptFilter === 'with' ? Boolean(row.sourceReceiptId) : !row.sourceReceiptId)
       const matchesProfit = profitFilter === 'all'
-        || (profitFilter === 'profit' ? row.profit > 0 : row.profit < 0)
+        || (profitFilter === 'profit'
+          ? row.hasSellPrice && Number(row.profit) > 0
+          : row.hasSellPrice && Number(row.profit) < 0)
       return matchesSearch && matchesCost && matchesReceipt && matchesProfit
     })
 
@@ -198,12 +204,12 @@ export default function CostProfitReportPage() {
   }, [costFilter, profitFilter, receiptFilter, rows, search, sortDirection, sortField])
 
   const negativeProfitCount = useMemo(
-    () => rows.filter((row) => row.profit < 0).length,
+    () => rows.filter((row) => row.hasSellPrice && Number(row.profit) < 0).length,
     [rows],
   )
 
   const filteredNegativeProfitCount = useMemo(
-    () => filtered.filter((row) => row.profit < 0).length,
+    () => filtered.filter((row) => row.hasSellPrice && Number(row.profit) < 0).length,
     [filtered],
   )
 
@@ -313,7 +319,7 @@ export default function CostProfitReportPage() {
         row.lastPurchaseUnitCost ?? '',
         row.sourceReceiptCode,
         row.costUpdatedAt ?? '',
-        row.profit,
+        row.hasSellPrice ? row.profit : '',
       ]),
     ])
     showSuccess('Đã xuất CSV.')
@@ -419,6 +425,7 @@ export default function CostProfitReportPage() {
               </p>
               <p className="mt-0.5 text-xs text-rose-700/90">
                 Giá bán đang thấp hơn giá vốn trung bình — nên kiểm tra trước khi bán.
+                SKU nguyên liệu/bao bì (giá bán = 0) không tính vào cảnh báo này.
                 {profitFilter === 'loss' && filteredNegativeProfitCount !== negativeProfitCount
                   ? ` Đang hiển thị ${filteredNegativeProfitCount} SKU sau bộ lọc.`
                   : null}
@@ -455,7 +462,7 @@ export default function CostProfitReportPage() {
           <article
             key={row.skuId}
             className={`rounded-2xl border bg-white p-4 shadow-sm ${
-              row.profit < 0 ? 'border-rose-200 ring-1 ring-rose-100' : 'border-slate-200'
+              row.hasSellPrice && Number(row.profit) < 0 ? 'border-rose-200 ring-1 ring-rose-100' : 'border-slate-200'
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -465,14 +472,14 @@ export default function CostProfitReportPage() {
                 <p className="mt-1 text-xs text-slate-500">Đơn vị: {row.unitName || '—'}</p>
               </div>
               <div className="shrink-0 text-right">
-                {row.profit < 0 ? (
+                {row.hasSellPrice && Number(row.profit) < 0 ? (
                   <span className="mb-1 inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
                     <span className="material-symbols-outlined text-[12px]">warning</span>
                     Lỗ
                   </span>
                 ) : null}
-                <p className={`text-sm font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
-                  {formatVnd(row.profit)}
+                <p className={`text-sm font-semibold ${!row.hasSellPrice ? 'text-slate-400' : Number(row.profit) >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
+                  {row.hasSellPrice ? formatVnd(row.profit) : '—'}
                 </p>
               </div>
             </div>
@@ -568,7 +575,7 @@ export default function CostProfitReportPage() {
                 <tr
                   key={row.skuId}
                   className={`border-t ${
-                    row.profit < 0 ? 'border-rose-100 bg-rose-50/40' : 'border-slate-100'
+                    row.hasSellPrice && Number(row.profit) < 0 ? 'border-rose-100 bg-rose-50/40' : 'border-slate-100'
                   }`}
                 >
                   <td className="max-w-[240px] px-4 py-3 text-slate-700">
@@ -600,14 +607,14 @@ export default function CostProfitReportPage() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{row.costUpdatedAt ? formatVietnamDateTime(row.costUpdatedAt) : '—'}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
-                    {row.profit < 0 ? (
+                  <td className={`px-4 py-3 text-right font-semibold ${!row.hasSellPrice ? 'text-slate-400' : Number(row.profit) >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
+                    {row.hasSellPrice && Number(row.profit) < 0 ? (
                       <span className="mb-1 inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
                         <span className="material-symbols-outlined text-[12px]">warning</span>
                         Lỗ
                       </span>
                     ) : null}
-                    <p>{formatVnd(row.profit)}</p>
+                    <p>{row.hasSellPrice ? formatVnd(row.profit) : '—'}</p>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">

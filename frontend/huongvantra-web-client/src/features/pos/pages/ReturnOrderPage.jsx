@@ -308,11 +308,11 @@ function ReturnOrderPage() {
     }
   }, [totals.customerOwes])
 
-  const selectedReasonLabels = useMemo(
+  const selectedReasonIds = useMemo(
     () =>
       RETURN_REASON_OPTIONS
         .filter((option) => selectedReasons.includes(option.id))
-        .map((option) => option.label),
+        .map((option) => option.id),
     [selectedReasons],
   )
 
@@ -450,7 +450,7 @@ function ReturnOrderPage() {
         })),
         exchangeManualDiscount: totals.manualExchangeDiscountAmount,
         note: buildReturnNote(),
-        reasons: selectedReasonLabels,
+        reasons: selectedReasonIds,
         otherReason: hasOtherReason ? otherReason : null,
       })
 

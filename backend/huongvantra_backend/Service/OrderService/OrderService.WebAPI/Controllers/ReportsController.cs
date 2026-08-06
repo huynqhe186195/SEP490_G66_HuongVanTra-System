@@ -2,8 +2,10 @@ using System.Security.Claims;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
+using OrderService.Domain.Enums;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -199,5 +201,48 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
     {
         var points = await reportLogic.GetOrderCountTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
         return Ok(points);
+    }
+
+    /// <summary>
+    /// Báo cáo đối soát két cuối ngày theo dòng tiền thực tế.
+    /// Sale chỉ xem được phần thu của chính mình; người có quyền xem doanh thu mới lọc theo nhân viên khác.
+    /// </summary>
+    [HttpGet("daily-cash-reconciliation")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetDailyCashReconciliation(
+        [FromQuery] DateTime fromDate,
+        [FromQuery] DateTime toDate,
+        [FromQuery] Guid? employeeId,
+        [FromQuery] Guid? customerId,
+        [FromQuery] PaymentMethod? paymentMethod,
+        [FromQuery] SalesMode? salesMode,
+        [FromQuery] OrderChannel? channel,
+        [FromQuery] OrderStatus? orderStatus,
+        CancellationToken ct = default)
+    {
+        if (toDate <= fromDate)
+            return BadRequest(new { message = "Khoảng thời gian không hợp lệ." });
+
+        var effectiveEmployeeId = employeeId;
+        if (!CanViewRevenue())
+        {
+            var selfId = User.GetUserId();
+            if (selfId == Guid.Empty)
+                return Forbid();
+            effectiveEmployeeId = selfId;
+        }
+
+        var report = await reportLogic.GetDailyCashReconciliationAsync(new DailyReportFilter
+        {
+            FromUtc = fromDate.ToUniversalTime(),
+            ToUtc = toDate.ToUniversalTime(),
+            EmployeeId = effectiveEmployeeId,
+            CustomerId = customerId,
+            PaymentMethod = paymentMethod,
+            SalesMode = salesMode,
+            Channel = channel,
+            OrderStatus = orderStatus
+        }, ct);
+        return Ok(report);
     }
 }

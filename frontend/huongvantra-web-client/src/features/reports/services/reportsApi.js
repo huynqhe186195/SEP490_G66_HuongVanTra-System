@@ -1,6 +1,6 @@
 import { apiRequestAuth } from '../../../lib/apiClient'
 
-const REPORTS_API = '/api/Reports'
+const REPORTS_API = '/api/reports'
 
 function buildQueryString(params) {
   if (!params) return ''
@@ -41,5 +41,9 @@ export const reportsApi = {
 
   getOrderCountGrowth: async (params) => {
     return await apiRequestAuth(`${REPORTS_API}/order-count-growth${buildQueryString(params)}`)
+  },
+
+  getDailyCashReconciliation: async (params) => {
+    return await apiRequestAuth(`${REPORTS_API}/daily-cash-reconciliation${buildQueryString(params)}`)
   },
 }

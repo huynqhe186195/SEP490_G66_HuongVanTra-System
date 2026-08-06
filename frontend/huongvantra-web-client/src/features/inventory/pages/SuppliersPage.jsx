@@ -17,9 +17,10 @@ import {
   updateSupplier,
 } from '../services/suppliersApi.js'
 
+import { validatePhoneNumber } from '../../customers/utils/customerValidation.js'
+
 const EMPTY_FORM = { supplierCode: '', name: '', phone: '', email: '', address: '', note: '' }
 
-const PHONE_REGEX = /^(0|\+84)(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\d{7}$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validateField(field, value) {
@@ -35,11 +36,11 @@ function validateField(field, value) {
       if (trimmed.length < 2) return 'Tên nhà cung cấp phải có ít nhất 2 ký tự.'
       if (trimmed.length > 255) return 'Tên nhà cung cấp tối đa 255 ký tự.'
       return ''
-    case 'phone':
+    case 'phone': {
       if (!trimmed) return ''
-      if (!PHONE_REGEX.test(trimmed.replace(/\s/g, '')))
-        return 'Số điện thoại phải đủ 10 số (VD: 0912345678).'
-      return ''
+      const phoneError = validatePhoneNumber(trimmed.replace(/\s/g, ''), { required: false })
+      return phoneError || ''
+    }
     case 'email':
       if (!trimmed) return ''
       if (!EMAIL_REGEX.test(trimmed)) return 'Email không hợp lệ.'

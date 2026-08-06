@@ -17,16 +17,23 @@ const templatesDir = join(__dirname, '..', 'public', 'templates')
 
 const referenceData = {
   categories: [
-    { categoryDisplay: 'Trà', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Trà xanh Tân Cương Thái Nguyên', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Set Quà Cao Cấp', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Kẹo Trà', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Dụng Cụ Trà', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Hoa Trà Sáng Tạo', productType: 'THANH_PHAM' },
+    { categoryDisplay: 'Trà nguyên liệu', productType: 'NGUYEN_LIEU' },
+    { categoryDisplay: 'Bao bì sản xuất', productType: 'BAO_BI' },
   ],
   componentSkus: [
-    { skuCode: 'LA-TRA-SEN-G', display: 'LA-TRA-SEN-G — Lá trà sen — g' },
-    { skuCode: 'LY-GIAY-350', display: 'LY-GIAY-350 — Ly giấy 350ml — Cái' },
+    { skuCode: 'NL-TRA-XANH-G', display: 'NL-TRA-XANH-G — Trà xanh thô Tân Cương — g' },
+    { skuCode: 'NL-HONG-TRA-G', display: 'NL-HONG-TRA-G — Hồng trà thô Hương Vân — g' },
+    { skuCode: 'BB-HOP-GIAY-HVT', display: 'BB-HOP-GIAY-HVT — Hộp giấy Hương Vân — Cái' },
   ],
   attributeNames: [
     { attributeName: 'Hương vị' },
-    { attributeName: 'Size' },
-    { attributeName: 'Dung tích' },
+    { attributeName: 'Xuất xứ' },
+    { attributeName: 'Đóng gói' },
   ],
 }
 

@@ -30,6 +30,7 @@ import {
   createPosOrderOffline,
   createPosOrderOnline,
   createTakeawayCodOrder,
+  createTakeawayCashOrder,
   createTakeawayVietQrOrder,
   fetchApplicablePromotions,
   fetchPosCustomerContext,
@@ -96,6 +97,7 @@ const COUNTER_PAYMENT_METHODS = [
 const TAKEAWAY_PAYMENT_METHODS = [
     { id: "COD", label: "COD — thu khi giao", icon: "local_shipping" },
     { id: "TRANSFER", label: "Chuyển khoản / VietQR", icon: "account_balance" },
+    { id: "CASH", label: "Tiền mặt / ghi nợ", icon: "payments" },
 ];
 
 const CUSTOMER_SEARCH_TYPES = [
@@ -2022,8 +2024,48 @@ function PosPage() {
             return;
         }
 
+        if (paymentMethod === 'CASH') {
+            if (!selectedCustomer?.customerId && (isDebtSale || isPartialPayment)) {
+                showError('Ghi nợ / thiếu tiền yêu cầu chọn khách hàng đã đăng ký.');
+                return;
+            }
+            const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
+            const backendDebtSettlementJson = debtApplyAmount > 0
+                ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: 'CASH' })
+                : null;
+            const cashPayload = {
+                ...payload,
+                payments: [{
+                    paymentMethod: 'CASH',
+                    amount: recordedPaymentAmount,
+                    debtSettlementJson: backendDebtSettlementJson,
+                }],
+            };
+            const result = await createTakeawayCashOrder(cashPayload, { idempotencyKey });
+            if (recordedPaymentAmount > 0) {
+                await recordCashSale();
+            }
+            if (isDebtSale) {
+                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Ghi nợ ${formatMoney(debtAmount)} đ.`);
+            } else if (isPartialPayment) {
+                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Thu ${formatMoney(recordedPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`);
+            } else {
+                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Thanh toán tiền mặt thành công.`);
+            }
+            const receipt = buildReceiptData({
+                orderCode: result.orderCode,
+                method: 'CASH',
+                orderTotal: result.totalAmount,
+                amountPaid: recordedPaymentAmount,
+                customerPaid: amountPaid,
+            });
+            resetCheckoutState();
+            printReceiptFromData(receipt);
+            return;
+        }
+
         if (amountPaid > 0 && amountPaid < total) {
-            showError("Số tiền khách trả phải bằng hoặc lớn hơn thành tiền.");
+            showError("Số tiền dự kiến thu COD phải bằng hoặc lớn hơn thành tiền. Muốn thu thiếu / ghi nợ hãy chọn Tiền mặt.");
             return;
         }
 

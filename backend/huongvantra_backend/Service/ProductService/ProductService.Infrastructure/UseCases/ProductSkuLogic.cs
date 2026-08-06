@@ -483,6 +483,8 @@ public class ProductSkuLogic(
         var query = _db.ProductVariants
             .Include(v => v.Product)
                 .ThenInclude(p => p.Category)
+            .Include(v => v.Product)
+                .ThenInclude(p => p.Images)
             .AsQueryable();
 
         if (scope == CatalogViewScope.Store)
@@ -509,7 +511,7 @@ public class ProductSkuLogic(
             v.MaxStock,
             v.IsSellable,
             v.AllowRewardPoints,
-            v.ImageUrl,
+            ResolveSkuImageUrl(v),
             v.IsActive,
             v.CreatedAt,
             v.SyncedToStoreAt,
@@ -524,6 +526,22 @@ public class ProductSkuLogic(
             v.CanHaveBom,
             v.Product?.ProductType.ToString() ?? string.Empty,
             v.Product?.InventoryUnit.ToString() ?? string.Empty);
+
+    private static string? ResolveSkuImageUrl(ProductVariant variant)
+    {
+        if (!string.IsNullOrWhiteSpace(variant.ImageUrl))
+            return variant.ImageUrl;
+
+        var images = variant.Product?.Images;
+        if (images is null || images.Count == 0) return null;
+
+        return images
+            .Where(image => !image.IsDeleted && !string.IsNullOrWhiteSpace(image.ImageUrl))
+            .OrderByDescending(image => image.IsThumbnail)
+            .ThenBy(image => image.SortOrder)
+            .Select(image => image.ImageUrl)
+            .FirstOrDefault();
+    }
 
     private static ProductBomCatalogVariantResponse MapBomCatalogVariant(ProductVariant v, bool includeBomLines)
     {

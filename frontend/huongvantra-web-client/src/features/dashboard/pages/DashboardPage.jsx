@@ -6,7 +6,6 @@ import {
     LineChart, Line, CartesianGrid
 } from 'recharts';
 import PageHeader from "../../../components/shared/PageHeader.jsx";
-import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -71,8 +70,7 @@ function DashboardPage() {
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterQuarter, setFilterQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-    
+
     const [topCount, setTopCount] = useState(5); // Default top 5
     const [topProductsSortBy, setTopProductsSortBy] = useState('revenue'); // 'revenue' | 'quantity'
 
@@ -416,7 +414,9 @@ function DashboardPage() {
 
             {/* Categories Section */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Danh Mục</h3>
+                <h3 className="mb-6 text-lg font-bold text-gray-800">
+                    {canViewRevenue ? 'Doanh Số Theo Danh Mục' : 'Số lượng theo danh mục'}
+                </h3>
                 
                 {categorySales && categorySales.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
@@ -430,7 +430,7 @@ function DashboardPage() {
                                         innerRadius={60}
                                         outerRadius={100}
                                         paddingAngle={5}
-                                        dataKey="totalRevenue"
+                                        dataKey={canViewRevenue ? 'totalRevenue' : 'totalQuantitySold'}
                                         nameKey="categoryName"
                                         label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
                                     >
@@ -438,7 +438,15 @@ function DashboardPage() {
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip content={renderPieTooltip(categorySales.reduce((acc, c) => acc + c.totalRevenue, 0), true)} />
+                                    <Tooltip
+                                        content={renderPieTooltip(
+                                            categorySales.reduce(
+                                                (acc, c) => acc + (canViewRevenue ? c.totalRevenue : c.totalQuantitySold),
+                                                0,
+                                            ),
+                                            canViewRevenue,
+                                        )}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
@@ -611,19 +619,7 @@ function DashboardPage() {
                         <option value={2025}>2025</option>
                     </select>
                 </label>
-
-                <div className="ml-auto">
-                    <button
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 border border-blue-200"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">assignment</span>
-                        Báo cáo doanh thu cuối ngày
-                    </button>
-                </div>
             </div>
-
-            <EndOfDayReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
 
             {isLoading ?
                 <div className="flex justify-center p-8">

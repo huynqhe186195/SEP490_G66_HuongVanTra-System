@@ -14,7 +14,6 @@ const ROLE_GROUPS = {
 
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng / khi đã tách rõ với kiểm kê. */
 const SIDEBAR_DISABLED_MODULES = new Set([
-  'reports',
   'integrations',
   'inventory_reports',
 ])
@@ -37,7 +36,6 @@ const HOME_MODULE_PRIORITY = [
 
 // --- Tạm ẩn (chưa xử lý backend) ---
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-// { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
 
 export const navigationItems = [
@@ -229,6 +227,27 @@ export const navigationItems = [
     })),
   },
   {
+    label: 'Báo cáo',
+    path: '/reports',
+    module: 'reports',
+    icon: 'description',
+    roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+    children: [
+      {
+        label: 'Tổng quan báo cáo',
+        path: '/reports',
+        module: 'reports',
+        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+      },
+      {
+        label: 'Báo cáo cuối ngày',
+        path: '/reports/end-of-day',
+        module: 'reports',
+        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+      },
+    ],
+  },
+  {
     label: 'Tài khoản',
     path: '/admin/users',
     module: 'users_admin',
@@ -268,7 +287,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory', label: 'Kho' },
       { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
-      { path: '/inventory/stocktake' },
+      { path: '/inventory/stocktake', label: 'Kiểm kê tồn kho' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-transfers', label: 'Điều chuyển Kho → Kệ' },
     ],
@@ -482,7 +501,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-transfers', 'Phiếu điều chuyển Kho → Kệ'],
       ['/inventory/shelf-replenishment-suggestions', 'Gợi ý bổ sung Kệ Hàng'],
@@ -493,7 +512,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-requests', 'Yêu cầu bổ sung Kệ Hàng'],
     ]
@@ -617,14 +636,52 @@ function groupAdminManagerSidebar(items, isAdmin) {
     }
   }
 
-  // Thống kê bán hàng — Admin đưa lên đầu sidebar
-  const dashboard = byPath.get('/dashboard')
-  if (dashboard) {
-    consumed.add('/dashboard')
+  // Thống kê & Báo cáo — gom một nhóm (Admin: đẩy lên đầu sidebar)
+  const insightsChildren = []
+
+  const dashboardLeaf = takeNavLeaf(byPath, consumed, '/dashboard', 'Thống kê bán hàng')
+  if (dashboardLeaf) {
+    insightsChildren.push({
+      ...dashboardLeaf,
+      icon: 'dashboard',
+    })
+  }
+
+  const reportsParent = byPath.get('/reports')
+    || items.find((item) => item.module === 'reports' && item.children?.length)
+  if (reportsParent) {
+    consumed.add(reportsParent.path)
+    for (const child of reportsParent.children || []) {
+      insightsChildren.push({
+        label: child.label,
+        path: child.path,
+        module: child.module || 'reports',
+        roles: child.roles,
+      })
+    }
+  } else {
+    for (const [path, label] of [
+      ['/reports', 'Tổng quan báo cáo'],
+      ['/reports/end-of-day', 'Báo cáo cuối ngày'],
+    ]) {
+      const leaf = takeNavLeaf(byPath, consumed, path, label)
+      if (leaf) insightsChildren.push(leaf)
+    }
+  }
+
+  if (insightsChildren.length) {
+    const insightsGroup = {
+      label: 'Thống kê & Báo cáo',
+      icon: 'analytics',
+      path: '__grp_insights',
+      module: 'dashboard',
+      isGroup: true,
+      children: insightsChildren,
+    }
     if (isAdmin) {
-      result.unshift(dashboard)
+      result.unshift(insightsGroup)
     } else {
-      result.push(dashboard)
+      result.push(insightsGroup)
     }
   }
 
@@ -751,7 +808,59 @@ export function getNavigationItemsForSession(session) {
     return groupAdminManagerSidebar(items, isAdminSession(roles))
   }
 
+  if (hasAnyRoleGroup(roles, ['accountant', 'salesStaff'])) {
+    return groupSalesAccountantInsights(items)
+  }
+
   return items
+}
+
+/** Sale / Kế toán: gom Thống kê + Báo cáo thành một nhóm gọn. */
+function groupSalesAccountantInsights(items) {
+  const byPath = new Map(items.map((item) => [item.path, item]))
+  const consumed = new Set()
+  const result = []
+
+  const insightsChildren = []
+  const dashboard = byPath.get('/dashboard')
+  if (dashboard) {
+    consumed.add('/dashboard')
+    insightsChildren.push({
+      label: 'Thống kê bán hàng',
+      path: '/dashboard',
+      module: 'dashboard',
+    })
+  }
+
+  const reports = byPath.get('/reports')
+    || items.find((item) => item.module === 'reports' && item.children?.length)
+  if (reports) {
+    consumed.add(reports.path)
+    for (const child of reports.children || []) {
+      insightsChildren.push({
+        label: child.label,
+        path: child.path,
+        module: child.module || 'reports',
+        roles: child.roles,
+      })
+    }
+  }
+
+  if (insightsChildren.length) {
+    result.push({
+      label: 'Thống kê & Báo cáo',
+      icon: 'analytics',
+      path: '__grp_insights',
+      module: 'dashboard',
+      isGroup: true,
+      children: insightsChildren,
+    })
+  }
+
+  for (const item of items) {
+    if (!consumed.has(item.path)) result.push(item)
+  }
+  return result
 }
 
 export function getHomeRouteForModules(modules = []) {
@@ -1254,6 +1363,13 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'dashboard') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'reports') {
+    if (target === '/reports') {
+      return path === '/reports'
+    }
     return path === target || path.startsWith(`${target}/`)
   }
 
