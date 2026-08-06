@@ -234,6 +234,12 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
     children: [
       {
+        label: 'Tổng quan báo cáo',
+        path: '/reports',
+        module: 'reports',
+        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+      },
+      {
         label: 'Báo cáo cuối ngày',
         path: '/reports/end-of-day',
         module: 'reports',
@@ -630,14 +636,52 @@ function groupAdminManagerSidebar(items, isAdmin) {
     }
   }
 
-  // Thống kê bán hàng — Admin đưa lên đầu sidebar
-  const dashboard = byPath.get('/dashboard')
-  if (dashboard) {
-    consumed.add('/dashboard')
+  // Thống kê & Báo cáo — gom một nhóm (Admin: đẩy lên đầu sidebar)
+  const insightsChildren = []
+
+  const dashboardLeaf = takeNavLeaf(byPath, consumed, '/dashboard', 'Thống kê bán hàng')
+  if (dashboardLeaf) {
+    insightsChildren.push({
+      ...dashboardLeaf,
+      icon: 'dashboard',
+    })
+  }
+
+  const reportsParent = byPath.get('/reports')
+    || items.find((item) => item.module === 'reports' && item.children?.length)
+  if (reportsParent) {
+    consumed.add(reportsParent.path)
+    for (const child of reportsParent.children || []) {
+      insightsChildren.push({
+        label: child.label,
+        path: child.path,
+        module: child.module || 'reports',
+        roles: child.roles,
+      })
+    }
+  } else {
+    for (const [path, label] of [
+      ['/reports', 'Tổng quan báo cáo'],
+      ['/reports/end-of-day', 'Báo cáo cuối ngày'],
+    ]) {
+      const leaf = takeNavLeaf(byPath, consumed, path, label)
+      if (leaf) insightsChildren.push(leaf)
+    }
+  }
+
+  if (insightsChildren.length) {
+    const insightsGroup = {
+      label: 'Thống kê & Báo cáo',
+      icon: 'analytics',
+      path: '__grp_insights',
+      module: 'dashboard',
+      isGroup: true,
+      children: insightsChildren,
+    }
     if (isAdmin) {
-      result.unshift(dashboard)
+      result.unshift(insightsGroup)
     } else {
-      result.push(dashboard)
+      result.push(insightsGroup)
     }
   }
 
@@ -764,7 +808,59 @@ export function getNavigationItemsForSession(session) {
     return groupAdminManagerSidebar(items, isAdminSession(roles))
   }
 
+  if (hasAnyRoleGroup(roles, ['accountant', 'salesStaff'])) {
+    return groupSalesAccountantInsights(items)
+  }
+
   return items
+}
+
+/** Sale / Kế toán: gom Thống kê + Báo cáo thành một nhóm gọn. */
+function groupSalesAccountantInsights(items) {
+  const byPath = new Map(items.map((item) => [item.path, item]))
+  const consumed = new Set()
+  const result = []
+
+  const insightsChildren = []
+  const dashboard = byPath.get('/dashboard')
+  if (dashboard) {
+    consumed.add('/dashboard')
+    insightsChildren.push({
+      label: 'Thống kê bán hàng',
+      path: '/dashboard',
+      module: 'dashboard',
+    })
+  }
+
+  const reports = byPath.get('/reports')
+    || items.find((item) => item.module === 'reports' && item.children?.length)
+  if (reports) {
+    consumed.add(reports.path)
+    for (const child of reports.children || []) {
+      insightsChildren.push({
+        label: child.label,
+        path: child.path,
+        module: child.module || 'reports',
+        roles: child.roles,
+      })
+    }
+  }
+
+  if (insightsChildren.length) {
+    result.push({
+      label: 'Thống kê & Báo cáo',
+      icon: 'analytics',
+      path: '__grp_insights',
+      module: 'dashboard',
+      isGroup: true,
+      children: insightsChildren,
+    })
+  }
+
+  for (const item of items) {
+    if (!consumed.has(item.path)) result.push(item)
+  }
+  return result
 }
 
 export function getHomeRouteForModules(modules = []) {
@@ -1267,6 +1363,13 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'dashboard') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'reports') {
+    if (target === '/reports') {
+      return path === '/reports'
+    }
     return path === target || path.startsWith(`${target}/`)
   }
 
