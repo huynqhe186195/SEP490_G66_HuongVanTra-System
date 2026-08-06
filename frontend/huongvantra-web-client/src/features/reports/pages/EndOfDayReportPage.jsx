@@ -90,12 +90,22 @@ function EndOfDayReportPage() {
   const isOnline = useNetworkStatus()
   const session = loadAuthSession()
   const canFilterByEmployee = canViewAllOrders(session)
+  const visibleTabs = useMemo(
+    () => (canFilterByEmployee ? TABS : TABS.filter((tab) => tab.key !== 'inventory')),
+    [canFilterByEmployee],
+  )
   const agencyName = session?.agency?.name || 'Chi nhánh chính'
 
   const isDirty = useMemo(
     () => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters),
     [draftFilters, appliedFilters],
   )
+
+  useEffect(() => {
+    if (visibleTabs.some((tab) => tab.key === activeTab)) return
+    handleTabChange(DEFAULT_TAB)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ redirect khi tab hiện tại bị ẩn theo role
+  }, [activeTab, visibleTabs])
 
   useEffect(() => {
     loadPosSeller().then(setSellerInfo)
@@ -373,7 +383,7 @@ function EndOfDayReportPage() {
       />
 
       <div className="flex flex-wrap gap-1 border-b border-[#c1c9c0]/60">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"

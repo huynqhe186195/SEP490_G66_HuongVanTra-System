@@ -468,6 +468,17 @@ export function createTakeawayCodOrder(
   )
 }
 
+/** Mang đi thanh toán tiền mặt / ghi nợ — channel COD + địa chỉ giao. */
+export function createTakeawayCashOrder(payload, { idempotencyKey } = {}) {
+  const cashAmount = getPaymentAllocationAmount(payload, (method) => method === 'CASH')
+  return submitPosOrder(payload, {
+    orderChannel: 'COD',
+    shippingAddress: payload.shippingAddress,
+    paymentMethod: 'Cash',
+    paidAmount: cashAmount,
+  }, { idempotencyKey })
+}
+
 export async function createTakeawayVietQrOrder(
   payload,
   {
@@ -487,7 +498,8 @@ export async function createTakeawayVietQrOrder(
       }],
     },
     {
-      orderChannel: 'Phone',
+      // Mang đi + QR vẫn theo dõi như đơn giao COD (địa chỉ giao), không phải Phone.
+      orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'VietQR',
       paidAmount: 0,

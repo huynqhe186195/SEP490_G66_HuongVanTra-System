@@ -1,6 +1,6 @@
 import { apiRequestAuth } from '../../../lib/apiClient'
 
-const REPORTS_API = '/api/Reports'
+const REPORTS_API = '/api/reports'
 
 function buildQueryString(params) {
   if (!params) return ''

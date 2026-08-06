@@ -39,6 +39,13 @@ public class PaymentLogic(
             ?? throw new OrderNotFoundException(payment.OrderId);
         EnsureCanModify(order, access);
 
+        if (order.OrderStatus == OrderStatus.Cancelled)
+            throw new OrderValidationException("Không thể xác nhận thu COD cho đơn đã hủy.");
+        if (order.OrderStatus == OrderStatus.Completed && payment.IsCodVerified)
+            throw new OrderValidationException("Đơn COD này đã được xác nhận thu tiền rồi.");
+        if (order.OrderStatus is OrderStatus.Draft or OrderStatus.CancellationRequested)
+            throw new OrderValidationException("Trạng thái đơn hiện tại không cho phép thu COD.");
+
         var collected = req.CollectedAmount > 0 ? req.CollectedAmount : order.FinalAmount;
         if (collected < order.FinalAmount)
             throw new OrderValidationException(

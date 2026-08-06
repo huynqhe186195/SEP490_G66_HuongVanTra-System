@@ -858,6 +858,10 @@ function toProductPayload(row) {
   const skuRows = syncSkuRows(row, getSkuRows(row))
   const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0]
   const baseUnit = baseSku?.unitName || row.baseUnit || 'unit'
+  const productThumbnailUrl = (Array.isArray(row.images) ? row.images : [])
+    .filter((image) => !image.uploading && normalizeText(image.imageUrl))
+    .sort((left, right) => Number(Boolean(right.isThumbnail)) - Number(Boolean(left.isThumbnail)) || (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+    .map((image) => normalizeText(image.imageUrl))[0] || ''
 
   return {
     categoryId: Number(row.categoryId),
@@ -912,7 +916,7 @@ function toProductPayload(row) {
         isSellable: sku.isSellable !== false,
         allowRewardPoints: true,
         isActive: true,
-        imageUrl: '',
+        imageUrl: normalizeText(sku.imageUrl) || productThumbnailUrl,
         unitName: sku.unitName || baseUnit,
         conversionRate: Number(sku.conversionRate || 1),
         baseRequestSkuKey: sku.isBaseUnitVariant ? null : (sku.baseRequestSkuKey || baseSku?.requestSkuKey || null),
@@ -2897,7 +2901,8 @@ export default function ProductApprovalsPage() {
       await submitProductCreationRequest(saved.id, warehouseNote)
       showSuccess('Đã gửi yêu cầu cho Admin duyệt.')
       resetForm()
-      await loadRequests(statusFilter)
+      navigate('/inventory/product-approvals')
+      return
     } catch (error) {
       showError(error.message)
     } finally {

@@ -464,7 +464,7 @@ function buildGuideSheet({ isSample = false } = {}) {
     { text: 'HƯỚNG DẪN NHẬP HÀNG HÓA MỚI', kind: 'title' },
     { text: 'Hương Vân Trà — mẫu Excel nhiều sheet, dễ điền', kind: 'subtitle' },
     { text: '', kind: 'blank' },
-    { text: isSample ? 'File này là BẢN CÓ DỮ LIỆU MẪU — dùng để học cách điền.' : 'File này là MẪU TRỐNG (có 1 ví dụ nhẹ) — điền thêm rồi Import.', kind: 'tip' },
+    { text: isSample ? 'File này chứa catalog mẫu Hương Vân — tên và giá bán tham khảo huongvantra.vn (08/2026).' : 'File này là MẪU TRỐNG (có 1 ví dụ nhẹ) — điền thêm rồi Import.', kind: 'tip' },
     { text: '', kind: 'blank' },
     { text: 'Cách dùng nhanh', kind: 'section' },
     { text: '1. Điền 1 dòng sản phẩm ở sheet 1_SanPham (Mã sản phẩm duy nhất).', kind: 'body' },
@@ -472,12 +472,15 @@ function buildGuideSheet({ isSample = false } = {}) {
     { text: '3. (Tuỳ chọn) Thuộc tính ở sheet 3_ThuocTinh.', kind: 'body' },
     { text: '4. BOM ở sheet 4_BOM — bắt buộc với THANH_PHAM (Sản phẩm kệ). Mỗi khối màu = 1 sản phẩm.', kind: 'body' },
     { text: '5. Xem gợi ý / dropdown ở sheet _ThamChieu.', kind: 'body' },
-    { text: '6. Ảnh sản phẩm: có thể thêm sau trên web, hoặc nén Excel + ảnh vào ZIP. Ảnh được ghép theo Mã sản phẩm và upload khi gửi duyệt.', kind: 'body' },
+    { text: '6. Ảnh sản phẩm: nén Excel + ảnh vào ZIP. Ảnh được ghép theo Mã sản phẩm và upload Cloudinary khi gửi duyệt.', kind: 'body' },
     { text: '', kind: 'blank' },
     { text: 'Quy tắc quan trọng', kind: 'section' },
     { text: '• Mã sản phẩm là chìa khóa nối các sheet.', kind: 'body' },
-    { text: '• Nếu dùng ZIP: chỉ để 1 file .xlsx; tên ảnh theo Mã sản phẩm, ví dụ SP01.jpg, SP01_2.jpg (tối đa 5 ảnh/SP, 5MB/ảnh).', kind: 'body' },
+    { text: '• ZIP chỉ có 1 file .xlsx; ảnh theo Mã sản phẩm, ví dụ HVT01.jpg, HVT01_2.jpg (tối đa 5 ảnh/SP, 5MB/ảnh).', kind: 'body' },
+    { text: '• Phải cấu hình Cloudinary trước khi gửi duyệt file có ảnh. Không dùng URL ảnh trực tiếp từ website làm dữ liệu lâu dài.', kind: 'body' },
+    { text: '• Giá vốn trong file Hương Vân chỉ là dữ liệu demo (~50% giá bán), không phải giá vốn thực tế của HTX.', kind: 'body' },
     { text: '• Mỗi sản phẩm chỉ có đúng 1 đơn vị cơ bản = Có, Quy đổi = 1.', kind: 'body' },
+    { text: '• Quy đổi phải là số nguyên dương; giá SKU quy đổi luôn = giá SKU cơ bản × Quy đổi.', kind: 'body' },
     { text: '• Đơn vị tồn: Piece hoặc Gram.', kind: 'body' },
     { text: '• Loại hàng hóa: THANH_PHAM / NGUYEN_LIEU / BAO_BI.', kind: 'body' },
     { text: '• Cột Có/Không chỉ nhận: Có hoặc Không.', kind: 'body' },
@@ -711,57 +714,46 @@ function demoProductRows() {
   return {
     products: [
       {
-        productKey: 'SP01',
-        productName: 'Trà Sen',
+        productKey: 'HVT07',
+        productName: 'Hương Trà Hương Vân',
         productType: PRODUCT_TYPE.THANH_PHAM,
-        category: 'Trà',
+        category: 'Trà xanh Tân Cương Thái Nguyên',
         inventoryUnit: 'Piece',
-        description: 'Ví dụ nhẹ — xóa nếu không dùng',
+        description: 'Ví dụ theo catalog Hương Vân — xóa nếu không dùng',
       },
     ],
     skus: [
       {
-        productKey: 'SP01',
-        skuRef: 'SP01-U1',
-        skuCode: 'TRA-SEN-LY',
-        unitName: 'Ly',
+        productKey: 'HVT07',
+        skuRef: 'HVT07-U1',
+        skuCode: 'HVT-HUONGTRA-100G',
+        unitName: 'Hộp 100g',
         conversionRate: 1,
         isBaseUnit: 'Có',
-        retailPrice: 35000,
-        costPrice: 12000,
+        retailPrice: 175000,
+        costPrice: 87500,
         isSellable: 'Có',
-        minStock: 0,
-      },
-      {
-        productKey: 'SP01',
-        skuRef: 'SP01-U2',
-        skuCode: 'TRA-SEN-SET',
-        unitName: 'Set',
-        conversionRate: 2,
-        isBaseUnit: 'Không',
-        retailPrice: 70000,
-        costPrice: 24000,
-        isSellable: 'Có',
-        minStock: 0,
+        minStock: 5,
+        maxStock: 100,
       },
     ],
     attributes: [
-      { productKey: 'SP01', attributeName: 'Size', attributeValue: 'M' },
+      { productKey: 'HVT07', attributeName: 'Xuất xứ', attributeValue: 'Thái Nguyên' },
     ],
     boms: [
       {
-        productKey: 'SP01',
-        skuRef: 'SP01-U1',
-        componentSku: 'LA-TRA-SEN-G',
-        bomQuantity: 5,
-        bomNote: 'Ví dụ BOM — Sản phẩm kệ bắt buộc có BOM',
+        productKey: 'HVT07',
+        skuRef: 'HVT07-U1',
+        componentSku: 'NL-TRA-XANH-G',
+        bomQuantity: 100,
+        bomNote: 'Ví dụ BOM — cần import nguyên liệu cùng file hoặc đã có sẵn',
       },
     ],
   }
 }
 
-/** File có dữ liệu mẫu đầy đủ hơn để học */
-export function richSampleProductRows() {
+/** @deprecated Dữ liệu mẫu cũ, giữ tạm để đối chiếu khi chuyển catalog Hương Vân. */
+export function legacyRichSampleProductRows() {
   return {
     products: [
       {
@@ -1235,6 +1227,337 @@ export function richSampleProductRows() {
       },
     ],
   }
+}
+
+/**
+ * Catalog mẫu lấy theo tên / giá công khai trên huongvantra.vn (snapshot 08/2026).
+ * Giá vốn chỉ là dữ liệu demo, ước tính khoảng 50% giá bán.
+ * Ràng buộc import: Quy đổi là số nguyên dương và giá SKU quy đổi = giá SKU cơ bản × Quy đổi,
+ * nên các quy cách không tỷ lệ tuyến tính được tách thành sản phẩm riêng.
+ * Mã HVTxx cũng là tên file ảnh khi import ZIP: HVT01.jpg, HVT01_2.jpg...
+ */
+export function richSampleProductRows() {
+  const componentProducts = [
+    { key: 'NL01', name: 'Trà xanh thô Tân Cương', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-TRA-XANH-G', cost: 180, min: 20000 },
+    { key: 'NL02', name: 'Hồng trà thô Hương Vân', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HONG-TRA-G', cost: 220, min: 10000 },
+    { key: 'NL03', name: 'Hoa bưởi sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-BUOI-G', cost: 900, min: 2000 },
+    { key: 'NL04', name: 'Hoa sen sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-SEN-G', cost: 1200, min: 2000 },
+    { key: 'BB01', name: 'Túi trà thực phẩm', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-TUI-TRA', cost: 1500, min: 500 },
+    { key: 'BB02', name: 'Hộp giấy Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HOP-GIAY-HVT', cost: 5000, min: 300 },
+    { key: 'BB03', name: 'Hũ sứ đựng trà', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HU-SU-HVT', cost: 45000, min: 100 },
+    { key: 'BB04', name: 'Hộp quà cứng Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HOP-QUA-HVT', cost: 50000, min: 100 },
+    { key: 'BB05', name: 'Tem chống giả Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-TEM-HVT', cost: 300, min: 1000 },
+  ]
+
+  const finishedProducts = [
+    {
+      key: 'HVT01', name: 'Hồng Trà Hương Vân', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Hồng trà cổ thụ, vị dịu và hậu ngọt.',
+      variants: [
+        ['HVT-HONGTRA-100G', 'Hộp 100g', 1, 150000],
+        ['HVT-HONGTRA-1KG', 'Gói 1kg', 10, 1500000],
+      ],
+      bom: [['NL-HONG-TRA-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Đóng gói', 'Hộp giấy / gói'], ['Xuất xứ', 'Thái Nguyên']],
+    },
+    {
+      key: 'HVT02', name: 'Trà Ướp Hoa Bưởi', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà xanh Hương Vân ướp hoa bưởi tự nhiên.',
+      variants: [
+        ['HVT-HOABUOI-100G', 'Hộp 100g', 1, 275000],
+        ['HVT-HOABUOI-500G', 'Hộp 500g', 5, 1375000],
+      ],
+      bom: [['NL-TRA-XANH-G', 95], ['NL-HOA-BUOI-G', 5], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Hương vị', 'Hoa bưởi'], ['Xuất xứ', 'Thái Nguyên']],
+    },
+    {
+      key: 'HVT03', name: 'Trà Vón – Trà Ký Ức', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Dòng trà ký ức mang phong vị truyền thống Hương Vân.',
+      variants: [
+        ['HVT-TRAVON-100G', 'Gói 100g', 1, 150000],
+        ['HVT-TRAVON-500G', 'Gói 500g', 5, 750000],
+      ],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Dòng trà', 'Trà truyền thống']],
+    },
+    {
+      key: 'HVT04', name: 'Trà Hoa Thảo Mộc', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà phối hoa và thảo mộc dùng hằng ngày.',
+      variants: [
+        ['HVT-THAOMOC-50G', 'Gói 50g', 1, 40000],
+        ['HVT-THAOMOC-500G', 'Hộp 500g', 10, 400000],
+      ],
+      bom: [['NL-TRA-XANH-G', 45], ['NL-HOA-SEN-G', 5], ['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Hương vị', 'Hoa và thảo mộc']],
+    },
+    {
+      key: 'HVT05', name: 'Thanh Hoa Trà', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà xanh thanh hương, hậu vị nhẹ.',
+      variants: [
+        ['HVT-THANHHOA-100G', 'Hộp 100g', 1, 150000],
+        ['HVT-THANHHOA-200G', 'Hộp 200g', 2, 300000],
+      ],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Dòng trà', 'Thanh hương']],
+    },
+    {
+      key: 'HVT06', name: 'Trà Sen Sấy Thăng Hoa Hảo Hạng', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà sen sấy thăng hoa giữ hương tự nhiên.',
+      variants: [['HVT-SEN-THANGHOA', 'Hộp', 1, 120000]],
+      bom: [['NL-TRA-XANH-G', 45], ['NL-HOA-SEN-G', 5], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Hương vị', 'Hoa sen']],
+    },
+    {
+      key: 'HVT07', name: 'Hương Trà Hương Vân', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Dòng trà phổ thông dùng hằng ngày.',
+      variants: [['HVT-HUONGTRA-100G', 'Hộp 100g', 1, 175000]],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Xuất xứ', 'Thái Nguyên']],
+    },
+    {
+      key: 'HVT08', name: 'Ngọc Xuân Trà – Trà Đinh', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Dòng trà đinh cao cấp của Hương Vân.',
+      variants: [
+        ['HVT-NGOCXUAN-100G', 'Hộp 100g', 1, 750000],
+        ['HVT-NGOCXUAN-200G', 'Hộp 200g', 2, 1500000],
+      ],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Phân hạng', 'Trà đinh cao cấp']],
+    },
+    {
+      key: 'HVT09', name: 'Tam Phúc Trà – Trà Móc Câu', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà móc câu Tân Cương mang thương hiệu Tam Phúc.',
+      variants: [
+        ['HVT-TAMPHUC-100G', 'Hộp 100g', 1, 150000],
+        ['HVT-TAMPHUC-500G', 'Hộp 500g', 5, 750000],
+      ],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Phân hạng', 'Trà móc câu']],
+    },
+    {
+      key: 'HVT10', name: 'Trà Lục Bảo', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Dòng trà quà biếu cao cấp.',
+      variants: [['HVT-LUCBAO', 'Hộp', 1, 2150000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Phân hạng', 'Cao cấp']],
+    },
+    {
+      key: 'HVT11', name: 'Hộp Trà Nõn Tôm Cao Cấp', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Trà nõn tôm tuyển chọn tại Tân Cương.',
+      variants: [
+        ['HVT-NONTOM-100G', 'Hộp 100g', 1, 400000],
+        ['HVT-NONTOM-500G', 'Hộp 500g', 5, 2000000],
+      ],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Phân hạng', 'Nõn tôm']],
+    },
+    {
+      key: 'HVT12', name: 'Hộp Trà Trống Đồng Hương Vân', category: 'Set Quà Cao Cấp',
+      description: 'Hộp trà quà tặng họa tiết trống đồng.',
+      variants: [['HVT-SET-TRONGDONG', 'Hộp', 1, 250000]],
+      bom: [['NL-TRA-XANH-G', 100], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Kiểu hộp', 'Trống đồng']],
+    },
+    {
+      key: 'HVT13', name: 'Hộp Hương Trà Đặc Biệt', category: 'Set Quà Cao Cấp',
+      description: 'Set Hương Trà đặc biệt dùng biếu tặng.',
+      variants: [['HVT-SET-HUONGTRA-DB', 'Hộp', 1, 850000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Dịp sử dụng', 'Quà biếu']],
+    },
+    {
+      key: 'HVT14', name: 'Túi Gấm Trà Cao Cấp', category: 'Set Quà Cao Cấp',
+      description: 'Set trà trong túi gấm cao cấp.',
+      variants: [['HVT-SET-TUIGAM', 'Túi', 1, 800000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-TUI-TRA', 2], ['BB-TEM-HVT', 1]],
+      attributes: [['Bao gói', 'Túi gấm']],
+    },
+    {
+      key: 'HVT15', name: 'Hộp Trà Gỗ Bọc Da Cao Cấp', category: 'Set Quà Cao Cấp',
+      description: 'Hộp gỗ bọc da sang trọng cho đối tác.',
+      variants: [['HVT-SET-GO-DA', 'Hộp', 1, 850000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Gỗ bọc da']],
+    },
+    {
+      key: 'HVT16', name: 'Hộp Trà Vân Gỗ Cao Cấp', category: 'Set Quà Cao Cấp',
+      description: 'Hộp quà vân gỗ Hương Vân.',
+      variants: [['HVT-SET-VANGO', 'Hộp', 1, 900000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Vân gỗ']],
+    },
+    {
+      key: 'HVT17', name: 'Hộp Trà Nắp Gỗ Cao Cấp', category: 'Set Quà Cao Cấp',
+      description: 'Hộp trà nắp gỗ cao cấp.',
+      variants: [['HVT-SET-NAPGO', 'Hộp', 1, 800000]],
+      bom: [['NL-TRA-XANH-G', 250], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Nắp gỗ']],
+    },
+    {
+      key: 'HVT18', name: 'Hộp Trà Đoàn Viên Cao Cấp', category: 'Set Quà Cao Cấp',
+      description: 'Set trà Đoàn Viên dùng tặng gia đình và đối tác.',
+      variants: [['HVT-SET-DOANVIEN', 'Hộp', 1, 1800000]],
+      bom: [['NL-TRA-XANH-G', 500], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Dịp sử dụng', 'Đoàn viên / lễ tết']],
+    },
+    {
+      key: 'HVT19', name: 'Kẹo Trà Hương Vân', category: 'Kẹo Trà',
+      description: 'Kẹo làm từ trà Hương Vân.',
+      variants: [['HVT-KEOTRA', 'Hộp', 1, 300000]],
+      bom: [['NL-TRA-XANH-G', 20], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Hương vị', 'Trà xanh']],
+    },
+    {
+      key: 'HVT20', name: 'Chè Lam Matcha', category: 'Kẹo Trà',
+      description: 'Chè lam vị trà xanh dùng cùng trà nóng.',
+      variants: [['HVT-CHELAM-MATCHA', 'Hộp', 1, 95000]],
+      bom: [['NL-TRA-XANH-G', 10], ['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Hương vị', 'Trà xanh']],
+    },
+    {
+      key: 'HVT21', name: 'Hoa Trà Hương Vân', category: 'Hoa Trà Sáng Tạo',
+      description: 'Hoa trà nghệ thuật bó thủ công.',
+      variants: [
+        ['HVT-HOATRA-50', 'Bó 50 bông', 1, 500000],
+        ['HVT-HOATRA-100', 'Bó 100 bông', 2, 1000000],
+      ],
+      bom: [['NL-HOA-SEN-G', 50], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Quy cách', 'Bó hoa trà']],
+    },
+    {
+      key: 'HVT22', name: 'Tống Thủy Tinh Trong', category: 'Dụng Cụ Trà',
+      description: 'Tống thủy tinh trong dùng chia trà.',
+      variants: [['HVT-TONG-THUY-TINH', 'Cái', 1, 420000]],
+      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Thủy tinh']],
+    },
+    {
+      key: 'HVT23', name: 'Tống Nâu Đỏ', category: 'Dụng Cụ Trà',
+      description: 'Tống trà màu nâu đỏ.',
+      variants: [['HVT-TONG-NAU-DO', 'Cái', 1, 105000]],
+      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Màu sắc', 'Nâu đỏ']],
+    },
+    {
+      key: 'HVT24', name: 'Tống Quai Gỗ To', category: 'Dụng Cụ Trà',
+      description: 'Tống trà quai gỗ cỡ lớn.',
+      variants: [['HVT-TONG-QUAI-GO', 'Cái', 1, 300000]],
+      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Thủy tinh / gỗ']],
+    },
+    {
+      key: 'HVT25', name: 'Xúc Trà Tre', category: 'Dụng Cụ Trà',
+      description: 'Xúc trà bằng tre tự nhiên.',
+      variants: [['HVT-XUC-TRE', 'Cái', 1, 35000]],
+      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Tre']],
+    },
+    {
+      key: 'HVT26', name: 'Xúc Trà Đồng Cán Gỗ Lẻ', category: 'Dụng Cụ Trà',
+      description: 'Xúc trà đồng cán gỗ bán lẻ.',
+      variants: [['HVT-XUC-DONG-GO', 'Cái', 1, 45000]],
+      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Đồng / gỗ']],
+    },
+    {
+      key: 'HVT27', name: 'Xúc Trà Gỗ Nâu', category: 'Dụng Cụ Trà',
+      description: 'Xúc trà gỗ nâu thủ công.',
+      variants: [['HVT-XUC-GO-NAU', 'Cái', 1, 80000]],
+      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Chất liệu', 'Gỗ']],
+    },
+    {
+      key: 'HVT28', name: 'Xúc Trà Vàng Chuôi Đen', category: 'Dụng Cụ Trà',
+      description: 'Xúc trà màu vàng, chuôi đen.',
+      variants: [['HVT-XUC-VANG-DEN', 'Cái', 1, 200000]],
+      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Màu sắc', 'Vàng / đen']],
+    },
+    {
+      key: 'HVT29', name: 'Xúc Trà Chuôi Rồng', category: 'Dụng Cụ Trà',
+      description: 'Xúc trà trang trí chuôi rồng.',
+      variants: [['HVT-XUC-CHUOI-RONG', 'Cái', 1, 95000]],
+      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Kiểu dáng', 'Chuôi rồng']],
+    },
+    {
+      key: 'HVT30', name: 'Hồng Trà Hũ Sứ 50g', category: 'Trà xanh Tân Cương Thái Nguyên',
+      description: 'Hồng trà Hương Vân đóng hũ sứ 50g.',
+      variants: [['HVT-HONGTRA-50G-HU', 'Hũ 50g', 1, 275000]],
+      bom: [['NL-HONG-TRA-G', 50], ['BB-HU-SU-HVT', 1], ['BB-TEM-HVT', 1]],
+      attributes: [['Đóng gói', 'Hũ sứ'], ['Xuất xứ', 'Thái Nguyên']],
+    },
+  ]
+
+  const products = componentProducts.map((item) => ({
+    productKey: item.key,
+    productName: item.name,
+    productType: item.type,
+    category: item.category,
+    inventoryUnit: item.unit,
+    description: 'Dữ liệu nội bộ phục vụ BOM và quản lý kho.',
+  }))
+  const skus = componentProducts.map((item) => ({
+    productKey: item.key,
+    skuRef: `${item.key}-U1`,
+    skuCode: item.code,
+    unitName: item.unit === 'Gram' ? 'g' : 'Cái',
+    conversionRate: 1,
+    isBaseUnit: 'Có',
+    retailPrice: 0,
+    salesTaxPercent: 0,
+    costPrice: item.cost,
+    isSellable: 'Không',
+    minStock: item.min,
+    maxStock: item.min * 5,
+  }))
+  const attributes = []
+  const boms = []
+
+  finishedProducts.forEach((product, productIndex) => {
+    products.push({
+      productKey: product.key,
+      productName: product.name,
+      productType: PRODUCT_TYPE.THANH_PHAM,
+      category: product.category,
+      inventoryUnit: 'Piece',
+      description: `${product.description} Nguồn tên/giá: huongvantra.vn (08/2026).`,
+    })
+
+    product.variants.forEach(([skuCode, unitName, conversionRate, retailPrice], variantIndex) => {
+      skus.push({
+        productKey: product.key,
+        skuRef: `${product.key}-U${variantIndex + 1}`,
+        skuCode,
+        unitName,
+        conversionRate,
+        isBaseUnit: variantIndex === 0 ? 'Có' : 'Không',
+        retailPrice,
+        salesTaxPercent: 0,
+        costPrice: Math.round(retailPrice * 0.5),
+        barcode: `8934674${String(productIndex * 10 + variantIndex + 1).padStart(6, '0')}`,
+        isSellable: 'Có',
+        minStock: 5,
+        maxStock: 100,
+      })
+    })
+
+    product.attributes.forEach(([attributeName, attributeValue]) => {
+      attributes.push({ productKey: product.key, attributeName, attributeValue })
+    })
+
+    product.bom.forEach(([componentSku, bomQuantity]) => {
+      boms.push({
+        productKey: product.key,
+        skuRef: `${product.key}-U1`,
+        componentSku,
+        bomQuantity,
+        bomNote: `Định mức demo cho ${product.name}`,
+      })
+    })
+  })
+
+  return { products, skus, attributes, boms }
 }
 
 function groupExportRows(exportRows = []) {
