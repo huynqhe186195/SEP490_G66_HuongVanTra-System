@@ -19,48 +19,58 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
-function getPrintCss(orientation) {
+/**
+ * CSS bản in. Khi `scope` rỗng thì áp thẳng lên document (dùng cho iframe in).
+ * Khi có `scope`, mọi luật được giới hạn trong phần tử đó để không rò ra giao diện
+ * ứng dụng trong lúc html2canvas chụp ảnh.
+ */
+function getPrintCss(orientation, scope = '') {
   const isLandscape = orientation === 'landscape'
+  const p = scope ? `${scope} ` : ''
+  const root = scope || 'html, body'
+  // Ở chế độ scope, chính phần tử nguồn mang cả class scope và class report-shell,
+  // nên selector phải dán liền nhau thay vì cách nhau một dấu trắng.
+  const shell = scope ? `${scope}.report-shell` : '.report-shell'
   return `
-    * { box-sizing: border-box; }
-    html, body {
+    ${p}* { box-sizing: border-box; }
+    ${root} {
       margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 12px; line-height: 1.45; color: #000; background: #fff;
     }
     @page { size: A4 ${isLandscape ? 'landscape' : 'portrait'}; margin: 12mm; }
-    .report-shell { width: 100%; max-width: ${isLandscape ? '265mm' : '180mm'}; margin: 0 auto; }
+    ${shell} { width: 100%; max-width: ${isLandscape ? '265mm' : '180mm'}; margin: 0 auto; }
 
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .text-left { text-align: left; }
-    .font-bold { font-weight: bold; }
+    ${p}.text-center { text-align: center; }
+    ${p}.text-right { text-align: right; }
+    ${p}.text-left { text-align: left; }
+    ${p}.font-bold { font-weight: bold; }
 
-    h1.report-title { font-size: ${isLandscape ? '20px' : '18px'}; margin: 0 0 6px; text-transform: uppercase; }
-    .meta-table { width: 100%; margin-top: 10px; font-size: 11px; }
-    .meta-table td { border: none; padding: 2px 4px; text-align: left; }
+    ${p}h1.report-title { font-size: ${isLandscape ? '20px' : '18px'}; margin: 0 0 6px; text-transform: uppercase; }
+    ${p}.meta-table { width: 100%; margin-top: 10px; font-size: 11px; }
+    ${p}.meta-table td { border: none; padding: 2px 4px; text-align: left; }
 
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { border: 1px solid #ddd; padding: 5px 6px; text-align: right; font-size: 11px; }
-    th:first-child, td:first-child { text-align: left; }
-    th { background: #f1f3f0; font-weight: bold; text-align: center; }
-    tfoot tr { background: #f9f9f9; font-weight: bold; }
+    ${p}table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    ${p}th, ${p}td { border: 1px solid #ddd; padding: 5px 6px; text-align: right; font-size: 11px; }
+    ${p}th:first-child, ${p}td:first-child { text-align: left; }
+    ${p}th { background: #f1f3f0; font-weight: bold; text-align: center; }
+    ${p}tfoot tr { background: #f9f9f9; font-weight: bold; }
 
-    .section { page-break-inside: avoid; }
-    .section-title {
+    ${p}.section { page-break-inside: avoid; }
+    ${p}.section-title {
       margin-top: 16px; font-weight: bold; font-size: 12px; text-transform: uppercase;
       border-bottom: 2px solid #333; padding-bottom: 3px;
     }
-    .note { margin-top: 5px; font-size: 10px; color: #666; font-style: italic; }
-    .kpi-grid { display: flex; gap: 8px; margin-top: 8px; }
-    .kpi {
+    ${p}.note { margin-top: 5px; font-size: 10px; color: #666; font-style: italic; }
+    ${p}.kpi-grid { display: flex; gap: 8px; margin-top: 8px; }
+    ${p}.kpi {
       flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 8px;
     }
-    .kpi .kpi-label { font-size: 10px; color: #555; }
-    .kpi .kpi-value { font-size: ${isLandscape ? '17px' : '15px'}; font-weight: bold; margin-top: 2px; }
-    .kpi .kpi-hint { font-size: 9px; color: #777; margin-top: 3px; }
-    .negative { color: #b42318; }
-    .page-break { page-break-before: always; }
+    ${p}.kpi .kpi-label { font-size: 10px; color: #555; }
+    ${p}.kpi .kpi-value { font-size: ${isLandscape ? '17px' : '15px'}; font-weight: bold; margin-top: 2px; }
+    ${p}.kpi .kpi-hint { font-size: 9px; color: #777; margin-top: 3px; }
+    ${p}.negative { color: #b42318; }
+    ${p}.page-break { page-break-before: always; }
   `
 }
 
@@ -355,25 +365,71 @@ export function printEndOfDayReport(data) {
   })
 }
 
-/** Xuất thẳng ra file PDF, không đi qua hộp thoại in. */
+const PDF_SHELL_CLASS = 'eod-pdf-shell'
+
+/**
+ * Xuất thẳng ra file PDF, không đi qua hộp thoại in.
+ *
+ * Hai điểm bắt buộc phải giữ, nếu không file sẽ trắng hoặc mất định dạng:
+ * - html2canvas chỉ chụp được phần tử nằm trong vùng nhìn thấy, nên phần tử nguồn đặt ở
+ *   toạ độ 0,0 và chỉ giấu bằng opacity/z-index thay vì đẩy ra ngoài màn hình.
+ * - html2pdf deep-clone phần tử nguồn rồi gắn bản sao vào một container mới ngay dưới
+ *   document.body, nên thẻ <style> phải nằm BÊN TRONG phần tử nguồn để đi theo bản sao,
+ *   và CSS phải scope theo class của chính phần tử đó thay vì theo phần tử cha.
+ */
 export async function exportEndOfDayPdf(data) {
   const { default: html2pdf } = await import('html2pdf.js')
+  const orientation = data.orientation === 'landscape' ? 'landscape' : 'portrait'
+
   const holder = document.createElement('div')
-  holder.style.cssText = 'position:fixed;left:-10000px;top:0;background:#fff;'
-  holder.innerHTML = `<style>${getPrintCss(data.orientation)}</style><div class="report-shell">${buildEndOfDayHtml(data)}</div>`
+  holder.style.cssText = [
+    'position:fixed',
+    'left:0',
+    'top:0',
+    `width:${orientation === 'landscape' ? '1123px' : '794px'}`,
+    'background:#ffffff',
+    'z-index:-1',
+    'opacity:0',
+    'pointer-events:none',
+    'overflow:visible',
+  ].join(';')
+
+  const shell = document.createElement('div')
+  shell.className = `report-shell ${PDF_SHELL_CLASS}`
+  shell.innerHTML = `<style>${getPrintCss(orientation, `.${PDF_SHELL_CLASS}`)}</style>${buildEndOfDayHtml(data)}`
+
+  holder.appendChild(shell)
   document.body.appendChild(holder)
 
   try {
+    // Chờ một nhịp layout để html2canvas đo được kích thước thật của bảng.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
     await html2pdf()
       .set({
         margin: 10,
         filename: `${data.filename || 'Bao_cao_cuoi_ngay'}.pdf`,
         image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: data.orientation === 'landscape' ? 'landscape' : 'portrait' },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: shell.scrollWidth,
+          windowHeight: shell.scrollHeight,
+          // Bản sao mà html2canvas dựng trong iframe riêng vẫn thừa hưởng opacity:0
+          // của phần tử nguồn nên phải bật lại, không thì ảnh chụp ra trắng.
+          onclone: (clonedDoc) => {
+            clonedDoc.querySelectorAll(`.${PDF_SHELL_CLASS}`).forEach((node) => {
+              node.style.opacity = '1'
+            })
+          },
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation },
         pagebreak: { mode: ['css', 'legacy'] },
       })
-      .from(holder)
+      .from(shell)
       .save()
   } finally {
     if (holder.parentNode) holder.parentNode.removeChild(holder)
