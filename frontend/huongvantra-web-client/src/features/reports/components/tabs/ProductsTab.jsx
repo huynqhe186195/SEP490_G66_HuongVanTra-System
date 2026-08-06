@@ -3,7 +3,9 @@ import { Card, DataTable } from '../reportUi.jsx'
 
 /**
  * Bảng hàng hóa. Cố ý KHÔNG có ô "tổng số lượng": hàng tính theo Gram và hàng tính
- * theo cái không cộng chung được, nên dùng số dòng hàng và số SKU thay thế.
+ * theo cái không cộng chung được, nên dùng số dòng hàng và số sản phẩm thay thế.
+ * "Số sản phẩm phát sinh" đếm SkuId không trùng lặp, nên hai quy cách khác nhau của
+ * cùng một mặt hàng vẫn được tính là hai.
  */
 function ProductsTab({ report }) {
   const products = report.products || []
@@ -16,7 +18,7 @@ function ProductsTab({ report }) {
           <p className="mt-1 text-xl font-bold text-[#1b1c17]">{report.totalLineCount || 0}</p>
         </div>
         <div className="rounded-2xl border border-[#c1c9c0]/40 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#717971]">Số SKU phát sinh</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#717971]">Số sản phẩm phát sinh</p>
           <p className="mt-1 text-xl font-bold text-[#1b1c17]">{report.distinctSkuCount || 0}</p>
         </div>
         <div className="rounded-2xl border border-[#c1c9c0]/40 bg-white p-4 shadow-sm">

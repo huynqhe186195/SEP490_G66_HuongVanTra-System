@@ -69,7 +69,7 @@ function buildOverviewSheet(report, meta) {
     ['Doanh thu ghi nhận thuần', report.netRecognizedRevenue || 0],
     ['Đơn hoàn tất', report.completedOrders || 0],
     ['Tổng dòng hàng', report.totalLineCount || 0],
-    ['Số SKU phát sinh', report.distinctSkuCount || 0],
+    ['Số sản phẩm phát sinh', report.distinctSkuCount || 0],
     [],
     ['DÒNG TIỀN', 'Giá trị'],
     ['Tổng thu vào', report.totalCashIn || 0],
@@ -198,7 +198,7 @@ function buildProductsSheet(report, meta) {
   rows.push(
     [],
     ['Tổng dòng hàng', report.totalLineCount || 0],
-    ['Số SKU phát sinh', report.distinctSkuCount || 0],
+    ['Số sản phẩm phát sinh', report.distinctSkuCount || 0],
     [],
     ['Ghi chú: số lượng không cộng gộp giữa các đơn vị tính khác nhau nên không có dòng tổng số lượng.'],
   )

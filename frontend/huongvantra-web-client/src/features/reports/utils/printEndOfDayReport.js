@@ -155,7 +155,7 @@ export function buildEndOfDayHtml({
         <div class="kpi">
           <div class="kpi-label">Đơn hoàn tất</div>
           <div class="kpi-value">${r.completedOrders || 0}</div>
-          <div class="kpi-hint">${r.totalLineCount || 0} dòng hàng · ${r.distinctSkuCount || 0} SKU</div>
+          <div class="kpi-hint">${r.totalLineCount || 0} dòng hàng · ${r.distinctSkuCount || 0} sản phẩm</div>
         </div>
       </div>
       <div class="note">
@@ -174,10 +174,10 @@ export function buildEndOfDayHtml({
       `<tr><td>Trừ hàng trả</td><td>${money(r.returnedRevenue)}</td></tr>`,
       `<tr><td>Đơn hoàn tất</td><td>${r.completedOrders || 0}</td></tr>`,
       `<tr><td>Tổng dòng hàng</td><td>${r.totalLineCount || 0}</td></tr>`,
-      `<tr><td>Số SKU phát sinh</td><td>${r.distinctSkuCount || 0}</td></tr>`,
+      `<tr><td>Số sản phẩm phát sinh</td><td>${r.distinctSkuCount || 0}</td></tr>`,
     ],
     foot: `<tr><td>Doanh thu ghi nhận thuần</td><td>${money(r.netRecognizedRevenue)}</td></tr>`,
-    note: 'Ghi nhận theo đơn hoàn tất trong kỳ. Số lượng không cộng gộp giữa các đơn vị tính nên báo cáo đếm dòng hàng và số SKU.',
+    note: 'Ghi nhận theo đơn hoàn tất trong kỳ. Số lượng không cộng gộp giữa các đơn vị tính nên báo cáo đếm dòng hàng và số sản phẩm.',
   })
 
   const cashInRows = (r.cashIn || []).map(
