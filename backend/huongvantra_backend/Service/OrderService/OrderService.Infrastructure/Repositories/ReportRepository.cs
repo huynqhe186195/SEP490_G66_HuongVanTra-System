@@ -10,14 +10,45 @@ namespace OrderService.Infrastructure.Repositories;
 
 public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 {
+    /// <summary>
+    /// Completed luôn vào báo cáo. Với thống kê cá nhân (employeeId), thêm đơn COD
+    /// đang xử lý của chính Sale (PendingPayment/Processing/…) để Sale COD không thấy dashboard trống.
+    /// </summary>
+    private static IQueryable<Order> ApplyReportableOrderFilter(IQueryable<Order> query, Guid? employeeId)
+    {
+        if (!employeeId.HasValue)
+            return query.Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        return query.Where(o =>
+            o.OrderStatus == OrderStatus.Completed
+            || (o.OrderChannel == OrderChannel.COD
+                && o.OrderStatus != OrderStatus.Cancelled
+                && o.OrderStatus != OrderStatus.Draft
+                && o.OrderStatus != OrderStatus.CancellationRequested));
+    }
+
+    private static IQueryable<OrderDetail> ApplyReportableOrderDetailFilter(IQueryable<OrderDetail> query, Guid? employeeId)
+    {
+        if (!employeeId.HasValue)
+            return query.Where(od => od.Order.OrderStatus == OrderStatus.Completed);
+
+        return query.Where(od =>
+            od.Order.OrderStatus == OrderStatus.Completed
+            || (od.Order.OrderChannel == OrderChannel.COD
+                && od.Order.OrderStatus != OrderStatus.Cancelled
+                && od.Order.OrderStatus != OrderStatus.Draft
+                && od.Order.OrderStatus != OrderStatus.CancellationRequested));
+    }
+
     public async Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
         var query = dbContext.Orders
             .Include(o => o.OrderDetails)
             .Include(o => o.Payments)
             .Include(o => o.ReturnOrders)
-            .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed);
+            .AsNoTracking();
+
+        query = ApplyReportableOrderFilter(query, employeeId);
 
         if (employeeId.HasValue)
         {
@@ -41,21 +72,20 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             query = query.Where(o => o.CreatedAt.Month == month.Value);
         }
 
-        var completedOrders = await query.ToListAsync(ct);
+        var reportableOrders = await query.ToListAsync(ct);
+        // Doanh thu / hoàn / lãi chỉ tính đơn Completed; số đơn / khách gồm cả COD đang xử lý (Sale COD).
+        var revenueOrders = reportableOrders.Where(o => o.OrderStatus == OrderStatus.Completed).ToList();
 
-        // Filter orders where Payment is Success
-        var validOrders = completedOrders.ToList();
-
-        var grossRevenue = validOrders.Sum(o => o.TotalAmount);
+        var grossRevenue = revenueOrders.Sum(o => o.TotalAmount);
         // DiscountAmount is the persisted aggregate (manual + promotion + membership).
-        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount);
+        var totalDiscountAmount = revenueOrders.Sum(o => o.DiscountAmount);
         
         var partiallyReturned = 0;
         var fullyReturned = 0;
         var totalRefundAmount = 0m;
         var totalReturnValue = 0m;
 
-        foreach (var order in validOrders)
+        foreach (var order in revenueOrders)
         {
             if (order.ReturnOrders != null && order.ReturnOrders.Count > 0)
             {
@@ -78,19 +108,19 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
 
         var netRevenue = grossRevenue - totalDiscountAmount - totalRefundAmount;
-        var totalOrders = validOrders.Count;
+        var totalOrders = reportableOrders.Count;
         var returnedOrdersCount = partiallyReturned + fullyReturned;
 
         // Calculate CostPrice sum for Profit
-        // Summing over OrderDetails of validOrders, subtracting cost of returned quantities
-        var totalCost = validOrders.SelectMany(o => o.OrderDetails ?? [])
+        // Summing over OrderDetails of revenueOrders, subtracting cost of returned quantities
+        var totalCost = revenueOrders.SelectMany(o => o.OrderDetails ?? [])
                                    .Sum(od => od.CostPrice * (od.Quantity - od.ReturnedQuantity));
         var grossProfit = netRevenue - totalCost;
 
         var returnRate = totalOrders > 0 ? (double)returnedOrdersCount / totalOrders : 0;
         var valueReturnRate = grossRevenue > 0 ? (double)totalRefundAmount / (double)grossRevenue : 0;
 
-        var customerCount = validOrders.Select(o => o.CustomerId).Distinct().Count();
+        var customerCount = reportableOrders.Select(o => o.CustomerId).Distinct().Count();
         
         int prevCustomerCount = 0;
         if (year.HasValue && month.HasValue)
@@ -172,8 +202,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
     public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
-        var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
+        var query = ApplyReportableOrderDetailFilter(dbContext.OrderDetails.AsQueryable(), employeeId);
 
         if (employeeId.HasValue)
         {
@@ -224,8 +253,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
     public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
-        var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
+        var query = ApplyReportableOrderDetailFilter(dbContext.OrderDetails.AsQueryable(), employeeId);
 
         if (employeeId.HasValue)
         {
@@ -265,9 +293,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
     public async Task<List<TimeSeriesPointDto>> GetCustomerGrowthTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
-        var query = dbContext.Orders
-            .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed);
+        var query = ApplyReportableOrderFilter(dbContext.Orders.AsNoTracking(), employeeId);
 
         if (employeeId.HasValue)
         {
@@ -499,8 +525,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
     public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
-        var query = dbContext.Orders
-            .Where(o => o.OrderStatus == OrderStatus.Completed);
+        var query = ApplyReportableOrderFilter(dbContext.Orders.AsQueryable(), employeeId);
 
         if (employeeId.HasValue)
         {
@@ -533,9 +558,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
     public async Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken ct = default)
     {
-        var query = dbContext.Orders
-            .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed);
+        var query = ApplyReportableOrderFilter(dbContext.Orders.AsNoTracking(), employeeId);
 
         if (employeeId.HasValue)
         {

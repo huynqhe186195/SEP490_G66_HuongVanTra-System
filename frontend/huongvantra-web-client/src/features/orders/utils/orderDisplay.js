@@ -576,6 +576,8 @@ export function canCancelOrder(order) {
 }
 
 export function canVerifyCod(order) {
+  const status = normalizeOrderKey(order?.orderStatus)
+  if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'DRAFT') return false
   const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
   return Boolean(payment && !payment.isCodVerified)
 }

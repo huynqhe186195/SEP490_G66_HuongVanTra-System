@@ -16,6 +16,7 @@ import {
 } from '../../auth/utils/permissions.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import BackorderRefundModal from '../components/BackorderRefundModal.jsx'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
 import { parseCodDebtSettlement, parseExpectedCollectedAmount } from '../../customers/utils/codDebtSettlementUtils.js'
@@ -98,6 +99,7 @@ function OrderDetailPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [isCollectRemainingOpen, setIsCollectRemainingOpen] = useState(false)
+  const [isBackorderRefundOpen, setIsBackorderRefundOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [isReprintOpen, setIsReprintOpen] = useState(false)
   const [isTimelineOpen, setIsTimelineOpen] = useState(false)
@@ -368,25 +370,13 @@ function OrderDetailPage() {
     }
   }
 
-  async function handleCompleteBackorderRefund() {
+  function handleOpenBackorderRefund() {
     if (!canFinalizeRefund || !order) return
-    const hasImmediateItems = order.fulfillmentPreference === 'PartialDelivery'
-      && order.items?.some((item) => Number(item.immediateFulfilledQuantity || 0) > 0)
-    let immediateItemsReturned = false
-    if (hasImmediateItems) {
-      immediateItemsReturned = window.confirm(
-        'Đơn đã giao một phần. Chỉ tiếp tục khi đã nhận lại đầy đủ phần hàng giao ngay. Xác nhận đã thu hồi hàng?',
-      )
-      if (!immediateItemsReturned) return
-    }
-    const refundMethod = window.prompt('Phương thức hoàn tiền (Tiền mặt/Chuyển khoản):')
-    if (!refundMethod?.trim()) return
-    const refundEvidence = window.prompt(
-      hasImmediateItems
-        ? 'Nhập mã giao dịch và bằng chứng thu hồi phần hàng đã giao/hoàn tiền:'
-        : 'Nhập mã giao dịch, đường dẫn chứng từ hoặc nội dung bằng chứng hoàn tiền:',
-    )
-    if (!refundEvidence?.trim()) return
+    setIsBackorderRefundOpen(true)
+  }
+
+  async function handleConfirmBackorderRefund({ refundMethod, refundEvidence, immediateItemsReturned }) {
+    if (!canFinalizeRefund || !order) return
     try {
       setIsSaving(true)
       const updated = await completeBackorderRefund(
@@ -396,8 +386,9 @@ function OrderDetailPage() {
         immediateItemsReturned,
       )
       setOrder(updated)
+      setIsBackorderRefundOpen(false)
       setTimelineRefreshKey((key) => key + 1)
-      showSuccess('Đã ghi nhận hoàn tiền, lưu bằng chứng và hủy đơn.')
+      showSuccess('Đã ghi nhận hoàn tiền và hủy đơn.')
     } catch (error) {
       showError(error.message)
     } finally {
@@ -621,7 +612,7 @@ function OrderDetailPage() {
                 <button
                   type="button"
                   disabled={isSaving}
-                  onClick={handleCompleteBackorderRefund}
+                  onClick={handleOpenBackorderRefund}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
@@ -1059,6 +1050,18 @@ function OrderDetailPage() {
         isSaving={isReprinting}
         onClose={() => setIsReprintOpen(false)}
         onConfirm={handleConfirmReprint}
+      />
+
+      <BackorderRefundModal
+        isOpen={isBackorderRefundOpen}
+        order={order}
+        isSaving={isSaving}
+        hasImmediateItems={
+          order?.fulfillmentPreference === 'PartialDelivery'
+          && order?.items?.some((item) => Number(item.immediateFulfilledQuantity || 0) > 0)
+        }
+        onClose={() => setIsBackorderRefundOpen(false)}
+        onConfirm={handleConfirmBackorderRefund}
       />
 
       <ConfirmDialog

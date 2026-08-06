@@ -141,17 +141,18 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="Đóng"
-        className="fixed inset-0 z-[70] bg-black/40"
-        onClick={onClose}
-      />
-      <div
-        className="fixed inset-x-4 top-1/2 z-[71] mx-auto max-w-md -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:inset-x-auto"
-        role="dialog"
-        aria-modal="true"
-      >
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+        <button
+          type="button"
+          aria-label="Đóng"
+          className="absolute inset-0 cursor-default"
+          onClick={onClose}
+        />
+        <div
+          className="relative z-[71] w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+        >
         <h3 className="text-lg font-bold text-slate-900">Xác nhận thu COD</h3>
         <p className="mt-1 text-sm text-slate-500">
           Đơn <span className="font-semibold text-slate-700">{order.orderCode}</span> · Thành tiền{' '}
@@ -244,6 +245,7 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
           >
             {isSubmitting ? 'Đang xử lý...' : 'Xác nhận đã giao & thu'}
           </button>
+        </div>
         </div>
       </div>
 

@@ -126,9 +126,10 @@ public class OrderLogic(
     private static bool IsOtherReturnReason(string value)
     {
         var text = value.Trim();
+        // Exact match only — do NOT use Contains("khác") (matches "Khách đổi ý").
         return text.Equals("OTHER", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("khác", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("khac", StringComparison.OrdinalIgnoreCase);
+            || text.Equals("Lý do khác", StringComparison.OrdinalIgnoreCase)
+            || text.Equals("Ly do khac", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildReturnNote(ReturnOrderRequest req)
@@ -149,7 +150,23 @@ public class OrderLogic(
             throw new OrderValidationException("Vui lòng nhập lý do khác ít nhất 10 ký tự.");
 
         var displayReasons = reasons
-            .Select(reason => IsOtherReturnReason(reason) ? "Lý do khác" : reason)
+            .Select(reason =>
+            {
+                if (IsOtherReturnReason(reason)) return "Lý do khác";
+                return reason switch
+                {
+                    "CUSTOMER_CHANGED_MIND" => "Khách đổi ý",
+                    "CUSTOMER_ORDERED_WRONG" => "Khách mua nhầm / mua dư",
+                    "DAMAGED" => "Sản phẩm bị lỗi / hư hỏng",
+                    "NOT_AS_DESCRIBED" => "Sản phẩm không đúng mô tả / hình ảnh",
+                    "WRONG_ITEM" => "Giao sai sản phẩm / sai loại / sai quy cách",
+                    "SHIPPING_DAMAGE" => "Đóng gói bị hư hỏng khi vận chuyển",
+                    "NEAR_EXPIRY" => "Sản phẩm gần hết hạn / kém chất lượng",
+                    "DEFECTIVE" or "PRODUCT_DEFECT" => "Hàng lỗi / hỏng",
+                    "EXPIRED" => "Hết hạn / cận hạn",
+                    _ => reason
+                };
+            })
             .ToList();
 
         var parts = new List<string> { $"Lý do: {string.Join("; ", displayReasons)}" };
@@ -1408,11 +1425,17 @@ public class OrderLogic(
             throw new OrderForbiddenException();
         if (string.IsNullOrWhiteSpace(request.RefundMethod))
             throw new OrderValidationException("Phương thức hoàn tiền là bắt buộc.");
-        if (string.IsNullOrWhiteSpace(request.RefundEvidence))
-            throw new OrderValidationException("Bằng chứng hoàn tiền là bắt buộc.");
-        if (request.RefundMethod.Trim().Length > 30)
+        var refundMethod = request.RefundMethod.Trim();
+        if (refundMethod.Length > 30)
             throw new OrderValidationException("Phương thức hoàn tiền tối đa 30 ký tự.");
-        if (request.RefundEvidence.Trim().Length > 1000)
+
+        var isCashRefund = refundMethod.Equals("Cash", StringComparison.OrdinalIgnoreCase)
+            || refundMethod.Equals("Tiền mặt", StringComparison.OrdinalIgnoreCase)
+            || refundMethod.Equals("Tien mat", StringComparison.OrdinalIgnoreCase);
+        var refundEvidence = request.RefundEvidence?.Trim() ?? string.Empty;
+        if (!isCashRefund && string.IsNullOrWhiteSpace(refundEvidence))
+            throw new OrderValidationException("Bằng chứng hoàn tiền là bắt buộc với chuyển khoản.");
+        if (refundEvidence.Length > 1000)
             throw new OrderValidationException("Bằng chứng hoàn tiền tối đa 1000 ký tự.");
 
         var order = await _orderRepo.GetByIdAsync(id, ct)
@@ -1448,8 +1471,8 @@ public class OrderLogic(
         order.OrderStatus = OrderStatus.Cancelled;
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
         order.RefundStatus = BackorderRefundStatus.Completed;
-        order.RefundMethod = request.RefundMethod.Trim();
-        order.RefundEvidence = request.RefundEvidence.Trim();
+        order.RefundMethod = refundMethod;
+        order.RefundEvidence = string.IsNullOrWhiteSpace(refundEvidence) ? null : refundEvidence;
         order.RefundedAt = now;
         order.RefundedBy = actorId;
         order.RefundedByName = NormalizeActorName(actorName);

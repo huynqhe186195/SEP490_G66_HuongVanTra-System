@@ -83,7 +83,7 @@ public record ReviewBackorderCancellationRequest(bool Approved, string? Note = n
 
 public record CompleteBackorderRefundRequest(
     string RefundMethod,
-    string RefundEvidence,
+    string? RefundEvidence = null,
     bool ImmediateItemsReturned = false);
 
 public record VerifyCodPaymentRequest(

@@ -2901,7 +2901,8 @@ export default function ProductApprovalsPage() {
       await submitProductCreationRequest(saved.id, warehouseNote)
       showSuccess('Đã gửi yêu cầu cho Admin duyệt.')
       resetForm()
-      await loadRequests(statusFilter)
+      navigate('/inventory/product-approvals')
+      return
     } catch (error) {
       showError(error.message)
     } finally {

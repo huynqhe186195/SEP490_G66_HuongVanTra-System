@@ -414,7 +414,9 @@ function DashboardPage() {
 
             {/* Categories Section */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Danh Mục</h3>
+                <h3 className="mb-6 text-lg font-bold text-gray-800">
+                    {canViewRevenue ? 'Doanh Số Theo Danh Mục' : 'Số lượng theo danh mục'}
+                </h3>
                 
                 {categorySales && categorySales.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
@@ -428,7 +430,7 @@ function DashboardPage() {
                                         innerRadius={60}
                                         outerRadius={100}
                                         paddingAngle={5}
-                                        dataKey="totalRevenue"
+                                        dataKey={canViewRevenue ? 'totalRevenue' : 'totalQuantitySold'}
                                         nameKey="categoryName"
                                         label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
                                     >
@@ -436,7 +438,15 @@ function DashboardPage() {
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip content={renderPieTooltip(categorySales.reduce((acc, c) => acc + c.totalRevenue, 0), true)} />
+                                    <Tooltip
+                                        content={renderPieTooltip(
+                                            categorySales.reduce(
+                                                (acc, c) => acc + (canViewRevenue ? c.totalRevenue : c.totalQuantitySold),
+                                                0,
+                                            ),
+                                            canViewRevenue,
+                                        )}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
