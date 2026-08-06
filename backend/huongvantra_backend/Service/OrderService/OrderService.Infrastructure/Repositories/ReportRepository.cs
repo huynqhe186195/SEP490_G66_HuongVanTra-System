@@ -993,11 +993,23 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var netRecognizedRevenue = salesRevenue - returnedRevenue;
         var forfeitedIncome = forfeited.Sum();
 
+        // Tiền thu của đơn tạo trong kỳ nhưng chưa được ghi nhận doanh thu: đơn còn dở dang
+        // (chờ nguyên vật liệu, chờ sản xuất, chờ điều chuyển). Đơn đã hủy không tính ở đây
+        // vì phần cọc bị giữ đã có dòng ForfeitedDeposit riêng.
+        var recognizedStatusName = statusForRevenue.ToString();
+        var cancelledStatusName = OrderStatus.Cancelled.ToString();
+        var advanceOnOpenOrders = receipts
+            .Where(r => r.OrderCreatedAt >= fromUtc
+                        && r.OrderStatus != recognizedStatusName
+                        && r.OrderStatus != cancelledStatusName)
+            .Sum(r => r.Amount);
+
         var bridge = new RevenueCashBridgeDto
         {
             RecognizedRevenue = netRecognizedRevenue,
             UnpaidRevenue = completed.Sum(o => o.FinalAmount - o.PaidAmount),
             PriorPeriodCollections = receipts.Where(r => r.OrderCreatedAt < fromUtc).Sum(r => r.Amount),
+            AdvanceOnOpenOrders = advanceOnOpenOrders,
             ForfeitedDeposit = forfeitedIncome,
             Refunds = totalOut,
             TotalCashIn = totalIn

@@ -241,11 +241,12 @@ export function buildEndOfDayHtml({
       `<tr><td>Doanh thu ghi nhận</td><td>${money(b.recognizedRevenue)}</td></tr>`,
       `<tr><td>(-) Doanh thu chưa thu tiền</td><td>${money(b.unpaidRevenue)}</td></tr>`,
       `<tr><td>(+) Tiền thu của đơn kỳ trước</td><td>${money(b.priorPeriodCollections)}</td></tr>`,
+      `<tr><td>(+) Tiền thu trước của đơn chưa hoàn tất</td><td>${money(b.advanceOnOpenOrders)}</td></tr>`,
       `<tr><td>(+) Cọc bị giữ do hủy đơn</td><td>${money(b.forfeitedDeposit)}</td></tr>`,
       `<tr><td>(-) Hoàn tiền trả hàng</td><td>${money(b.refunds)}</td></tr>`,
     ],
     foot: `<tr><td>= Tổng tiền thu vào</td><td>${money(b.totalCashIn)}</td></tr>`,
-    note: 'Giải thích vì sao doanh thu ghi nhận và tiền thực thu của cùng một kỳ không bằng nhau.',
+    note: 'Giải thích vì sao doanh thu ghi nhận và tiền thực thu của cùng một kỳ không bằng nhau. Đơn chưa hoàn tất gồm đơn chờ nguyên vật liệu, chờ sản xuất và chờ điều chuyển.',
   })
 
   const section6 = tableSection({

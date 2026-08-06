@@ -81,6 +81,7 @@ function buildOverviewSheet(report, meta) {
     ['Doanh thu ghi nhận', b.recognizedRevenue || 0],
     ['(-) Doanh thu chưa thu tiền', b.unpaidRevenue || 0],
     ['(+) Tiền thu của đơn kỳ trước', b.priorPeriodCollections || 0],
+    ['(+) Tiền thu trước của đơn chưa hoàn tất', b.advanceOnOpenOrders || 0],
     ['(+) Cọc bị giữ do hủy đơn', b.forfeitedDeposit || 0],
     ['(-) Hoàn tiền trả hàng', b.refunds || 0],
     ['= Tổng tiền thu vào', b.totalCashIn || 0],

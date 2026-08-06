@@ -58,6 +58,7 @@ function PaymentsTab({ report, mode }) {
     (bridge.recognizedRevenue || 0) -
     (bridge.unpaidRevenue || 0) +
     (bridge.priorPeriodCollections || 0) +
+    (bridge.advanceOnOpenOrders || 0) +
     (bridge.forfeitedDeposit || 0) -
     (bridge.refunds || 0)
   const bridgeGap = (bridge.totalCashIn || 0) - computedTotal
@@ -150,6 +151,12 @@ function PaymentsTab({ report, mode }) {
             />
             <BridgeRow
               sign="+"
+              label="Tiền thu trước của đơn chưa hoàn tất"
+              amount={bridge.advanceOnOpenOrders}
+              note="Đơn chờ nguyên vật liệu, chờ sản xuất, chờ điều chuyển. Tiền đã vào két nhưng chưa giao hàng nên chưa ghi nhận doanh thu."
+            />
+            <BridgeRow
+              sign="+"
               label="Cọc bị giữ do hủy đơn"
               amount={bridge.forfeitedDeposit}
               note="Thu nhập khác, không tính vào doanh thu bán hàng."
@@ -161,8 +168,8 @@ function PaymentsTab({ report, mode }) {
         {Math.abs(bridgeGap) > 1 && (
           <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-[#fbf9f1] p-3 text-xs text-[#7e5700]">
             <span className="material-symbols-outlined text-[16px]">warning</span>
-            Còn chênh lệch {formatVnd(bridgeGap)} chưa giải thích được. Thường do đơn hoàn tất ở kỳ này nhưng
-            hàng trả thuộc đơn của kỳ khác.
+            Còn chênh lệch {formatVnd(bridgeGap)} chưa giải thích được. Thường do hàng trả trong kỳ thuộc đơn
+            của kỳ trước, hoặc đơn đổi trạng thái sau khi đã thu tiền.
           </p>
         )}
       </Card>
