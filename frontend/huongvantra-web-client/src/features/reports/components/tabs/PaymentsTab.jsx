@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react'
 import { formatVnd } from '../../../../utils/vietnamCurrency.js'
 import { formatVietnamDateTimeMinute } from '../../../../utils/vietnamDateTime.js'
 import { paymentMethodLabel, paymentPurposeLabel } from '../../utils/cashReportLabels.js'
-import { Card, DataTable } from '../reportUi.jsx'
+import { endOfDayOrderApi } from '../../services/endOfDayApi.js'
+import { Card, DataTable, Pagination } from '../reportUi.jsx'
+
+const PAGE_SIZE = 50
 
 /** Bảng thu/chi theo nhóm. */
 function FlowTable({ lines, totalLabel, total, accent }) {
@@ -45,19 +49,56 @@ function BridgeRow({ label, amount, sign, note, strong }) {
   )
 }
 
-function PaymentsTab({ report, mode }) {
+function PaymentsTab({ report, mode, params }) {
   const byMethod = report.byPaymentMethod || []
   const cashLines = byMethod.filter((m) => m.isCash)
   const bankLines = byMethod.filter((m) => !m.isCash)
   const bridge = report.bridge || {}
 
-  const cashNet = cashLines.reduce((s, m) => s + (m.net || 0), 0)
-  const bankNet = bankLines.reduce((s, m) => s + (m.net || 0), 0)
+  const [page, setPage] = useState(1)
+  const [pageItems, setPageItems] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setPage(1)
+    setPageItems(null)
+  }, [params])
+
+  // Trang đầu dùng lại lát dữ liệu trang cha đã tải, chỉ lật trang mới gọi thêm API.
+  useEffect(() => {
+    if (page === 1) return
+    const controller = new AbortController()
+    const { signal } = controller
+    setIsLoading(true)
+    setError(null)
+    endOfDayOrderApi
+      .getPayments({ ...params, page, pageSize: PAGE_SIZE }, { signal })
+      .then((res) => {
+        if (!signal.aborted) setPageItems(res?.items || [])
+      })
+      .catch((err) => {
+        if (signal.aborted || err.name === 'AbortError') return
+        setError(err.statusCode === 403 ? 'Bạn không có quyền xem danh sách khoản thu.' : err.message)
+      })
+      .finally(() => {
+        if (!signal.aborted) setIsLoading(false)
+      })
+    return () => controller.abort()
+  }, [params, page])
+
+  const receiptTotalCount = report.receiptsTotalCount || 0
+  const receiptTotalPages = Math.ceil(receiptTotalCount / PAGE_SIZE)
+  const receipts = page === 1 ? (report.receipts || []).slice(0, PAGE_SIZE) : pageItems || []
+
+  const cashNet = report.cashOnHand ?? cashLines.reduce((s, m) => s + (m.net || 0), 0)
+  const bankNet = report.bankIn ?? bankLines.reduce((s, m) => s + (m.net || 0), 0)
 
   const computedTotal =
     (bridge.recognizedRevenue || 0) -
     (bridge.unpaidRevenue || 0) +
     (bridge.priorPeriodCollections || 0) +
+    (bridge.advanceOnOpenOrders || 0) +
     (bridge.forfeitedDeposit || 0) -
     (bridge.refunds || 0)
   const bridgeGap = (bridge.totalCashIn || 0) - computedTotal
@@ -150,6 +191,12 @@ function PaymentsTab({ report, mode }) {
             />
             <BridgeRow
               sign="+"
+              label="Tiền thu trước của đơn chưa hoàn tất"
+              amount={bridge.advanceOnOpenOrders}
+              note="Đơn chờ nguyên vật liệu, chờ sản xuất, chờ điều chuyển. Tiền đã vào két nhưng chưa giao hàng nên chưa ghi nhận doanh thu."
+            />
+            <BridgeRow
+              sign="+"
               label="Cọc bị giữ do hủy đơn"
               amount={bridge.forfeitedDeposit}
               note="Thu nhập khác, không tính vào doanh thu bán hàng."
@@ -161,8 +208,8 @@ function PaymentsTab({ report, mode }) {
         {Math.abs(bridgeGap) > 1 && (
           <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-[#fbf9f1] p-3 text-xs text-[#7e5700]">
             <span className="material-symbols-outlined text-[16px]">warning</span>
-            Còn chênh lệch {formatVnd(bridgeGap)} chưa giải thích được. Thường do đơn hoàn tất ở kỳ này nhưng
-            hàng trả thuộc đơn của kỳ khác.
+            Còn chênh lệch {formatVnd(bridgeGap)} chưa giải thích được. Thường do hàng trả trong kỳ thuộc đơn
+            của kỳ trước, hoặc đơn đổi trạng thái sau khi đã thu tiền.
           </p>
         )}
       </Card>
@@ -198,9 +245,14 @@ function PaymentsTab({ report, mode }) {
       {mode === 'detail' && (
         <Card
           title="Chi tiết các khoản thu"
-          subtitle={`${(report.receipts || []).length} giao dịch`}
+          subtitle={`${receiptTotalCount} giao dịch trong kỳ · tổng ${formatVnd(report.receiptsTotalAmount)}`}
           icon="receipt"
         >
+          {error && (
+            <p className="mb-2 rounded-lg border border-[#b42318]/40 bg-[#b42318]/5 px-3 py-2 text-sm text-[#b42318]">
+              {error}
+            </p>
+          )}
           <DataTable
             columns={[
               { key: 'code', label: 'Mã đơn' },
@@ -211,7 +263,7 @@ function PaymentsTab({ report, mode }) {
               { key: 'employee', label: 'Nhân viên' },
               { key: 'amount', label: 'Số tiền', align: 'right' },
             ]}
-            rows={report.receipts || []}
+            rows={receipts}
             renderRow={(r, i) => (
               <tr key={`${r.orderId}-${r.paidAt}-${i}`}>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-[#356647]">
@@ -225,6 +277,27 @@ function PaymentsTab({ report, mode }) {
                 <td className="whitespace-nowrap px-3 py-2 text-right font-semibold">{formatVnd(r.amount)}</td>
               </tr>
             )}
+            footer={
+              receiptTotalCount > 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-2">
+                    Tổng thu toàn kỳ
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-[#356647]">
+                    {formatVnd(report.receiptsTotalAmount)}
+                  </td>
+                </tr>
+              ) : null
+            }
+          />
+
+          <Pagination
+            page={page}
+            totalPages={receiptTotalPages}
+            totalCount={receiptTotalCount}
+            unitLabel="khoản thu"
+            isLoading={isLoading}
+            onChange={setPage}
           />
         </Card>
       )}

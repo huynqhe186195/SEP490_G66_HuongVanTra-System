@@ -60,6 +60,7 @@ builder.Services.AddHostedService<OutboxDispatcherHostedService>();
 builder.Services.AddScoped<IOutboxMonitoringRepository, OutboxMonitoringRepository>();
 builder.Services.AddScoped<IOutboxMonitoringLogic, OutboxMonitoringLogic>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<IEndOfDayReportRepository, EndOfDayReportRepository>();
 builder.Services.AddScoped<IPosCashSessionRepository, PosCashSessionRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
@@ -118,6 +119,7 @@ builder.Services.AddScoped<PromotionLogic>();
 builder.Services.AddScoped<CodReminderLogic>();
 builder.Services.AddHostedService<CodReminderHostedService>();
 builder.Services.AddScoped<IReportLogic, ReportLogic>();
+builder.Services.AddScoped<IEndOfDayReportLogic, EndOfDayReportLogic>();
 
 builder.Services.AddMassTransit(x =>
 {

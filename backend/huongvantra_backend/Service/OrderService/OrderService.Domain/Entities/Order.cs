@@ -25,6 +25,14 @@ public class Order : BaseEntity
     public string? Note { get; set; }
     public string? IdempotencyKey { get; set; }
 
+    /// <summary>
+    /// Mốc đơn chuyển sang <see cref="OrderStatus.Completed"/>, dùng làm kỳ ghi nhận doanh thu.
+    /// Không dùng <c>UpdatedAt</c> vì mọi lần sửa đơn sau đó đều ghi đè giá trị đó,
+    /// cũng không dùng <c>DeliveredAt</c> vì mốc đó chỉ có ở luồng giao hàng.
+    /// Null với các đơn hoàn tất trước khi có cột này — báo cáo lùi về <c>CreatedAt</c>.
+    /// </summary>
+    public DateTime? CompletedAt { get; set; }
+
     public DateTime? BackorderAcceptedAt { get; set; }
     public int? BackorderMinLeadDaysSnapshot { get; set; }
     public int? BackorderMaxLeadDaysSnapshot { get; set; }
