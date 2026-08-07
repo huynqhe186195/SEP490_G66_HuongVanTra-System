@@ -42,7 +42,7 @@ public class OrderLogic(
         GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
     {
         var page = ParsePositiveInt(req.Page, 1);
-        var pageSize = Math.Clamp(ParsePositiveInt(req.PageSize, 20), 1, 1000);
+        var pageSize = Math.Clamp(ParsePositiveInt(req.PageSize, 20), 1, 100);
         OrderInputValidator.ValidatePagination(page, pageSize);
 
         var customerId = ParseOptionalGuid(req.CustomerId);
