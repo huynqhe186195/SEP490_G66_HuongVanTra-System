@@ -151,6 +151,9 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<int?>("ContractPaymentTermDaysSnapshot")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -319,7 +322,11 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompletedAt");
+
                     b.HasIndex("ContractId");
+
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("CustomerId");
 
@@ -441,6 +448,10 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("UnitSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -623,6 +634,8 @@ namespace OrderService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("PaidAt");
 
                     b.ToTable("Payments", (string)null);
                 });

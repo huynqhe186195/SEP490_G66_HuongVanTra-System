@@ -54,6 +54,7 @@ public class PaymentLogic(
 
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
+        order.CompletedAt ??= order.UpdatedAt;
 
         var overpay = Math.Max(collected - order.FinalAmount, 0);
         var codDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
