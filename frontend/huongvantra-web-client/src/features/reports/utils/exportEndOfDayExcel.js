@@ -725,17 +725,16 @@ async function downloadWorkbook(wb, filename) {
  * quyền xem tồn kho — khi đó sheet Kho/Kệ vẫn tồn tại nhưng ghi rõ là thiếu dữ liệu.
  */
 export async function exportEndOfDayExcel({ report, exceptions, inventory, meta: m, filename }) {
-  // Nạp exceljs lúc bấm xuất chứ không lúc load trang: gói này chưa có trong volume
-  // node_modules của container dev, nếu import tĩnh thì cả màn hình báo cáo không mở được.
-  // Tên gói ghép từ biến để Vite không phân tích tĩnh và không chặn lúc build/dev.
-  const pkg = ['exce', 'ljs'].join('')
+  // Dynamic import: chỉ nạp khi bấm xuất Excel (gói nặng). Vite resolve được tên gói tĩnh.
   let ExcelJS
   try {
-    ExcelJS = (await import(/* @vite-ignore */ pkg)).default
-  } catch {
+    ExcelJS = (await import('exceljs')).default
+  } catch (err) {
+    console.error('Failed to load exceljs', err)
     throw new Error(
       'Chưa cài thư viện xuất Excel (exceljs) trong môi trường này. ' +
-        'Bản in A4/K80 và PDF vẫn dùng được bình thường.',
+        'Chạy npm install trong frontend (hoặc restart container web-client-dev), ' +
+        'rồi thử lại. Bản in A4/K80 và PDF vẫn dùng được bình thường.',
     )
   }
 
