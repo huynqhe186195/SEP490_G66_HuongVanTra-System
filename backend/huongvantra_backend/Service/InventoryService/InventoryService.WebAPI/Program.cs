@@ -57,6 +57,7 @@ builder.Services.AddScoped<ISupplierProductRepository, SupplierProductRepository
 builder.Services.AddScoped<IReturnInspectionRepository, ReturnInspectionRepository>();
 builder.Services.AddScoped<IWarehouseDailyReportRepository, WarehouseDailyReportRepository>();
     builder.Services.AddScoped<IWarehouseDailyReportSubmissionRepository, WarehouseDailyReportSubmissionRepository>();
+builder.Services.AddScoped<IEndOfDayInventoryReportRepository, EndOfDayInventoryReportRepository>();
     builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
 {
@@ -71,6 +72,7 @@ builder.Services.AddScoped<StockTransferLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddScoped<WarehouseDailyReportLogic>();
 builder.Services.AddScoped<WarehouseDailyReportSubmissionLogic>();
+builder.Services.AddScoped<EndOfDayInventoryReportLogic>();
 builder.Services.AddHostedService<InventoryOutboxDispatcherHostedService>();
 builder.Services.AddMassTransit(x =>
 {

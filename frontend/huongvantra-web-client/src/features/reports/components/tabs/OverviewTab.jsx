@@ -58,11 +58,7 @@ function OverviewTab({ report }) {
           </div>
           <div className="rounded-xl bg-white p-3">
             <p className="text-xs font-semibold uppercase text-[#717971]">Tiền mặt tại két</p>
-            <p className="mt-1 text-lg font-bold text-[#1b1c17]">
-              {formatVnd(
-                (report.byPaymentMethod || []).filter((m) => m.isCash).reduce((s, m) => s + (m.net || 0), 0),
-              )}
-            </p>
+            <p className="mt-1 text-lg font-bold text-[#1b1c17]">{formatVnd(report.cashOnHand)}</p>
             <p className="mt-1 text-[11px] text-[#717971]">
               Chỉ tiền mặt. VietQR và chuyển khoản vào tài khoản, không nằm trong két.
             </p>
@@ -127,7 +123,7 @@ function OverviewTab({ report }) {
               <td className="px-3 py-2 font-mono text-xs">{p.skuCode}</td>
               <td className="px-3 py-2 font-medium text-[#1b1c17]">{p.skuName}</td>
               <td className="px-3 py-2 text-center">{p.orderCount}</td>
-              <td className="px-3 py-2 text-right font-semibold">{formatVnd(p.revenue)}</td>
+              <td className="px-3 py-2 text-right font-semibold">{formatVnd(p.netRevenue)}</td>
             </tr>
           )}
         />

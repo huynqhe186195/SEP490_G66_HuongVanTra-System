@@ -109,6 +109,20 @@ Official quantity principles:
 
 ## Current POS Reliability Roadmap
 
+Status audited against code on 2026-08-06. Summary of what actually remains:
+
+| Phase | State | What is left |
+|---|---|---|
+| G — Outbox/Inbox | G1–G7 done | G8 Docker UAT |
+| H — COD Reservation | H1–H6 done, H7 mostly done | COD-edit re-reserve at runtime |
+| I — Sell-first (KB1–KB3) | done | FEFO batch-level unit tests |
+| I — POS-06a Backorder | done | — |
+| J — Return Inspection | done | Gateway UAT with Warehouse role |
+| K — Regression & docs | partial | stale test counts, POS UAT harness, cleanup |
+
+Business rules below remain the specification of record even where implementation is
+complete — keep them when editing.
+
 ### Phase G — POS-05 Transactional Outbox/Inbox
 
 Completed: G1–G7.
@@ -123,7 +137,13 @@ Completed: G1–G7.
 
 Not completed:
 
-- G8 — End-to-end runtime verification (Docker UAT).
+- G8 — End-to-end runtime verification (Docker UAT). Current evidence is unit tests only.
+  `docs/pos-reliability-regression-matrix.md` lines 140-145 record the specific gaps:
+  atomic lease claim against real MySQL, two concurrent workers not double-claiming,
+  expired-lease recovery, and exactly-once redelivery through RabbitMQ.
+
+Note: the two-tier dedup described in G6 lives in `InventoryLogic` (`ExistsByEventIdAsync` /
+`ExistsAsync`), not in the consumer classes — consumers only delegate.
 
 ### Phase H — POS-04 COD Stock Reservation
 
@@ -138,9 +158,13 @@ Key implementation:
 - Available-stock at Shelf = `SkuStock.QuantityOnHand - SkuStock.ReservedQuantity`.
 - All read/trace endpoints present (`/reservations/by-order`, `/by-sku`, `/active-orders`).
 
-Not completed:
+Partially completed:
 
-- H7 — End-to-end runtime verification (Docker UAT).
+- H7 — Docker UAT largely done. `docs/pos-reliability-regression-matrix.md` lines 127-135
+  records 9 COD reservation cases passing against the real stack (reserve, release,
+  dispatch, repeat-request 409).
+- Still missing: the COD-edit branch (atomic release-old + re-reserve-new) has not been
+  exercised at runtime — see matrix line 146.
 
 ### Phase I — POS-06 Sell-first Reconciliation
 
@@ -154,7 +178,7 @@ Deduction priority order at checkout:
 2. Warehouse (Kho) finished goods
 3. Warehouse raw materials / packaging — only when both Shelf and Warehouse finished goods are exhausted
 
-Business rules (confirmed 2026-08-04, partially implemented — see gaps below):
+Business rules (confirmed 2026-08-04, implemented — verified against code 2026-08-06):
 
 **Scenario 1 — Shelf sufficient:**
 - Deduct Shelf, order Completed immediately. No Thủ kho action needed.
@@ -179,15 +203,27 @@ General rules:
 - Insufficient confirmation must not create partial or negative stock.
 - Rejecting or cancelling reconciliation never cancels the completed customer order.
 
-Known gaps (not yet implemented — scenarios 2 and 3 require rework):
+Implementation status (verified 2026-08-06 — scenarios 2 and 3 are DONE, the earlier
+"requires rework" note was stale):
 
-- Scenario 2: currently deducts Warehouse finished goods and completes order immediately — must be changed to WaitingTransfer + auto Transfer Slip on Thủ kho confirmation.
-- Scenario 3: currently creates reconciliation queue and completes order immediately — must be changed to WaitingProduction + auto Production Order + Transfer Slip on single Thủ kho confirmation.
+- Scenario 2: `InventoryLogic.PreparePosStockDeductionAsync` returns mode
+  `WarehouseTransferPending`; `OrderLogic.cs:2550` maps it to `OrderStatus.WaitingTransfer`.
+  Only the Shelf portion is deducted at checkout; the Warehouse portion waits for Thủ kho.
+- Scenario 3: mode `pending_bom_reconciliation` → `OrderLogic.cs:2551` →
+  `OrderStatus.WaitingProduction`.
+- Single-confirmation auto-generation is implemented in `InventoryLogic.ConfirmQueueAsync`
+  (line 707). One transaction: sufficiency check first (all-or-nothing), then Production
+  Order, then Kho → Kệ Transfer Slip, then Shelf export. Shortage sets `QueueStatus.Insufficient`
+  and mutates no stock.
+- `ReadyToDeliver` exists as an additional status for the pickup handoff step.
+
+Remaining gap:
+
 - FEFO batch-level deduction path (SimulateWarehouse=false) not exercised in unit tests.
 
 ### Phase I — POS-06a Backorder on Material Shortage (Mentor requirement, 2026-08-04)
 
-Not completed.
+Completed (backend and frontend), verified 2026-08-06.
 
 Mentor feedback: instead of blocking the order when Warehouse materials are insufficient,
 the system should present the customer with a backorder option.
@@ -211,11 +247,19 @@ Design constraints:
 - Do not change the Confirm/Cancel queue path — it already handles Insufficient queues.
 - Do not change non-POS channels (COD, B2B still use event-driven path).
 
+Where it landed:
+
+- `InventoryLogic.cs:364-377` returns `BackorderRequired` instead of blocking; message text
+  at lines 507-508; lead days configurable via `BackorderOptions`.
+- Queue created immediately with `QueueStatus.Insufficient` (lines 430-435).
+- `OrderLogic.cs:2552` maps mode `BackorderAccepted` → `OrderStatus.WaitingMaterials`.
+- POS dialog: `features/pos/components/BackorderConfirmModal.jsx`, wired at `PosPage.jsx:3253`.
+- Beyond the original scope, commit `c8596cda` added deposit ≥50%, pickup deadline, and
+  deposit-forfeit policy.
+
 ### Phase J — Return Inspection Safety
 
-Not completed:
-
-- J1–J5.
+Completed J1–J5 (backend and frontend), verified 2026-08-06.
 
 Business rules:
 
@@ -228,18 +272,36 @@ Business rules:
 - Refund state and inventory disposition must remain separately auditable.
 - Inspection decisions must be idempotent and permission-controlled.
 
+Where it landed:
+
+- `InventoryLogic.cs:1695-1709` creates `ReturnInspection` rows with `Disposition.Pending`
+  and does not touch `QuantityOnHand`; asserted by `ReturnInspectionTests.cs:214-238`.
+- Dispositions implemented at `InventoryLogic.cs:1741-1795`; Quarantined moves goods to
+  `Location = "Quarantine"` so they stay out of sellable stock.
+- Idempotency guards at lines 1688 and 1733-1734; authorization via
+  `ReturnInspectionController.cs:39` (`WarehouseOrManagerOps`).
+- UI: `features/inventory/pages/ReturnInspectionsPage.jsx`, route registered in `App.jsx:128`.
+
+Remaining gap:
+
+- Gateway-level UAT with a real Warehouse-role user has not been run.
+
 ### Phase K — Full Regression and Documentation
+
+Partially completed.
+
+Done:
+
+- `docs/pos-reliability-regression-matrix.md` — invariant matrix with code traces, plus
+  30 Docker UAT cases already executed against the real stack.
+- `docs/inventory-acceptance-guide.md` — covers Phase J.
 
 Not completed:
 
-- K1–K4.
-
-Includes:
-
-- regression matrix;
-- Docker runtime/UAT;
-- technical and acceptance documentation;
-- final cleanup and checkpoint.
+- Test counts in the matrix (lines 72-73) are stale; actual suite is 50 test files /
+  373 `[Fact]`+`[Theory]` attributes across six services.
+- No scripted UAT harness for the POS flows.
+- Final cleanup and checkpoint.
 
 ## Transactional Messaging Rules
 
