@@ -65,14 +65,36 @@ Existing `Payment` structures are retained because payment history, QR callback,
 | COD edit re-stamps `Active` lines and keeps the sum consistent | `ReplaceCodReservationAsync` | InventoryService COD traceability tests |
 | Traceability reads use event snapshots only — no cross-service database query | `CustomerSnapshotName` on `OrderPlacedEvent` / `StockDeductQueue` | Contract + repository code |
 
-## Test Evidence (2026-07-25)
+## Test Evidence (2026-08-06)
+
+Host `dotnet test`, .NET 8, one project per invocation.
 
 | Suite | Result | Notes |
 | --- | --- | --- |
-| `OrderService.Application.Tests` | 98 / 98 pass | Host `dotnet test`, .NET 8. Includes 16 receipt-reprint facts. |
-| `InventoryService.Application.Tests` | 68 / 68 pass | Host `dotnet test`. Includes 7 `CodReservationTraceabilityTests` facts. |
-| `CustomerService.Application.Tests` | 23 / 23 pass | Host run blocked by `0x800711C7` Application Control on `CustomerService.Infrastructure.dll`; executed in the isolated Docker fallback container (source copied without `bin` / `obj`, no writable mount into the worktree). Includes 7 `CustomerCreatePermissionPolicyTests` facts. |
-| Frontend `npm run build` | Success | Only pre-existing chunk-size / dynamic-import warnings |
+| `OrderService.Application.Tests` | 126 / 126 pass | Clean. |
+| `UserService.Application.Tests` | 19 / 19 pass | Clean. |
+| `InventoryService.Application.Tests` | 126 pass / 18 fail (144) | All 18 failures are in `SupplierReceiptApprovalWorkflowTests` and are stale tests, not a code defect — see below. |
+| `ProductService.Application.Tests` | Not measurable on host | 71 reported failures, all `0x800711C7` Application Control `FileLoadException`; the test host itself crashed on `ProductService.Domain.dll`. Needs the Docker fallback container. |
+| `CustomerService.Application.Tests` | Not measurable on host | 16 failures, all `0x800711C7` on `CustomerService.Application.dll`. Needs the Docker fallback container. |
+| `AuditService.Application.Tests` | Not measurable on host | 2 failures, both `0x800711C7`. Needs the Docker fallback container. |
+
+Application Control blocks assembly load for three services on this machine. Those
+counts say nothing about code correctness — filter `0x800711C7` out of the output
+before reading a failure count, and rerun those three in Docker for a real result.
+
+### `SupplierReceiptApprovalWorkflowTests` — 18 stale failures
+
+The tests assert the old three-step supplier-receipt flow (Draft → Submit → Approve).
+Commit `f70194f7` (2026-08-03) replaced it with a single-step create-and-post:
+`CreateSupplierReceiptAsync` now calls `ApplySupplierReceiptToWarehouseAsync` inside
+its own transaction, so a new receipt lands on `Completed` rather than `Draft`. The
+same commit also deleted the self-approval guard. Every one of the 18 fails on
+`InventoryLogic.SubmitSupplierReceiptAsync` throwing
+"Chỉ được gửi phiếu nhập ở trạng thái Draft hoặc Rejected."
+
+The implementation is the newer truth; the test class was never updated with it.
+Rewriting these tests touches supplier-receipt business logic and is out of scope
+for the POS reliability roadmap — track it separately.
 
 Build:
 

@@ -334,7 +334,8 @@ public class OrderLogic(
                 i.CostPrice,
                 unitPrice,
                 isGift,
-                profile.CategoryId ?? i.CategoryId);
+                profile.CategoryId ?? i.CategoryId,
+                profile.InventoryUnit);
         }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
@@ -518,6 +519,7 @@ public class OrderLogic(
             SkuSnapshotName = i.SkuSnapshotName,
             SkuSnapshotCode = i.SkuSnapshotCode,
             CategorySnapshotName = i.CategorySnapshotName,
+            UnitSnapshot = i.UnitSnapshot,
             Quantity = i.Quantity,
             CostPrice = i.CostPrice,
             UnitPrice = i.UnitPrice,
@@ -991,6 +993,7 @@ public class OrderLogic(
                 detail.SkuSnapshotName = reqItem.SkuSnapshotName.Trim();
                 detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
                 detail.CategorySnapshotName = reqItem.CategorySnapshotName?.Trim();
+                detail.UnitSnapshot = profile.InventoryUnit;
                 detail.Quantity = quantity;
                 detail.CostPrice = reqItem.CostPrice;
                 detail.UnitPrice = unitPrice;
@@ -1011,6 +1014,7 @@ public class OrderLogic(
                 SkuSnapshotName = reqItem.SkuSnapshotName.Trim(),
                 SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim(),
                 CategorySnapshotName = reqItem.CategorySnapshotName?.Trim(),
+                UnitSnapshot = profile.InventoryUnit,
                 Quantity = quantity,
                 CostPrice = reqItem.CostPrice,
                 UnitPrice = 0m,
@@ -1661,6 +1665,7 @@ public class OrderLogic(
 
         var deliveredAt = DateTime.UtcNow;
         order.OrderStatus = OrderStatus.Completed;
+        order.CompletedAt ??= deliveredAt;
         order.DeliveredAt = deliveredAt;
         order.DeliveredBy = actorId;
         order.DeliveredByName = actorName;
@@ -1914,6 +1919,8 @@ public class OrderLogic(
 
         order.OrderStatus = completionTarget;
         order.UpdatedAt = DateTime.UtcNow;
+        if (completionTarget == OrderStatus.Completed)
+            order.CompletedAt ??= order.UpdatedAt;
 
         var newlySucceededCashAmount = 0m;
         foreach (var payment in payments)
@@ -2357,6 +2364,7 @@ public class OrderLogic(
             {
                 completedForPickup = true;
                 order.OrderStatus = OrderStatus.Completed;
+                order.CompletedAt ??= DateTime.UtcNow;
             }
 
             foreach (var detail in order.OrderDetails ?? [])

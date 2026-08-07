@@ -1,13 +1,50 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatVnd } from '../../../../utils/vietnamCurrency.js'
 import { formatVietnamDateTimeMinute } from '../../../../utils/vietnamDateTime.js'
 import { getOrderStatusLabel, getOrderStatusClass } from '../../../orders/utils/orderDisplay.js'
-import { Card, DataTable } from '../reportUi.jsx'
+import { endOfDayOrderApi } from '../../services/endOfDayApi.js'
+import { Card, DataTable, Pagination } from '../reportUi.jsx'
 import OrderDetailDrawer from '../OrderDetailDrawer.jsx'
 
-function SalesTab({ report, mode }) {
-  const orders = report.orders || []
+const PAGE_SIZE = 50
+
+function SalesTab({ report, mode, params }) {
   const [selected, setSelected] = useState(null)
+  const [page, setPage] = useState(1)
+  const [pageItems, setPageItems] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setPage(1)
+    setPageItems(null)
+  }, [params])
+
+  // Trang đầu dùng lại lát dữ liệu trang cha đã tải, chỉ lật trang mới gọi thêm API.
+  useEffect(() => {
+    if (page === 1) return
+    const controller = new AbortController()
+    const { signal } = controller
+    setIsLoading(true)
+    setError(null)
+    endOfDayOrderApi
+      .getSales({ ...params, page, pageSize: PAGE_SIZE }, { signal })
+      .then((res) => {
+        if (!signal.aborted) setPageItems(res?.items || [])
+      })
+      .catch((err) => {
+        if (signal.aborted || err.name === 'AbortError') return
+        setError(err.statusCode === 403 ? 'Bạn không có quyền xem danh sách đơn hàng.' : err.message)
+      })
+      .finally(() => {
+        if (!signal.aborted) setIsLoading(false)
+      })
+    return () => controller.abort()
+  }, [params, page])
+
+  const totalCount = report.ordersTotalCount || 0
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const orders = page === 1 ? (report.orders || []).slice(0, PAGE_SIZE) : pageItems || []
 
   return (
     <div className="space-y-4">
@@ -74,9 +111,14 @@ function SalesTab({ report, mode }) {
       {mode === 'detail' && (
         <Card
           title="Chi tiết từng đơn"
-          subtitle={`${orders.length} đơn trong kỳ · bấm vào dòng để xem chi tiết đơn`}
+          subtitle={`${totalCount} đơn trong kỳ · bấm vào dòng để xem chi tiết đơn`}
           icon="list_alt"
         >
+          {error && (
+            <p className="mb-2 rounded-lg border border-[#b42318]/40 bg-[#b42318]/5 px-3 py-2 text-sm text-[#b42318]">
+              {error}
+            </p>
+          )}
           <DataTable
             columns={[
               { key: 'code', label: 'Mã đơn' },
@@ -123,6 +165,34 @@ function SalesTab({ report, mode }) {
                 <td className="px-3 py-2 text-xs">{o.paymentMethods || '—'}</td>
               </tr>
             )}
+            footer={
+              totalCount > 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-2">
+                    Tổng toàn kỳ ({totalCount} đơn)
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    {formatVnd(report.ordersTotalDiscountAmount)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-[#356647]">
+                    {formatVnd(report.ordersTotalFinalAmount)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    {formatVnd(report.ordersTotalPaidAmount)}
+                  </td>
+                  <td />
+                </tr>
+              ) : null
+            }
+          />
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            unitLabel="đơn"
+            isLoading={isLoading}
+            onChange={setPage}
           />
         </Card>
       )}

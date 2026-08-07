@@ -243,7 +243,8 @@ export const navigationItems = [
         label: 'Báo cáo cuối ngày',
         path: '/reports/end-of-day',
         module: 'reports',
-        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+        // Sale POS/COD chỉ dùng «Báo cáo chốt ca» trên POS; màn hình đầy đủ dành Manager/Kế toán.
+        roles: ['admin', 'agencyManager', 'accountant'],
       },
     ],
   },
@@ -809,14 +810,14 @@ export function getNavigationItemsForSession(session) {
   }
 
   if (hasAnyRoleGroup(roles, ['accountant', 'salesStaff'])) {
-    return groupSalesAccountantInsights(items)
+    return groupSalesAccountantInsights(items, session)
   }
 
   return items
 }
 
 /** Sale / Kế toán: gom Thống kê + Báo cáo thành một nhóm gọn. */
-function groupSalesAccountantInsights(items) {
+function groupSalesAccountantInsights(items, session = null) {
   const byPath = new Map(items.map((item) => [item.path, item]))
   const consumed = new Set()
   const result = []
@@ -837,6 +838,11 @@ function groupSalesAccountantInsights(items) {
   if (reports) {
     consumed.add(reports.path)
     for (const child of reports.children || []) {
+      const isEndOfDay = child.path === '/reports/end-of-day' || child.path?.startsWith('/reports/end-of-day')
+      // Sale POS / Sale COD: ẩn Báo cáo cuối ngày trong Thống kê & Báo cáo (chỉ Manager/Kế toán).
+      if (isEndOfDay && (isSaleCodOnlySession(session) || isSalePosOnlySession(session))) {
+        continue
+      }
       insightsChildren.push({
         label: child.label,
         path: child.path,
@@ -1133,6 +1139,13 @@ export function canAccessPath(session, pathname, search = '') {
     return canAccessModule(session, 'warehouse_daily_report')
   }
 
+  // Báo cáo cuối ngày (Back-Office): Sale POS/COD không vào — họ dùng Báo cáo chốt ca trên POS.
+  if (path === '/reports/end-of-day' || path.startsWith('/reports/end-of-day')) {
+    if (isSaleCodOnlySession(session) || isSalePosOnlySession(session)) {
+      return false
+    }
+  }
+
   const module = getModuleForPath(pathname)
   return canAccessModule(session, module)
 }
@@ -1147,6 +1160,19 @@ function isSaleCodOnlySession(session) {
     !canViewAll
     && permissions.includes('CREATE_COD_ORDER')
     && !permissions.includes('CREATE_POS_ORDER')
+  )
+}
+
+function isSalePosOnlySession(session) {
+  const permissions = session?.permissions ?? []
+  const canViewAll =
+    permissions.includes('VIEW_ALL_CUSTOMERS')
+    || permissions.includes('MANAGE_EMPLOYEE')
+    || permissions.includes('MANAGE_ROLE')
+  return (
+    !canViewAll
+    && permissions.includes('CREATE_POS_ORDER')
+    && !permissions.includes('CREATE_COD_ORDER')
   )
 }
 

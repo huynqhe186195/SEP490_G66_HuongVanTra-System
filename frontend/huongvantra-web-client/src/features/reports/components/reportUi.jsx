@@ -52,6 +52,40 @@ export function DataTable({ columns, rows, renderRow, emptyText = 'Không có ph
   )
 }
 
+/**
+ * Thanh phân trang cho các bảng chi tiết. Số tổng luôn lấy từ backend (tính trên toàn kỳ),
+ * không suy ra từ số dòng đang hiển thị.
+ */
+export function Pagination({ page, totalPages, totalCount, unitLabel = 'dòng', isLoading, onChange }) {
+  if (!totalPages || totalPages <= 1) return null
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[#c1c9c0]/40 px-3 py-2">
+      <p className="text-xs text-[#717971]">
+        Trang {page}/{totalPages}
+        {totalCount != null ? ` · ${totalCount} ${unitLabel} toàn kỳ` : ''}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={isLoading || page <= 1}
+          onClick={() => onChange(Math.max(1, page - 1))}
+          className="rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-sm font-medium text-[#414942] disabled:opacity-40"
+        >
+          Trang trước
+        </button>
+        <button
+          type="button"
+          disabled={isLoading || page >= totalPages}
+          onClick={() => onChange(page + 1)}
+          className="rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-sm font-medium text-[#414942] disabled:opacity-40"
+        >
+          Trang sau
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function EmptyState({ text = 'Không có giao dịch phù hợp với bộ lọc đã chọn.', hint, action }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#c1c9c0] bg-[#fbf9f1] p-10 text-center">

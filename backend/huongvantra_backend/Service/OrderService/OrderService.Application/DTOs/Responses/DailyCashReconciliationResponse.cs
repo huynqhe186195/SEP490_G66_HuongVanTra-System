@@ -113,7 +113,8 @@ public class OrderSummaryLineDto
 
 /// <summary>
 /// Giải thích chênh lệch giữa doanh thu ghi nhận và tiền thực thu:
-/// RecognizedRevenue - UnpaidRevenue + PriorPeriodCollections + ForfeitedDeposit - Refunds = TotalCashIn.
+/// RecognizedRevenue - UnpaidRevenue + PriorPeriodCollections + AdvanceOnOpenOrders
+/// + ForfeitedDeposit - Refunds = TotalCashIn.
 /// </summary>
 public class RevenueCashBridgeDto
 {
@@ -122,6 +123,11 @@ public class RevenueCashBridgeDto
     public decimal UnpaidRevenue { get; set; }
     /// <summary>Tiền thu trong kỳ nhưng thuộc đơn tạo từ kỳ trước (cọc, thu phần còn lại).</summary>
     public decimal PriorPeriodCollections { get; set; }
+    /// <summary>
+    /// Tiền thu trong kỳ của đơn tạo trong kỳ nhưng chưa hoàn tất: chờ nguyên vật liệu,
+    /// chờ sản xuất, chờ điều chuyển. Tiền đã vào két nhưng chưa được ghi nhận doanh thu.
+    /// </summary>
+    public decimal AdvanceOnOpenOrders { get; set; }
     public decimal ForfeitedDeposit { get; set; }
     public decimal Refunds { get; set; }
     public decimal TotalCashIn { get; set; }

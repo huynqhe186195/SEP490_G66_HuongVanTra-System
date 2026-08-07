@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
-import { reportsApi } from '../services/reportsApi'
-import { printEndOfDayReport, exportEndOfDayPdf } from '../utils/printEndOfDayReport.js'
+import { endOfDayOrderApi, endOfDayInventoryApi, fetchAllPages } from '../services/endOfDayApi.js'
+import { printEndOfDayReport, exportEndOfDayPdf, printEndOfDayK80 } from '../utils/printEndOfDayReport.js'
 import { exportEndOfDayExcel } from '../utils/exportEndOfDayExcel.js'
 import { loadPosSeller } from '../../pos/utils/posSeller.js'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
@@ -11,27 +11,20 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewAllOrders } from '../../auth/utils/permissions.js'
 import { fetchCustomers } from '../../customers/services/customersApi.js'
 import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
-import ReportFilterBar from '../components/ReportFilterBar.jsx'
-import ReportKpiCards from '../components/ReportKpiCards.jsx'
-import OverviewTab from '../components/tabs/OverviewTab.jsx'
-import SalesTab from '../components/tabs/SalesTab.jsx'
-import PaymentsTab from '../components/tabs/PaymentsTab.jsx'
-import ProductsTab from '../components/tabs/ProductsTab.jsx'
-import InventoryTab from '../components/tabs/InventoryTab.jsx'
-import ExceptionsTab from '../components/tabs/ExceptionsTab.jsx'
-import ExportReportDialog from '../components/ExportReportDialog.jsx'
-import { EmptyState } from '../components/reportUi.jsx'
+import EndOfDayCriteriaPanel from '../components/EndOfDayCriteriaPanel.jsx'
+import EndOfDayReportViewer from '../components/EndOfDayReportViewer.jsx'
 import {
-  TABS,
-  DEFAULT_TAB,
+  DEFAULT_CONCERN,
+  concernMeta,
+  parseConcernFromSearchParams,
+  parseLayoutFromSearchParams,
+  layoutToOrientation,
+  filtersForConcern,
   parseFiltersFromSearchParams,
-  parseTabFromSearchParams,
   filtersToSearchParams,
-  filtersToApiParams,
+  filtersToEodParams,
   isMultiDay,
   todayInputValue,
-  countAdvancedFilters,
-  quickRangeToDates,
 } from '../utils/endOfDayFilters.js'
 
 const EMPTY_REPORT = {
@@ -40,6 +33,7 @@ const EMPTY_REPORT = {
   byPaymentMethod: [],
   receipts: [],
   products: [],
+  productTotals: [],
   bySalesMode: [],
   hourlyRevenue: [],
   byEmployee: [],
@@ -60,52 +54,41 @@ const EMPTY_REPORT = {
   distinctSkuCount: 0,
   cancelledOrders: 0,
   refundedOrders: 0,
+  ordersTotalCount: 0,
+  receiptsTotalCount: 0,
+  productsTotalCount: 0,
 }
 
+/**
+ * Màn hình Báo cáo cuối ngày dạng hai panel.
+ *
+ * Trái là panel tiêu chí (kiểu hiển thị, mối quan tâm, thời gian và các bộ lọc), phải là
+ * khung xem tài liệu báo cáo. Đổi mối quan tâm là đổi tài liệu chứ không phải đổi tab, và
+ * giá trị bộ lọc được giữ nguyên trong URL kể cả khi mối quan tâm đang xem không dùng tới.
+ */
 function EndOfDayReportPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Bộ lọc đang áp dụng đọc từ URL; bộ lọc nháp là thứ người dùng đang chỉnh.
   const appliedFilters = useMemo(() => parseFiltersFromSearchParams(searchParams), [searchParams])
-  const activeTab = parseTabFromSearchParams(searchParams)
-  const filterKey = JSON.stringify(appliedFilters)
-  const [draftFilters, setDraftFilters] = useState(appliedFilters)
-  const [syncedFilterKey, setSyncedFilterKey] = useState(filterKey)
-
-  // Bộ lọc nháp bám theo URL khi người dùng bấm back/forward hoặc mở link có sẵn filter.
-  if (syncedFilterKey !== filterKey) {
-    setSyncedFilterKey(filterKey)
-    setDraftFilters(appliedFilters)
-  }
+  const concern = parseConcernFromSearchParams(searchParams)
+  const layout = parseLayoutFromSearchParams(searchParams)
+  const meta = concernMeta(concern)
 
   const [users, setUsers] = useState([])
   const [customers, setCustomers] = useState([])
   const [report, setReport] = useState(EMPTY_REPORT)
+  const [exceptions, setExceptions] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [loadedAt, setLoadedAt] = useState(null)
+  const [reloadNonce, setReloadNonce] = useState(0)
+  const [isCriteriaOpen, setIsCriteriaOpen] = useState(false)
 
   const [sellerInfo, setSellerInfo] = useState({ name: '', role: '—' })
-  const [showExportDialog, setShowExportDialog] = useState(false)
   const isOnline = useNetworkStatus()
   const session = loadAuthSession()
   const canFilterByEmployee = canViewAllOrders(session)
-  const visibleTabs = useMemo(
-    () => (canFilterByEmployee ? TABS : TABS.filter((tab) => tab.key !== 'inventory')),
-    [canFilterByEmployee],
-  )
   const agencyName = session?.agency?.name || 'Chi nhánh chính'
-
-  const isDirty = useMemo(
-    () => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters),
-    [draftFilters, appliedFilters],
-  )
-
-  useEffect(() => {
-    if (visibleTabs.some((tab) => tab.key === activeTab)) return
-    handleTabChange(DEFAULT_TAB)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ redirect khi tab hiện tại bị ẩn theo role
-  }, [activeTab, visibleTabs])
 
   useEffect(() => {
     loadPosSeller().then(setSellerInfo)
@@ -153,53 +136,100 @@ function EndOfDayReportPage() {
     }
   }, [canFilterByEmployee])
 
-  // Chỉ tải lại khi bộ lọc đã áp dụng thay đổi. Đổi tab không gọi lại API.
-  const apiParams = useMemo(() => filtersToApiParams(JSON.parse(filterKey)), [filterKey])
+  // Chỉ gửi lên API những bộ lọc mà mối quan tâm đang xem thực sự hỗ trợ.
+  const eodParams = useMemo(
+    () => filtersToEodParams(filtersForConcern(appliedFilters, concern)),
+    [appliedFilters, concern],
+  )
+  const paramKey = JSON.stringify(eodParams)
+
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
+    const { signal } = controller
+    const params = JSON.parse(paramKey)
+
     const loadReport = async () => {
       try {
         setIsLoading(true)
         setError(null)
-        const res = await reportsApi.getDailyCashReconciliation(filtersToApiParams(JSON.parse(filterKey)))
-        if (cancelled) return
-        setReport({ ...EMPTY_REPORT, ...(res || {}) })
+        // Bản in và Excel cần dòng chi tiết, nên lấy kèm một lát đầu của ba danh sách.
+        // DETAIL_SLICE bằng trần trang phía server; phần vượt được báo trong DataGaps.
+        const DETAIL_SLICE = 200
+        const detail = { ...params, page: 1, pageSize: DETAIL_SLICE }
+        const [summary, exc, sales, payments, products] = await Promise.all([
+          endOfDayOrderApi.getSummary(params, { signal }),
+          endOfDayOrderApi.getExceptions({ ...params, page: 1, pageSize: 20 }, { signal }),
+          endOfDayOrderApi.getSales(detail, { signal }),
+          endOfDayOrderApi.getPayments(detail, { signal }),
+          endOfDayOrderApi.getProducts(detail, { signal }),
+        ])
+        if (signal.aborted) return
+        setExceptions(exc)
+        setReport({
+          ...EMPTY_REPORT,
+          ...(summary || {}),
+          orders: sales?.items || [],
+          receipts: payments?.items || [],
+          products: products?.items || [],
+          productTotals: products?.totals || [],
+          // Số tổng toàn kỳ do backend trả về; tài liệu dùng nó thay vì đếm dòng đang xem.
+          ordersTotalCount: sales?.totalCount || 0,
+          receiptsTotalCount: payments?.totalCount || 0,
+          productsTotalCount: products?.totalCount || 0,
+          ordersTotalFinalAmount: sales?.totalFinalAmount || 0,
+          ordersTotalDiscountAmount: sales?.totalDiscountAmount || 0,
+          ordersTotalPaidAmount: sales?.totalPaidAmount || 0,
+          receiptsTotalAmount: payments?.totalAmount || 0,
+        })
         setLoadedAt(new Date().toISOString())
       } catch (err) {
-        if (cancelled) return
+        if (signal.aborted || err.name === 'AbortError') return
         setError('Không thể tải dữ liệu báo cáo: ' + err.message)
         setReport(EMPTY_REPORT)
+        setExceptions(null)
       } finally {
-        if (!cancelled) setIsLoading(false)
+        if (!signal.aborted) setIsLoading(false)
       }
     }
     loadReport()
-    return () => {
-      cancelled = true
-    }
-  }, [filterKey])
+    return () => controller.abort()
+  }, [paramKey, reloadNonce])
 
-  const handleApply = () => {
-    setSearchParams(filtersToSearchParams(draftFilters, searchParams))
-  }
+  const handleRetry = useCallback(() => setReloadNonce((n) => n + 1), [])
 
-  const handleReset = () => {
+  // Bộ lọc áp dụng ngay khi đổi, không có nút Áp dụng riêng.
+  const handleFiltersChange = useCallback(
+    (next) => setSearchParams(filtersToSearchParams(next, searchParams), { replace: true }),
+    [searchParams, setSearchParams],
+  )
+
+  const handleConcernChange = useCallback(
+    (key) => {
+      const next = new URLSearchParams(searchParams)
+      if (key === DEFAULT_CONCERN) next.delete('concern')
+      else next.set('concern', key)
+      setSearchParams(next, { replace: true })
+      setIsCriteriaOpen(false)
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const handleLayoutChange = useCallback(
+    (key) => {
+      const next = new URLSearchParams(searchParams)
+      if (key === 'report') next.delete('layout')
+      else next.set('layout', key)
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const handleReset = useCallback(() => {
     const next = new URLSearchParams()
-    if (activeTab !== DEFAULT_TAB) next.set('tab', activeTab)
+    if (concern !== DEFAULT_CONCERN) next.set('concern', concern)
+    if (layout !== 'report') next.set('layout', layout)
     setSearchParams(next)
-  }
-
-  const handleTabChange = (tab) => {
-    const next = new URLSearchParams(searchParams)
-    if (tab === DEFAULT_TAB) next.delete('tab')
-    else next.set('tab', tab)
-    setSearchParams(next, { replace: true })
-  }
-
-  // Lối thoát khi kỳ đang xem không có dữ liệu — thường gặp lúc vừa qua nửa đêm.
-  const handleWidenToLast7 = () => {
-    setSearchParams(filtersToSearchParams({ ...appliedFilters, ...quickRangeToDates('last7') }, searchParams))
-  }
+  }, [concern, layout, setSearchParams])
 
   const employeeName = !canFilterByEmployee
     ? sellerInfo.username
@@ -220,11 +250,35 @@ function EndOfDayReportPage() {
     ? `${appliedFilters.date} → ${appliedFilters.dateTo}`
     : appliedFilters.date || todayInputValue()
 
-  // Ngoại lệ: đơn chưa thu đủ tiền. Tab Ngoại lệ đầy đủ sẽ bổ sung ở đợt sau.
-  const exceptionCount = useMemo(
-    () => (report.orders || []).filter((o) => (o.paidAmount || 0) < (o.finalAmount || 0)).length,
-    [report.orders],
-  )
+  const customerName = appliedFilters.customerId
+    ? customers.find((c) => c.customerId === appliedFilters.customerId)?.fullName || 'Khách đã chọn'
+    : 'Tất cả khách hàng'
+
+  // Phần đầu tài liệu ghi lại đúng tiêu chí đã áp dụng cho báo cáo đang xem.
+  const criteriaLines = useMemo(() => {
+    const effective = filtersForConcern(appliedFilters, concern)
+    const lines = [
+      { label: 'Kỳ báo cáo', value: periodLabel },
+      { label: 'Chi nhánh', value: agencyName },
+    ]
+    if (effective.employeeId || !canFilterByEmployee) lines.push({ label: 'Nhân viên', value: employeeName })
+    if (effective.customerId) lines.push({ label: 'Khách hàng', value: customerName })
+    if (effective.channel) lines.push({ label: 'Kênh bán', value: effective.channel })
+    if (effective.paymentMethod) lines.push({ label: 'PT thanh toán', value: effective.paymentMethod })
+    if (effective.salesMode) lines.push({ label: 'PT bán hàng', value: effective.salesMode })
+    if (effective.orderStatus) lines.push({ label: 'Trạng thái đơn', value: effective.orderStatus })
+    lines.push({ label: 'Người kết xuất', value: creatorName })
+    return lines
+  }, [
+    appliedFilters,
+    concern,
+    periodLabel,
+    agencyName,
+    canFilterByEmployee,
+    employeeName,
+    customerName,
+    creatorName,
+  ])
 
   const hasData =
     (report.receipts?.length || 0) > 0 ||
@@ -241,74 +295,141 @@ function EndOfDayReportPage() {
 
   const exportMeta = { periodLabel, creatorName, agencyName, employeeName }
 
-  const handleExport = async ({ output, orientation }) => {
-    const payload = {
+  // Bảng trên màn hình chỉ tải một lát đầu để mở tài liệu cho nhanh. Excel và bản in thì
+  // phải đủ dòng, nên trước khi xuất sẽ tải nốt các trang còn lại. Nếu kỳ báo cáo vượt trần
+  // an toàn thì đánh dấu để file ghi rõ, không cắt bớt trong im lặng.
+  const [isPreparingFullData, setIsPreparingFullData] = useState(false)
+  const [isExportingExcel, setIsExportingExcel] = useState(false)
+  const [exportError, setExportError] = useState(null)
+
+  const loadFullDetail = useCallback(async () => {
+    const needsMore =
+      (report.ordersTotalCount || 0) > (report.orders?.length || 0) ||
+      (report.receiptsTotalCount || 0) > (report.receipts?.length || 0) ||
+      (report.productsTotalCount || 0) > (report.products?.length || 0)
+    if (!needsMore) return { report, truncationNotes: [] }
+
+    setIsPreparingFullData(true)
+    try {
+      const [sales, payments, products] = await Promise.all([
+        fetchAllPages(endOfDayOrderApi.getSales, eodParams),
+        fetchAllPages(endOfDayOrderApi.getPayments, eodParams),
+        fetchAllPages(endOfDayOrderApi.getProducts, eodParams),
+      ])
+      const truncationNotes = []
+      if (sales.truncated)
+        truncationNotes.push(`Danh sách đơn chỉ in ${sales.items.length}/${report.ordersTotalCount} dòng.`)
+      if (payments.truncated)
+        truncationNotes.push(`Danh sách khoản thu chỉ in ${payments.items.length}/${report.receiptsTotalCount} dòng.`)
+      if (products.truncated)
+        truncationNotes.push(`Danh sách hàng hóa chỉ in ${products.items.length}/${report.productsTotalCount} dòng.`)
+
+      return {
+        report: {
+          ...report,
+          orders: sales.items,
+          receipts: payments.items,
+          products: products.items,
+        },
+        truncationNotes,
+      }
+    } catch {
+      // Tải bổ sung hỏng thì vẫn xuất được bằng lát dữ liệu đang có, kèm ghi chú.
+      return {
+        report,
+        truncationNotes: ['Không tải được toàn bộ dòng chi tiết; file chỉ chứa phần đã tải trên màn hình.'],
+      }
+    } finally {
+      setIsPreparingFullData(false)
+    }
+  }, [report, eodParams])
+
+  // Cùng một payload nuôi cả bản in và file PDF, nên hai đường không thể lệch nội dung nhau.
+  const documentPayload = useMemo(
+    () => ({
       periodLabel,
       employeeName,
       report,
+      exceptions,
       creatorName,
       agencyName,
-      periodStartUtc: apiParams.fromDate,
       isMultiDay: multiDay,
-      orientation,
-      filename: getExportFilename(),
-    }
-    if (output === 'pdf') await exportEndOfDayPdf(payload)
-    else await printEndOfDayReport(payload)
-  }
+    }),
+    [periodLabel, employeeName, report, exceptions, creatorName, agencyName, multiDay],
+  )
 
-  const handleExportExcel = () => {
-    exportEndOfDayExcel({
-      report,
-      meta: exportMeta,
-      periodStartUtc: apiParams.fromDate,
-      filename: getExportFilename(),
-    })
-  }
+  const handleExport = useCallback(
+    async (output) => {
+      const full = await loadFullDetail()
+      const payload = {
+        ...documentPayload,
+        report: full.report,
+        truncationNotes: full.truncationNotes,
+        orientation: layoutToOrientation(layout),
+        filename: getExportFilename(),
+      }
+      if (output === 'pdf') await exportEndOfDayPdf(payload)
+      else if (output === 'k80') await printEndOfDayK80(payload)
+      else await printEndOfDayReport(payload)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [documentPayload, loadFullDetail, layout, periodLabel],
+  )
 
-  const renderTab = () => {
-    // Tab Kho/Kệ đọc dữ liệu riêng từ InventoryService nên vẫn có thể có số liệu
-    // dù kỳ này không phát sinh đơn hàng nào.
-    if (!hasData && !isLoading && !error && activeTab !== 'inventory') {
-      return (
-        <EmptyState
-          text={`Không có giao dịch nào trong kỳ ${periodLabel}${
-            countAdvancedFilters(appliedFilters) > 0 ? ' với bộ lọc đã chọn' : ''
-          }.`}
-          hint="Kỳ báo cáo tính theo ngày dương lịch giờ Việt Nam. Nếu vừa sang ngày mới, số liệu ca bán hàng đêm qua nằm ở ngày hôm trước."
-          action={
-            <button
-              type="button"
-              onClick={handleWidenToLast7}
-              className="mt-1 rounded-lg border border-[#356647] px-4 py-2 text-sm font-medium text-[#356647] hover:bg-[#356647]/10"
-            >
-              Xem 7 ngày gần nhất
-            </button>
-          }
-        />
-      )
+  // Sheet Kho/Kệ thuộc InventoryService nên chỉ tải lúc bấm xuất Excel. Thiếu quyền xem
+  // tồn kho thì vẫn xuất file, sheet đó ghi rõ lý do thay vì để trống gây hiểu nhầm.
+  const handleExportExcel = useCallback(async () => {
+    setExportError(null)
+    setIsExportingExcel(true)
+    let inventory
+    try {
+      inventory = await endOfDayInventoryApi.getSummary(eodParams)
+    } catch {
+      inventory = null
     }
-    switch (activeTab) {
-      case 'sales':
-        return <SalesTab report={report} mode={appliedFilters.mode} />
-      case 'payments':
-        return <PaymentsTab report={report} mode={appliedFilters.mode} />
-      case 'products':
-        return <ProductsTab report={report} />
-      case 'inventory':
-        return <InventoryTab fromUtc={apiParams.fromDate} toUtc={apiParams.toDate} />
-      case 'exceptions':
-        return <ExceptionsTab report={report} periodStartUtc={apiParams.fromDate} />
-      default:
-        return <OverviewTab report={report} />
+    try {
+      const full = await loadFullDetail()
+      await exportEndOfDayExcel({
+        report: full.report,
+        exceptions,
+        inventory,
+        meta: { ...exportMeta, truncationNotes: full.truncationNotes },
+        filename: getExportFilename(),
+      })
+    } catch (err) {
+      // Không dùng `error` chung vì state đó thay thế cả nội dung báo cáo đang xem.
+      setExportError(err.message || 'Không xuất được file Excel.')
+    } finally {
+      setIsExportingExcel(false)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eodParams, exceptions, loadFullDetail, periodLabel, creatorName, agencyName, employeeName])
+
+  const criteriaPanel = (
+    <EndOfDayCriteriaPanel
+      filters={appliedFilters}
+      onFiltersChange={handleFiltersChange}
+      concern={concern}
+      onConcernChange={handleConcernChange}
+      layout={layout}
+      onLayoutChange={handleLayoutChange}
+      users={users}
+      customers={customers}
+      canFilterByEmployee={canFilterByEmployee}
+      onReset={handleReset}
+      isLoading={isLoading}
+    />
+  )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 [font-family:'Manrope',sans-serif]">
       <PageHeader
         compact
-        title={multiDay ? 'Báo cáo bán hàng theo kỳ' : 'Báo cáo cuối ngày'}
+        title={
+          multiDay
+            ? 'Báo cáo bán hàng theo kỳ'
+            : 'Báo cáo cuối ngày'
+        }
         titleInfo="Chốt số liệu bán hàng, thu chi và hàng hóa trong kỳ"
       />
 
@@ -322,101 +443,73 @@ function EndOfDayReportPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-[#717971]">
-          Dữ liệu cập nhật gần nhất: {loadedAt ? formatVietnamDateTimeMinute(loadedAt) : '—'} · Múi giờ: GMT+7
-        </p>
-        <div className="flex items-center gap-2">
+      {exportError && (
+        <div className="flex items-start gap-2 rounded-2xl border border-[#7e5700]/40 bg-[#fec25b]/15 p-3">
+          <span className="material-symbols-outlined text-[18px] text-[#7e5700]">warning</span>
+          <p className="flex-1 text-sm text-[#7e5700]">{exportError}</p>
           <button
             type="button"
-            onClick={handleExportExcel}
-            className="flex items-center gap-1.5 rounded-lg border border-[#c1c9c0] bg-white px-3 py-2 text-sm font-medium text-[#414942] hover:bg-[#f6f4ec]"
+            onClick={() => setExportError(null)}
+            className="rounded-lg p-1 text-[#7e5700] hover:bg-[#fec25b]/25"
+            aria-label="Đóng thông báo"
           >
-            <span className="material-symbols-outlined text-[18px] text-[#356647]">table_view</span>
-            Xuất Excel
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowExportDialog(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-[#c1c9c0] bg-white px-3 py-2 text-sm font-medium text-[#414942] hover:bg-[#f6f4ec]"
-          >
-            <span className="material-symbols-outlined text-[18px] text-[#356647]">print</span>
-            In báo cáo
-          </button>
-        </div>
-      </div>
-
-      <ReportFilterBar
-        draft={draftFilters}
-        onChange={setDraftFilters}
-        onApply={handleApply}
-        onReset={handleReset}
-        isDirty={isDirty}
-        isLoading={isLoading}
-        users={users}
-        customers={customers}
-        canFilterByEmployee={canFilterByEmployee}
-        agencyName={agencyName}
-      />
-
-      {error && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#b42318]/40 bg-[#b42318]/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-medium text-[#b42318]">
-            <span className="material-symbols-outlined text-[18px]">error</span>
-            {error}
-          </p>
-          <button
-            type="button"
-            onClick={() => setSearchParams(new URLSearchParams(searchParams))}
-            className="rounded-lg border border-[#b42318] px-3 py-1.5 text-sm font-medium text-[#b42318] hover:bg-[#b42318]/10"
-          >
-            Thử lại
+            <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
       )}
 
-      <ReportKpiCards
-        report={report}
-        exceptionCount={exceptionCount}
-        onOpenExceptions={() => handleTabChange('exceptions')}
-        showStoreWideCash={canFilterByEmployee}
-      />
+      <div className="flex min-h-0 flex-1 gap-3">
+        <aside className="hidden w-[268px] shrink-0 overflow-auto rounded-2xl border border-[#c1c9c0]/60 bg-white lg:block">
+          {criteriaPanel}
+        </aside>
 
-      <div className="flex flex-wrap gap-1 border-b border-[#c1c9c0]/60">
-        {visibleTabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => handleTabChange(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              activeTab === t.key
-                ? 'border-[#356647] text-[#356647]'
-                : 'border-transparent text-[#717971] hover:text-[#414942]'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto pb-4">
-        {isLoading ? (
-          <div className="space-y-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-32 animate-pulse rounded-2xl bg-[#f6f4ec]" />
-            ))}
-          </div>
-        ) : (
-          renderTab()
-        )}
-      </div>
-
-      {showExportDialog && (
-        <ExportReportDialog
+        <EndOfDayReportViewer
+          concern={concern}
+          concernTitle={meta.title}
+          layout={layout}
+          onLayoutChange={handleLayoutChange}
+          report={report}
+          exceptions={exceptions}
+          params={eodParams}
           periodLabel={periodLabel}
-          onClose={() => setShowExportDialog(false)}
-          onConfirm={handleExport}
+          criteriaLines={criteriaLines}
+          printedAtLabel={loadedAt ? formatVietnamDateTimeMinute(loadedAt) : null}
+          loadedAtLabel={loadedAt ? formatVietnamDateTimeMinute(loadedAt) : null}
+          isLoading={isLoading}
+          isBusy={isPreparingFullData || isExportingExcel}
+          error={error}
+          hasData={hasData}
+          onReload={handleRetry}
+          onExportExcel={handleExportExcel}
+          onPrintA4={() => handleExport('a4')}
+          onPrintK80={() => handleExport('k80')}
+          onExportPdf={() => handleExport('pdf')}
+          onOpenCriteria={() => setIsCriteriaOpen(true)}
         />
+      </div>
+
+      {isCriteriaOpen && (
+        <div className="fixed inset-0 z-40 flex lg:hidden">
+          <button
+            type="button"
+            aria-label="Đóng bảng tiêu chí"
+            onClick={() => setIsCriteriaOpen(false)}
+            className="flex-1 bg-black/40"
+          />
+          <div className="w-[292px] max-w-[85vw] overflow-auto bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#c1c9c0]/60 px-3 py-2">
+              <span className="text-sm font-bold text-[#1b1c17]">Tiêu chí báo cáo</span>
+              <button
+                type="button"
+                onClick={() => setIsCriteriaOpen(false)}
+                className="rounded-lg p-1 text-[#414942] hover:bg-[#f6f4ec]"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            {criteriaPanel}
+          </div>
+        </div>
       )}
     </div>
   )

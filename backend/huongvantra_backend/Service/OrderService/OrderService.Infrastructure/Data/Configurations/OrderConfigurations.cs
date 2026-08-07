@@ -55,6 +55,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(e => e.DueDate);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
+        // Báo cáo cuối ngày lọc đơn hoàn tất theo kỳ; thiếu index thì mỗi lần mở báo cáo
+        // là một lần quét toàn bảng Orders.
+        builder.HasIndex(e => e.CompletedAt);
+        builder.HasIndex(e => e.CreatedAt);
 
         builder.HasMany(e => e.OrderDetails).WithOne(d => d.Order).HasForeignKey(d => d.OrderId);
         builder.HasMany(e => e.Payments).WithOne(p => p.Order).HasForeignKey(p => p.OrderId);
@@ -118,6 +122,7 @@ public class OrderDetailConfiguration : IEntityTypeConfiguration<OrderDetail>
         builder.Property(e => e.Id).ValueGeneratedNever();
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.SkuSnapshotCode).HasMaxLength(50);
+        builder.Property(e => e.UnitSnapshot).HasMaxLength(20);
         builder.Property(e => e.Quantity).IsRequired();
         builder.Property(e => e.ReturnedQuantity).HasDefaultValue(0).IsRequired();
         builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
@@ -163,6 +168,8 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.TransferQrExpiresAtUtc);
         builder.Property(e => e.PaymentPurpose).HasConversion<string>().HasMaxLength(30)
             .HasDefaultValue(PaymentPurpose.Full).IsRequired();
+        // Tiền thu vào của báo cáo cuối ngày lọc theo PaidAt.
+        builder.HasIndex(e => e.PaidAt);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }

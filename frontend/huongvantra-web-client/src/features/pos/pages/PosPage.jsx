@@ -8,6 +8,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
 import PosPaymentConfirmModal from "../components/PosPaymentConfirmModal.jsx";
 import BackorderConfirmModal from "../components/BackorderConfirmModal.jsx";
+import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
 import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
 import CustomScrollArea from "../../../components/shared/CustomScrollArea.jsx";
@@ -79,6 +80,7 @@ import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../component
 import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
   isOpenCashSessionReady,
+  loadOpenCashSession,
   recordCashSale,
   refreshCashSession,
   subscribeCashSession,
@@ -333,6 +335,7 @@ function PosPage() {
   const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
   const [isPaymentConfirmOpen, setIsPaymentConfirmOpen] = useState(false)
   const [backorderPrompt, setBackorderPrompt] = useState(null)
+  const [showEndOfDayModal, setShowEndOfDayModal] = useState(false)
   const [customerOpenDebts, setCustomerOpenDebts] = useState([])
   const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
   const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
@@ -2710,8 +2713,19 @@ function PosPage() {
                         </button>
                     </div>
 
+                    <div className="ml-auto shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowEndOfDayModal(true)}
+                            className="flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] transition-colors hover:bg-[#356647]/10"
+                            title={isTakeaway ? 'Báo cáo chốt ca COD / mang đi' : 'Xem báo cáo chốt ca và in phiếu K80'}>
+                            <Icon className="text-[16px]">summarize</Icon>
+                            {isTakeaway ? 'Báo cáo chốt ca COD' : 'Báo cáo chốt ca'}
+                        </button>
+                    </div>
+
                     {showCashSessionUi ? (
-                      <div className="ml-auto shrink-0">
+                      <div className="shrink-0">
                         <PosCashSessionBar
                           dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
                           dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
@@ -3425,6 +3439,18 @@ function PosPage() {
           isSubmitting={isSubmitting}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
+        />
+      ) : null}
+
+      {showEndOfDayModal ? (
+        <EndOfDayReportModal
+          onClose={() => setShowEndOfDayModal(false)}
+          sellerName={authSession?.username || ''}
+          sellerRole={(authSession?.roles || []).join(', ') || '—'}
+          channel={isTakeaway ? 'COD' : 'POS'}
+          variant={isTakeaway ? 'cod' : 'shift'}
+          onDutyShift={shelfOnDuty}
+          cashSession={loadOpenCashSession()}
         />
       ) : null}
 
