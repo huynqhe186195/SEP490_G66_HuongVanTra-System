@@ -25,6 +25,21 @@ import {
   saveDraftOrder,
 } from '../../../lib/offlineDb.js'
 
+/** Ghép tên SP + quy cách; tránh "Trà Xanh 100g — Trà Xanh 100g" khi VariantName đã chứa tên SP. */
+export function formatPosDisplayName(productName, packagingType, fallback = '') {
+  const name = String(productName || '').trim()
+  const packaging = String(packagingType || '').trim()
+  if (!name) return packaging || String(fallback || '').trim() || 'Sản phẩm'
+  if (!packaging) return name
+  if (name === packaging) return name
+  const nameLower = name.toLowerCase()
+  const packagingLower = packaging.toLowerCase()
+  if (packagingLower.includes(nameLower) || nameLower.includes(packagingLower)) {
+    return packaging.length >= name.length ? packaging : name
+  }
+  return `${name} — ${packaging}`
+}
+
 function buildPromotionPreviewBody({
   promotionId = null,
   promotionCode = null,
@@ -155,10 +170,11 @@ function buildOrderRequestFromPosPayload(
     codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
       skuId: line.productId,
-      skuSnapshotName:
-        line.productName && line.packagingType
-          ? `${line.productName} — ${line.packagingType}`
-          : line.name || line.sku || 'Sản phẩm',
+      skuSnapshotName: formatPosDisplayName(
+        line.productName,
+        line.packagingType,
+        line.name || line.sku || 'Sản phẩm',
+      ),
       skuSnapshotCode: line.sku || null,
       categorySnapshotName: line.categoryName || null,
       quantity: normalizePosBaseQuantity(line.quantity, line.inventoryUnit),
@@ -616,10 +632,7 @@ export function mapPosProduct(item) {
   const packagingType = item.packagingType ?? item.PackagingType ?? ''
   const sku = item.sku ?? item.Sku ?? ''
   const fallbackName = item.name ?? item.Name ?? ''
-  const displayName =
-    productName && packagingType
-      ? `${productName} — ${packagingType}`
-      : fallbackName || sku
+  const displayName = formatPosDisplayName(productName, packagingType, fallbackName || sku)
 
   return {
     productId: item.productId ?? item.ProductId,

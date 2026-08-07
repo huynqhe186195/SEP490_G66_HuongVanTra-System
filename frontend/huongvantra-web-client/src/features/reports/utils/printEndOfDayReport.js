@@ -115,6 +115,7 @@ export function buildEndOfDayHtml({
   agencyName = 'Chi nhánh chính',
   isMultiDay = false,
   truncationNotes = [],
+  documentTitle = null,
 }) {
   const r = report || {}
   const b = r.bridge || {}
@@ -129,9 +130,12 @@ export function buildEndOfDayHtml({
   const underpaid = e.underpaid || []
   const priorPeriod = e.priorPeriodReceipts || []
 
+  const reportTitle = documentTitle
+    || (isMultiDay ? 'BÁO CÁO BÁN HÀNG THEO KỲ' : 'BÁO CÁO CUỐI NGÀY')
+
   const header = `
     <div class="text-center">
-      <h1 class="report-title font-bold">${isMultiDay ? 'BÁO CÁO BÁN HÀNG THEO KỲ' : 'BÁO CÁO CUỐI NGÀY'}</h1>
+      <h1 class="report-title font-bold">${escapeHtml(reportTitle)}</h1>
       <div class="font-bold">Hệ thống Quản lý Hương Vân Trà</div>
       <div class="font-bold">Kỳ báo cáo: ${escapeHtml(periodLabel)}</div>
     </div>
@@ -462,14 +466,16 @@ export function buildK80Html({
   exceptions,
   creatorName = '—',
   agencyName = 'Chi nhánh chính',
+  documentTitle = null,
 }) {
   const r = report || {}
   const e = exceptions || {}
   const byMethod = (r.byPaymentMethod || []).filter((m) => (m.amountIn || 0) !== 0 || (m.amountOut || 0) !== 0)
   const totals = r.productTotals || []
+  const title = documentTitle || 'Báo cáo cuối ngày'
 
   return `
-    <div class="k80-title">Báo cáo cuối ngày</div>
+    <div class="k80-title">${escapeHtml(title)}</div>
     <div class="k80-sub">Hương Vân Trà</div>
     <div class="k80-sub">${escapeHtml(agencyName)}</div>
     <div class="k80-sep"></div>

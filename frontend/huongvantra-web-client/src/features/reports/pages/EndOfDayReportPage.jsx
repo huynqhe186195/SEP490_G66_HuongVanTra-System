@@ -425,7 +425,11 @@ function EndOfDayReportPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-3 [font-family:'Manrope',sans-serif]">
       <PageHeader
         compact
-        title={multiDay ? 'Báo cáo bán hàng theo kỳ' : 'Báo cáo cuối ngày'}
+        title={
+          multiDay
+            ? 'Báo cáo bán hàng theo kỳ'
+            : 'Báo cáo cuối ngày'
+        }
         titleInfo="Chốt số liệu bán hàng, thu chi và hàng hóa trong kỳ"
       />
 

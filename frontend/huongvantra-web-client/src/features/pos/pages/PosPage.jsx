@@ -80,6 +80,7 @@ import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../component
 import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
   isOpenCashSessionReady,
+  loadOpenCashSession,
   recordCashSale,
   refreshCashSession,
   subscribeCashSession,
@@ -2717,9 +2718,9 @@ function PosPage() {
                             type="button"
                             onClick={() => setShowEndOfDayModal(true)}
                             className="flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] transition-colors hover:bg-[#356647]/10"
-                            title="Xem nhanh báo cáo cuối ngày và in phiếu K80">
+                            title={isTakeaway ? 'Báo cáo chốt ca COD / mang đi' : 'Xem báo cáo chốt ca và in phiếu K80'}>
                             <Icon className="text-[16px]">summarize</Icon>
-                            Báo cáo cuối ngày
+                            {isTakeaway ? 'Báo cáo chốt ca COD' : 'Báo cáo chốt ca'}
                         </button>
                     </div>
 
@@ -3446,6 +3447,10 @@ function PosPage() {
           onClose={() => setShowEndOfDayModal(false)}
           sellerName={authSession?.username || ''}
           sellerRole={(authSession?.roles || []).join(', ') || '—'}
+          channel={isTakeaway ? 'COD' : 'POS'}
+          variant={isTakeaway ? 'cod' : 'shift'}
+          onDutyShift={shelfOnDuty}
+          cashSession={loadOpenCashSession()}
         />
       ) : null}
 

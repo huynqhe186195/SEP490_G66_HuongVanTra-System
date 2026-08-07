@@ -11,6 +11,7 @@ SET time_zone = '+00:00';
 SET @NOW = UTC_TIMESTAMP(6);
 
 SET @SALE_ID = (SELECT Id FROM hvt_user_db.Users WHERE Username = 'sale01' AND IsDeleted = 0 LIMIT 1);
+SET @SALE_COD_ID = (SELECT Id FROM hvt_user_db.Users WHERE Username = 'sale_cod01' AND IsDeleted = 0 LIMIT 1);
 SET @WH_ID   = (SELECT Id FROM hvt_user_db.Users WHERE Username = 'warehouse01' AND IsDeleted = 0 LIMIT 1);
 SET @MGR_ID  = (SELECT Id FROM hvt_user_db.Users WHERE Username = 'manager01' AND IsDeleted = 0 LIMIT 1);
 
@@ -19,6 +20,12 @@ SET @SALE_NAME = (
   FROM hvt_user_db.Users u
   LEFT JOIN hvt_user_db.Employees e ON e.UserId = u.Id AND e.IsDeleted = 0
   WHERE u.Id = @SALE_ID LIMIT 1
+);
+SET @SALE_COD_NAME = (
+  SELECT COALESCE(e.FullName, u.Username)
+  FROM hvt_user_db.Users u
+  LEFT JOIN hvt_user_db.Employees e ON e.UserId = u.Id AND e.IsDeleted = 0
+  WHERE u.Id = @SALE_COD_ID LIMIT 1
 );
 SET @WH_NAME = (
   SELECT COALESCE(e.FullName, u.Username)
@@ -409,23 +416,34 @@ SELECT '33333333-4001-4000-8000-000000000003', @O3, 'Cash', @O3_TOTAL, 'Success'
 WHERE EXISTS (SELECT 1 FROM Orders WHERE Id=@O3)
   AND NOT EXISTS (SELECT 1 FROM Payments WHERE Id='33333333-4001-4000-8000-000000000003');
 
--- O4: COD đang xử lý
+-- O4: COD mẫu thuộc sale_cod01 (để Sale COD thấy báo cáo cuối ngày)
 SET @O4 = 'dddddddd-4001-4000-8000-000000000004';
 SET @O4_TOTAL = @PRICE_HUONG * 3;
 SET @ADDR = (SELECT CONCAT(AddressLine, ', ', Ward, ', ', District, ', ', Province)
              FROM hvt_customer_db.CustomerAddresses
              WHERE CustomerId=@KH5 AND IsDeleted=0 ORDER BY IsDefault DESC LIMIT 1);
+SET @O4_EMP_ID = COALESCE(@SALE_COD_ID, @SALE_ID);
+SET @O4_EMP_NAME = COALESCE(@SALE_COD_NAME, @SALE_NAME);
 INSERT INTO Orders
   (Id, OrderCode, CustomerId, CustomerSnapshotName, EmployeeId, EmployeeSnapshotName,
    OrderChannel, OrderKind, OrderStatus, InventorySyncStatus,
    TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount,
    ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted, IdempotencyKey)
-SELECT @O4, 'HVT-SAMPLE-004', @KH5, @KH5_NAME, @SALE_ID, @SALE_NAME,
+SELECT @O4, 'HVT-SAMPLE-004', @KH5, @KH5_NAME, @O4_EMP_ID, @O4_EMP_NAME,
        'COD', 'Sale', 'Processing', 'PendingDeduction',
        @O4_TOTAL, 0, NULL, NULL, 0, @O4_TOTAL,
        COALESCE(@ADDR, '45 Lê Lợi, Quận 1, TP.HCM'), 'Đơn COD demo chờ giao', DATE_SUB(@NOW, INTERVAL 6 HOUR), @NOW, 0, 'seed-hvt-sample-004'
-WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode='HVT-SAMPLE-004');
+WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode='HVT-SAMPLE-004')
+  AND @O4_EMP_ID IS NOT NULL;
 
+-- Nếu đơn COD mẫu đã seed trước đó dưới sale01, chuyển về sale_cod01 khi có tài
+UPDATE Orders
+SET EmployeeId = @O4_EMP_ID,
+    EmployeeSnapshotName = @O4_EMP_NAME,
+    UpdatedAt = @NOW
+WHERE OrderCode = 'HVT-SAMPLE-004'
+  AND @SALE_COD_ID IS NOT NULL
+  AND EmployeeId <> @SALE_COD_ID;
 INSERT INTO OrderDetails
   (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, CategorySnapshotName, Quantity, CostPrice,
    ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted, IsGift)

@@ -228,12 +228,17 @@ cd D:\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\Scripts
 
 ### D. Catalog Excel (bắt buộc — không seed SQL)
 
+Form **Tải file mẫu** / **Import** không nằm ở **Lịch sử tạo hàng hóa**. Nằm ở trang **Tạo sản phẩm**.
+
 1. Mở FE (thường `http://localhost:5173`).
-2. Login `manager01` / `123456`.
-3. **Lịch sử tạo hàng hóa** → tải file mẫu (có dữ liệu).
-4. (Tuỳ chọn) ZIP: 1 file `.xlsx` + ảnh `HVT01.jpg`, …
-5. Import → preview → gửi duyệt → duyệt.
-6. Kiểm tra list SP có SKU kiểu `HVT-HUONGTRA-100G`, `NL-TRA-XANH-G`, `BB-HOP-GIAY-HVT`.
+2. Login `warehouse01` / `123456` (Thủ kho).
+3. Menu **Sản phẩm & Số lượng** (với Thủ kho có thể hiện **Hàng hóa**) → nút **Tạo sản phẩm**
+   → URL `/inventory/products/create`.
+4. Trên trang đó: **Tải file có dữ liệu mẫu** (hoặc **Tải file mẫu** trống).
+5. (Tuỳ chọn) ZIP: đúng 1 file `.xlsx` + ảnh `HVT01.jpg`, `HVT01_2.jpg`, …
+6. **Import Excel / ZIP** → preview → gửi duyệt.
+7. Login `manager01` / `123456` → **Lịch sử tạo hàng hóa** (`/inventory/product-approvals`) → duyệt.
+8. Kiểm tra list SP có SKU kiểu `HVT-HUONGTRA-100G`, `NL-TRA-XANH-G`, `BB-HOP-GIAY-HVT`.
 
 ### E. Tồn kho theo SkuCode (Phase B)
 
@@ -266,7 +271,15 @@ Nạp: map NCC↔SKU, PN Draft/Pending/Completed, BOM, đơn mẫu, ca/quỹ, ki
 
 ## Nạp catalog Hương Vân bằng Excel + ZIP ảnh
 
-Catalog không tự nạp khi `docker compose up`. Luồng chuẩn là tạo danh mục trước, sau đó dùng file Excel mẫu trên màn hình **Lịch sử tạo hàng hóa** để gửi duyệt Product/SKU. Nếu có ảnh, nén Excel và ảnh thành một file ZIP; tên ảnh phải trùng **Mã sản phẩm** (`HVT01.jpg`, `HVT01_2.jpg`).
+Catalog không tự nạp khi `docker compose up`. Luồng chuẩn:
+
+1. Tạo danh mục nền (script).
+2. Thủ kho mở **Sản phẩm & Số lượng** → **Tạo sản phẩm** (`/inventory/products/create`) → tải Excel mẫu / Import ZIP → gửi duyệt.
+3. Manager mở **Lịch sử tạo hàng hóa** (`/inventory/product-approvals`) để duyệt.
+
+Không tìm nút Import trên trang Lịch sử — trang đó chỉ xem/duyệt yêu cầu đã gửi.
+
+Nếu có ảnh, nén Excel và ảnh thành một file ZIP; tên ảnh phải trùng **Mã sản phẩm** (`HVT01.jpg`, `HVT01_2.jpg`).
 
 Tên và giá bán trong file mẫu được tham khảo từ `https://huongvantra.vn/` (snapshot 08/2026). Giá vốn chỉ là dữ liệu demo, không phải giá vốn thực tế. Trình import yêu cầu **Quy đổi là số nguyên dương** và tự tính **giá SKU quy đổi = giá SKU cơ bản × Quy đổi**, nên các quy cách không theo tỷ lệ tuyến tính (ví dụ hũ sứ 50g) được tách thành sản phẩm riêng.
 
@@ -283,12 +296,14 @@ cd backend\huongvantra_backend\Scripts
 
 ### Bước 2 — tải và import file mẫu
 
-1. Đăng nhập `manager01` / `123456`.
-2. Mở **Lịch sử tạo hàng hóa** → **Tải file có dữ liệu mẫu**.
-3. Chuẩn bị ảnh: `HVT01.jpg`, `HVT01_2.jpg`, … (tối đa 5 ảnh/SP, 5MB/ảnh).
-4. Nén đúng 1 file `.xlsx` và các ảnh vào ZIP.
-5. Import ZIP, kiểm tra preview, gửi duyệt và duyệt yêu cầu.
-6. Cấu hình Cloudinary trước khi gửi duyệt nếu ZIP có ảnh.
+1. Đăng nhập `warehouse01` / `123456` (Thủ kho — role tạo yêu cầu catalog).
+2. Vào **Sản phẩm & Số lượng** (menu Thủ kho; nhãn có thể là **Hàng hóa**).
+3. Bấm **Tạo sản phẩm** → trang tạo biên bản (`/inventory/products/create`).
+4. Trên trang này mới có **Tải file có dữ liệu mẫu**, **Tải file mẫu**, **Import Excel / ZIP**.
+5. Chuẩn bị ảnh (tuỳ chọn): `HVT01.jpg`, `HVT01_2.jpg`, … (tối đa 5 ảnh/SP, 5MB/ảnh).
+6. Nén đúng 1 file `.xlsx` và các ảnh vào ZIP → Import → kiểm tra preview → gửi duyệt.
+7. Đăng nhập `manager01` / `123456` → **Lịch sử tạo hàng hóa** → duyệt yêu cầu.
+8. Cấu hình Cloudinary trước khi gửi duyệt nếu ZIP có ảnh.
 
 ### Bước 3 — tồn kho (Phase B)
 
