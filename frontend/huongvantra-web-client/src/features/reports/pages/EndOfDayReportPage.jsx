@@ -422,7 +422,7 @@ function EndOfDayReportPage() {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 [font-family:'Manrope',sans-serif]">
       <PageHeader
         compact
         title={

@@ -5,7 +5,9 @@ import {
     PieChart, Pie, Cell, Legend,
     LineChart, Line, CartesianGrid
 } from 'recharts';
+import ListFilterToolbar, { listFilterControlClass } from "../../../components/shared/ListFilterToolbar.jsx";
 import PageHeader from "../../../components/shared/PageHeader.jsx";
+import PageShell from "../../../components/shared/PageShell.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -570,56 +572,74 @@ function DashboardPage() {
     );
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
+        <PageShell className="min-h-0 flex-1">
             <PageHeader
+                compact
                 title="Thống kê bán hàng"
                 titleInfo={
                     isPersonalStatsView
                         ? `${sectionLabel} — số liệu đơn hàng do bạn tạo trong kỳ đã chọn (không bao gồm doanh thu / lợi nhuận).`
                         : `${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`
                 }
-                searchPlaceholder="Tìm kiếm..."
             />
 
-            <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Kỳ báo cáo</span>
-                    <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="rounded-lg border-gray-200 text-sm">
-                        <option value="month">Theo Tháng</option>
-                        <option value="quarter">Theo Quý</option>
-                        <option value="year">Theo Năm</option>
+            <ListFilterToolbar>
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500">Kỳ</span>
+                    <select
+                        value={filterPeriod}
+                        onChange={(e) => setFilterPeriod(e.target.value)}
+                        className={listFilterControlClass}
+                    >
+                        <option value="month">Theo tháng</option>
+                        <option value="quarter">Theo quý</option>
+                        <option value="year">Theo năm</option>
                     </select>
                 </label>
 
-                {filterPeriod === 'month' && (
-                    <label className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Tháng</span>
-                        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
-                            {Array.from({length: 12}).map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
+                {filterPeriod === 'month' ? (
+                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-500">Tháng</span>
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(Number(e.target.value))}
+                            className={listFilterControlClass}
+                        >
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
+                            ))}
                         </select>
                     </label>
-                )}
+                ) : null}
 
-                {filterPeriod === 'quarter' && (
-                    <label className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Quý</span>
-                        <select value={filterQuarter} onChange={e => setFilterQuarter(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                {filterPeriod === 'quarter' ? (
+                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-500">Quý</span>
+                        <select
+                            value={filterQuarter}
+                            onChange={(e) => setFilterQuarter(Number(e.target.value))}
+                            className={listFilterControlClass}
+                        >
                             <option value={1}>Quý 1</option>
                             <option value={2}>Quý 2</option>
                             <option value={3}>Quý 3</option>
                             <option value={4}>Quý 4</option>
                         </select>
                     </label>
-                )}
+                ) : null}
 
-                <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Năm</span>
-                    <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500">Năm</span>
+                    <select
+                        value={filterYear}
+                        onChange={(e) => setFilterYear(Number(e.target.value))}
+                        className={listFilterControlClass}
+                    >
                         <option value={2026}>2026</option>
                         <option value={2025}>2025</option>
                     </select>
                 </label>
-            </div>
+            </ListFilterToolbar>
 
             {isLoading ?
                 <div className="flex justify-center p-8">
@@ -633,7 +653,7 @@ function DashboardPage() {
                     {activeSection === 'customer-growth' && canViewCustomerGrowth && renderCustomerGrowth()}
                 </div>
             }
-        </div>
+        </PageShell>
     );
 }
 

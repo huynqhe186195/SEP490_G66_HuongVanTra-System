@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 
 /**
  * Báo cáo là văn bản chốt kỳ, có người lập và người duyệt — khác với Thống kê
@@ -115,25 +116,22 @@ function ReportCard({ report }) {
 
 function ReportsOverviewPage() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 [font-family:'Manrope',sans-serif]">
+    <PageShell>
       <PageHeader
         compact
-        title="Báo cáo"
+        title="Tổng quan báo cáo"
         titleInfo="Văn bản chốt kỳ để đối chiếu và lưu trữ, có người lập và người duyệt"
       />
 
-      <div className="rounded-2xl border border-[#fec25b]/40 bg-[#fec25b]/10 p-4">
-        <div className="flex items-start gap-3">
-          <span className="material-symbols-outlined text-[20px] text-[#7e5700]">info</span>
-          <p className="text-sm leading-relaxed text-[#744f00]">
-            <strong>Báo cáo</strong> là số liệu đã chốt tại một thời điểm, in ra ký được và lưu lại để đối chiếu. Nếu bạn
-            cần xem biểu đồ xu hướng để ra quyết định, hãy dùng{' '}
-            <Link to="/dashboard" className="font-semibold underline">
-              Thống kê bán hàng
-            </Link>
-            .
-          </p>
-        </div>
+      <div className="flex items-start gap-2 rounded-xl border border-[#fec25b]/40 bg-[#fec25b]/10 px-3 py-2.5">
+        <span className="material-symbols-outlined mt-0.5 text-[18px] text-[#7e5700]">info</span>
+        <p className="text-sm leading-relaxed text-[#604100]">
+          <strong>Báo cáo</strong> là số liệu đã chốt tại một thời điểm, in ra ký được và lưu lại để đối chiếu. Biểu đồ xu hướng nằm ở{' '}
+          <Link to="/dashboard" className="font-semibold underline">
+            Thống kê bán hàng
+          </Link>
+          .
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -141,7 +139,7 @@ function ReportsOverviewPage() {
           <ReportCard key={report.key} report={report} />
         ))}
       </div>
-    </div>
+    </PageShell>
   )
 }
 
