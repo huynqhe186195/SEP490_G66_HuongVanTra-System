@@ -26,9 +26,11 @@ const VIEW_TABS = [
 ]
 
 const LIST_TABS = [
+  { key: 'all', label: 'Tất cả' },
   { key: 'pending', label: 'Chờ thu COD' },
   { key: 'overdue', label: 'Quá hạn (>7 ngày)' },
   { key: 'done', label: 'Đã hoàn tất' },
+  { key: 'cancelled', label: 'Đã hủy' },
 ]
 
 function CodOrdersPage() {
@@ -40,7 +42,7 @@ function CodOrdersPage() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchValue, setSearchValue] = useState('')
   const [orders, setOrders] = useState([])
-  const [counts, setCounts] = useState({ pending: 0, overdue: 0, done: 0 })
+  const [counts, setCounts] = useState({ all: 0, pending: 0, overdue: 0, done: 0, cancelled: 0 })
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
@@ -71,22 +73,26 @@ function CodOrdersPage() {
     if (activeView !== 'list') return
     setIsLoading(true)
     try {
-      const [pending, overdue, done, activeData] = await Promise.all([
+      const [all, pending, overdue, done, cancelled, activeData] = await Promise.all([
+        loadTab('all'),
         loadTab('pending'),
         loadTab('overdue'),
         loadTab('done'),
+        loadTab('cancelled'),
         loadTab(activeTab, page, pageSize),
       ])
       setCounts({
+        all: all.totalCount,
         pending: pending.totalCount,
         overdue: overdue.totalCount,
         done: done.totalCount,
+        cancelled: cancelled.totalCount,
       })
       setOrders(activeData.items)
       setTotalCount(activeData.totalCount)
     } catch (error) {
       setOrders([])
-      setCounts({ pending: 0, overdue: 0, done: 0 })
+      setCounts({ all: 0, pending: 0, overdue: 0, done: 0, cancelled: 0 })
       setTotalCount(0)
       showError(error.message)
     } finally {
@@ -100,6 +106,12 @@ function CodOrdersPage() {
 
   const listCards = useMemo(
     () => [
+      {
+        key: 'all',
+        label: 'Tất cả',
+        value: counts.all,
+        note: 'Mọi đơn kênh COD',
+      },
       {
         key: 'pending',
         label: 'Chờ thu',
@@ -119,15 +131,23 @@ function CodOrdersPage() {
         value: counts.done,
         note: 'Đơn COD đã thu',
       },
+      {
+        key: 'cancelled',
+        label: 'Đã hủy',
+        value: counts.cancelled,
+        note: 'Đơn COD đã hủy',
+      },
     ],
     [counts],
   )
 
   const listChips = useMemo(
     () => [
+      { value: 'all', label: 'Tất cả', count: counts.all },
       { value: 'pending', label: 'Chờ thu', count: counts.pending },
       { value: 'overdue', label: 'Quá hạn', count: counts.overdue },
       { value: 'done', label: 'Đã hoàn tất', count: counts.done },
+      { value: 'cancelled', label: 'Đã hủy', count: counts.cancelled },
     ],
     [counts],
   )
@@ -184,7 +204,7 @@ function CodOrdersPage() {
         <CodShiftReportPanel searchValue={searchValue} />
       ) : (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {listCards.map((card) => {
               const active = activeTab === card.key
               return (
@@ -253,7 +273,9 @@ function CodOrdersPage() {
                     </tr>
                   ) : (
                     orders.map((order) => {
-                      const overdue = activeTab !== 'done' && isCodOverdue(order)
+                      const overdue = activeTab !== 'done'
+                        && activeTab !== 'cancelled'
+                        && isCodOverdue(order)
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/80">
                           <td className="px-4 py-2.5">
@@ -290,7 +312,7 @@ function CodOrdersPage() {
                           <td className="px-4 py-2.5 text-xs text-slate-600">
                             {order.codWarningDate
                               ? formatVietnamDateTime(order.codWarningDate)
-                              : activeTab === 'done'
+                              : activeTab === 'done' || activeTab === 'cancelled' || activeTab === 'all'
                                 ? formatVietnamDateTime(order.createdAt)
                                 : '—'}
                           </td>

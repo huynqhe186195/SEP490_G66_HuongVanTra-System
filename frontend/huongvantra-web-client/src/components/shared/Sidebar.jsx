@@ -178,7 +178,7 @@ function Sidebar({
   const handleLogout = async () => {
     if (!authSession) {
       clearAuthSession()
-      navigate('/login', { replace: true })
+      window.location.replace('/login')
       return
     }
 
@@ -191,7 +191,8 @@ function Sidebar({
     } finally {
       clearAuthSession()
       setIsLoggingOut(false)
-      navigate('/login', { replace: true })
+      // Hard redirect: tránh race request in-flight → toast "phiên hết hạn" + kẹt màn hình cũ.
+      window.location.replace('/login')
     }
   }
 

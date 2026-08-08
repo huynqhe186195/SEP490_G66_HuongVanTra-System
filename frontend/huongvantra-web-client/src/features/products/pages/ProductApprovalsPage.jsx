@@ -2899,7 +2899,7 @@ export default function ProductApprovalsPage() {
     setIsSaving(true)
     try {
       await submitProductCreationRequest(saved.id, warehouseNote)
-      showSuccess('Đã gửi yêu cầu cho Admin duyệt.')
+      showSuccess('Đã gửi yêu cầu cho Manager duyệt.')
       resetForm()
       navigate('/inventory/product-approvals')
       return
@@ -3329,7 +3329,7 @@ export default function ProductApprovalsPage() {
             </button>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={isSaving} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50" onClick={() => saveDraft()}>{isSaving ? 'Đang lưu...' : 'Lưu nháp'}</button>
-              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d] disabled:opacity-50" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Admin duyệt'}</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d] disabled:opacity-50" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Manager duyệt'}</button>
             </div>
           </div>
         </section>

@@ -224,7 +224,7 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
     } finally {
       clearAuthSession()
       setLoggingOut(false)
-      navigate('/login', { replace: true })
+      window.location.replace('/login')
     }
   }
 

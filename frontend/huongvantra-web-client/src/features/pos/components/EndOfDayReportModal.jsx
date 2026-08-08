@@ -312,9 +312,6 @@ function EndOfDayReportModal({
                 <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#c1c9c0]/60 px-5 py-3">
                     <div>
                         <h2 className="text-base font-bold text-[#1b1c17]">{headerTitle}</h2>
-                        <p className="mt-0.5 text-xs text-[#717971]">
-                            Bản rút gọn {scopeLabel} · múi giờ GMT+7
-                        </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
