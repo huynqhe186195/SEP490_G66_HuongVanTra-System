@@ -144,6 +144,16 @@ export function getPaymentMethodLabel(method) {
   return map[key] || method || '—'
 }
 
+export function getPaymentPurposeLabel(purpose) {
+  const key = normalizeOrderKey(purpose)
+  const map = {
+    Deposit: 'Đặt cọc',
+    RemainingAtPickup: 'Thu nốt khi nhận hàng',
+    Full: 'Thanh toán toàn bộ',
+  }
+  return map[key] || 'Thanh toán'
+}
+
 export function getPaymentStatusLabel(status) {
   const key = normalizeOrderKey(status)
   const map = {

@@ -55,7 +55,7 @@ function emptyLine() {
 }
 
 function calculateLineAmount(line) {
-  const actualQuantity = Number(line.actualQuantity)
+  const actualQuantity = parseVndInput(line.actualQuantity)
   const unitCost = parseVndInput(line.unitCost)
   if (!Number.isFinite(actualQuantity) || !Number.isFinite(unitCost)) return 0
   return actualQuantity * unitCost
@@ -90,7 +90,7 @@ function normalizeCsvHeader(value) {
 }
 
 function isPositiveIntegerText(value) {
-  return /^[1-9]\d*$/.test(String(value ?? '').trim())
+  return /^[1-9]\d*$/.test(sanitizeVndInput(value))
 }
 
 const IMPORT_FORMAT_TIPS = [
@@ -587,7 +587,7 @@ function InventoryImportCreatePage() {
     [supplierReceiptSkus],
   )
   const receiptTotals = useMemo(() => ({
-    actualQuantity: lines.reduce((sum, line) => sum + (Number(line.actualQuantity) || 0), 0),
+    actualQuantity: lines.reduce((sum, line) => sum + (parseVndInput(line.actualQuantity) || 0), 0),
     amount: lines.reduce((sum, line) => sum + calculateLineAmount(line), 0),
   }), [lines])
 
@@ -977,8 +977,8 @@ function InventoryImportCreatePage() {
     for (const [, line] of lines.entries()) {
       const lineErr = {}
       const lineWarn = {}
-      const documentQuantity = Number(line.documentQuantity)
-      const actualQuantity = Number(line.actualQuantity)
+      const documentQuantity = parseVndInput(line.documentQuantity)
+      const actualQuantity = parseVndInput(line.actualQuantity)
       const unitCost = parseVndInput(line.unitCost)
       const lotCode = line.lotCode.trim()
 
@@ -1034,9 +1034,7 @@ function InventoryImportCreatePage() {
       }
 
       // Hạn dùng
-      if (!line.expiresAt) {
-        lineErr.expiresAt = 'Hạn dùng là bắt buộc.'
-      } else if (line.expiresAt) {
+      if (line.expiresAt) {
         if (line.manufacturedAt && line.expiresAt <= line.manufacturedAt) {
           lineErr.expiresAt = 'Hạn dùng phải sau ngày sản xuất.'
         } else if (header.receivedDate && line.expiresAt <= header.receivedDate) {
@@ -1126,9 +1124,9 @@ function InventoryImportCreatePage() {
         productTypeSnapshot: sku.productType,
         inventoryUnitSnapshot: getSkuUnitName(sku),
         submittedUnit: line.submittedUnit || defaultSubmittedUnit(sku.inventoryUnit),
-        submittedQuantity: Number(line.actualQuantity),
-        documentQuantity: Number(line.documentQuantity),
-        actualQuantity: Number(line.actualQuantity),
+        submittedQuantity: parseVndInput(line.actualQuantity),
+        documentQuantity: parseVndInput(line.documentQuantity),
+        actualQuantity: parseVndInput(line.actualQuantity),
         unitCost: line.unitCost === '' ? null : parseVndInput(line.unitCost),
         lotCode: line.lotCode.trim(),
         manufacturedAt: line.manufacturedAt ? new Date(`${line.manufacturedAt}T00:00:00`).toISOString() : null,
@@ -1490,7 +1488,7 @@ function InventoryImportCreatePage() {
               const errs = lineErrors[line.key] ?? {}
               const quantityDifference = isPositiveIntegerText(line.documentQuantity)
                 && isPositiveIntegerText(line.actualQuantity)
-                ? Number(line.actualQuantity) - Number(line.documentQuantity)
+                ? (parseVndInput(line.actualQuantity) || 0) - (parseVndInput(line.documentQuantity) || 0)
                 : 0
               const varianceWarning = quantityDifference < 0
                 ? `Cảnh báo: Số lượng thực nhập thiếu ${Math.abs(quantityDifference)} so với chứng từ. Chênh lệch: ${quantityDifference}.`
@@ -1628,9 +1626,9 @@ function InventoryImportCreatePage() {
                                 inputMode="numeric"
                                 pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
-                                value={line.documentQuantity}
+                                value={formatVndInput(line.documentQuantity)}
                                 onChange={(event) => {
-                                  updateLine(line.key, { documentQuantity: event.target.value })
+                                  updateLine(line.key, { documentQuantity: sanitizeVndInput(event.target.value) })
                                   setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
                                 }}
                               />
@@ -1643,9 +1641,9 @@ function InventoryImportCreatePage() {
                                 inputMode="numeric"
                                 pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
-                                value={line.actualQuantity}
+                                value={formatVndInput(line.actualQuantity)}
                                 onChange={(event) => {
-                                  updateLine(line.key, { actualQuantity: event.target.value })
+                                  updateLine(line.key, { actualQuantity: sanitizeVndInput(event.target.value) })
                                   setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
                                 }}
                               />
@@ -1737,17 +1735,17 @@ function InventoryImportCreatePage() {
                               {errs.manufacturedAt ? <p className="text-xs text-red-500">{errs.manufacturedAt}</p> : null}
                             </label>
                             <label className="space-y-1">
-                              <span className="text-xs font-semibold text-[#717971]">Hạn dùng <span className="text-red-500">*</span></span>
-                              <input
-                                type="date"
-                                className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
-                                value={line.expiresAt}
-                                onChange={(event) => {
-                                  updateLine(line.key, { expiresAt: event.target.value })
-                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
-                                }}
-                              />
-                              {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
+                                <span className="text-xs font-semibold text-[#717971]">Hạn dùng</span>
+                                <input
+                                  type="date"
+                                  className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                                  value={line.expiresAt}
+                                  onChange={(event) => {
+                                    updateLine(line.key, { expiresAt: event.target.value })
+                                    setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
+                                  }}
+                                />
+                                {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
                             </label>
                           </div>
                         </section>

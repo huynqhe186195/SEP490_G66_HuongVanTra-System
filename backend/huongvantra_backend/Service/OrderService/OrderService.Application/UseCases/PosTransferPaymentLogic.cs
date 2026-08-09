@@ -582,7 +582,7 @@ public class PosTransferPaymentLogic(
         await orderLogic.MarkDeliveredAsync(
             order.Id,
             new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
-            actorName: "SePay Webhook",
+            actorName: order.EmployeeSnapshotName,
             ct: ct);
         logger.LogInformation("SePay webhook collected remaining balance for {OrderCode}.", order.OrderCode);
     }

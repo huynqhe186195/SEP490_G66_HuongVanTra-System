@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatVnd, formatVndInput, parseVndInput } from '../../../utils/vietnamCurrency.js'
+import { fetchPosCustomers } from '../services/posApi.js'
 
 const toDateInputValue = (date) => {
   const pad = (value) => String(value).padStart(2, '0')
@@ -31,6 +32,7 @@ export default function BackorderConfirmModal({
   isSubmitting = false,
   onAccept,
   onDecline,
+  onCustomerSelected,
 }) {
   const canChooseFulfillment = availableQuantity > 0
   const [selectedPreference, setSelectedPreference] = useState(null)
@@ -39,6 +41,9 @@ export default function BackorderConfirmModal({
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [depositInput, setDepositInput] = useState('')
+  const [customerMatches, setCustomerMatches] = useState([])
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false)
+  const [customerSearchDone, setCustomerSearchDone] = useState(false)
 
   const fulfillmentPreference = canChooseFulfillment
     ? selectedPreference ?? 'PartialDelivery'
@@ -62,6 +67,50 @@ export default function BackorderConfirmModal({
   useEffect(() => {
     if (isOpen) setDepositInput(minDeposit > 0 ? String(minDeposit) : '')
   }, [isOpen, minDeposit])
+
+  useEffect(() => {
+    if (!isOpen || selectedCustomer?.customerId) {
+      setCustomerMatches([])
+      setCustomerSearchDone(false)
+      setIsSearchingCustomer(false)
+      return undefined
+    }
+
+    const phone = normalizePhone(contactPhone)
+    const name = contactName.trim()
+    const search = PHONE_PATTERN.test(phone) ? phone : name.length >= 3 ? name : ''
+    if (!search) {
+      setCustomerMatches([])
+      setCustomerSearchDone(false)
+      return undefined
+    }
+
+    let cancelled = false
+    const controller = new AbortController()
+    const timerId = setTimeout(async () => {
+      setIsSearchingCustomer(true)
+      try {
+        const results = await fetchPosCustomers({ search, limit: 5, signal: controller.signal })
+        if (!cancelled) {
+          setCustomerMatches(results)
+          setCustomerSearchDone(true)
+        }
+      } catch {
+        if (!cancelled) {
+          setCustomerMatches([])
+          setCustomerSearchDone(false)
+        }
+      } finally {
+        if (!cancelled) setIsSearchingCustomer(false)
+      }
+    }, 300)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timerId)
+      controller.abort()
+    }
+  }, [contactName, contactPhone, isOpen, selectedCustomer?.customerId])
 
   const depositAmount = parseVndInput(depositInput)
   const isDepositValid =
@@ -234,43 +283,65 @@ export default function BackorderConfirmModal({
             ) : (
               <p className="mt-0.5 text-xs text-[#7e5700]">Khách vãng lai — bắt buộc nhập để đối chiếu khi lấy hàng.</p>
             )}
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="backorder-contact-name" className="block text-xs font-semibold text-[#414942]">
-                  Họ tên <span className="text-[#7e5700]">*</span>
-                </label>
-                <input
-                  id="backorder-contact-name"
-                  type="text"
-                  value={contactName || selectedCustomer?.fullName || ''}
-                  onChange={(event) => setContactName(event.target.value)}
-                  disabled={isSubmitting}
-                  placeholder="Nguyễn Văn A"
-                  className={inputCls(isContactNameValid)}
-                />
-                {!isContactNameValid ? (
-                  <p className="mt-1 text-xs text-[#7e5700]">Chỉ gồm chữ cái và khoảng trắng.</p>
-                ) : null}
+            <div className="relative mt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="backorder-contact-phone" className="block text-xs font-semibold text-[#414942]">
+                    Số điện thoại <span className="text-[#7e5700]">*</span>
+                  </label>
+                  <input
+                    id="backorder-contact-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    value={contactPhone || normalizePhone(selectedCustomer?.phone).slice(0, 10)}
+                    onChange={(event) => setContactPhone(normalizePhone(event.target.value).slice(0, 10))}
+                    maxLength={10}
+                    disabled={isSubmitting}
+                    placeholder="09xxxxxxxx"
+                    className={inputCls(isContactPhoneValid)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="backorder-contact-name" className="block text-xs font-semibold text-[#414942]">
+                    Họ tên <span className="text-[#7e5700]">*</span>
+                  </label>
+                  <input
+                    id="backorder-contact-name"
+                    type="text"
+                    value={contactName || selectedCustomer?.fullName || ''}
+                    onChange={(event) => setContactName(event.target.value)}
+                    disabled={isSubmitting}
+                    placeholder="Nguyễn Văn A"
+                    className={inputCls(isContactNameValid)}
+                  />
+                </div>
               </div>
-              <div>
-                <label htmlFor="backorder-contact-phone" className="block text-xs font-semibold text-[#414942]">
-                  Số điện thoại <span className="text-[#7e5700]">*</span>
-                </label>
-                <input
-                  id="backorder-contact-phone"
-                  type="tel"
-                  inputMode="numeric"
-                  value={contactPhone || normalizePhone(selectedCustomer?.phone).slice(0, 10)}
-                  onChange={(event) => setContactPhone(normalizePhone(event.target.value).slice(0, 10))}
-                  maxLength={10}
-                  disabled={isSubmitting}
-                  placeholder="09xxxxxxxx"
-                  className={inputCls(isContactPhoneValid)}
-                />
-                {!isContactPhoneValid ? (
-                  <p className="mt-1 text-xs text-[#7e5700]">10 số, bắt đầu bằng 0.</p>
+              {!selectedCustomer?.customerId && (isSearchingCustomer || customerMatches.length > 0 || customerSearchDone) ? (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white p-2 text-xs shadow-xl">
+                {isSearchingCustomer ? <p className="text-[#717971]">Đang tìm hồ sơ khách hàng...</p> : null}
+                {!isSearchingCustomer && customerMatches.length === 0 && customerSearchDone ? (
+                  <p className="text-[#717971]">Chưa thấy hồ sơ phù hợp — tiếp tục với khách vãng lai.</p>
                 ) : null}
-              </div>
+                {customerMatches.map((customer) => (
+                  <button
+                    key={customer.customerId}
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      if (onCustomerSelected?.(customer) === false) return
+                      setContactName(customer.fullName || '')
+                      setContactPhone(normalizePhone(customer.phone).slice(0, 10))
+                      setCustomerMatches([])
+                      setCustomerSearchDone(false)
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-[#f6f4ec] disabled:opacity-50"
+                  >
+                    <span><strong className="text-[#1b1c17]">{customer.fullName}</strong> · {customer.phone || '—'}</span>
+                    <span className="font-semibold text-[#356647]">Dùng khách này</span>
+                  </button>
+                ))}
+                </div>
+              ) : null}
             </div>
 
             {/* Ngày hẹn */}
