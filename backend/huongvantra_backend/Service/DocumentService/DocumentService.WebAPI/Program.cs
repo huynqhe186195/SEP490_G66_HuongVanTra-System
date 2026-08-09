@@ -39,16 +39,9 @@ builder.Services.AddScoped<ContractLogic>();
 builder.Services.AddHostedService<DocumentService.WebAPI.Services.ContractExpiryHostedService>();
 
 builder.Services.Configure<SellerProfileOptions>(builder.Configuration.GetSection("SellerProfile"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SellerProfileOptions>>().Value);
 builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractDocxGenerator>("docx");
 builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractPdfGenerator>("pdf");
-builder.Services.AddScoped<ContractLogic>(sp =>
-{
-    var repo = sp.GetRequiredService<IContractRepository>();
-    var customerClient = sp.GetRequiredService<ICustomerCatalogClient>();
-    var productClient = sp.GetRequiredService<IProductCatalogClient>();
-    var seller = sp.GetRequiredService<IOptions<SellerProfileOptions>>().Value;
-    return new ContractLogic(repo, customerClient, productClient, seller);
-});
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
