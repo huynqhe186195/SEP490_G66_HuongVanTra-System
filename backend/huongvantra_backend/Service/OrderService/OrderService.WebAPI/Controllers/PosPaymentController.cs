@@ -22,21 +22,35 @@ public class PosPaymentController(
         User.GetDisplayName()
     );
 
+    /// <summary>Sale quầy (CREATE_POS_ORDER) hoặc Sale COD (CREATE_COD_ORDER) đều tạo/xem QR chuyển khoản.</summary>
+    private bool CanManageTransferQr() =>
+        User.HasPermission(PermissionNames.CreatePosOrder)
+        || User.HasPermission(PermissionNames.CreateCodOrder);
+
     [HttpGet("transfer-payment-info")]
-    [Authorize(Policy = PermissionNames.CreatePosOrder)]
-    public IActionResult GetTransferPaymentInfo() =>
-        Ok(posPaymentLogic.GetTransferPaymentInfo());
+    [Authorize]
+    public IActionResult GetTransferPaymentInfo()
+    {
+        if (!CanManageTransferQr()) return Forbid();
+        return Ok(posPaymentLogic.GetTransferPaymentInfo());
+    }
 
     [HttpGet("sepay-setup")]
-    [Authorize(Policy = PermissionNames.CreatePosOrder)]
-    public IActionResult GetSepaySetup() =>
-        Ok(posPaymentLogic.GetSepaySetup());
+    [Authorize]
+    public IActionResult GetSepaySetup()
+    {
+        if (!CanManageTransferQr()) return Forbid();
+        return Ok(posPaymentLogic.GetSepaySetup());
+    }
 
     [HttpPost("transfer-qr")]
-    [Authorize(Policy = PermissionNames.CreatePosOrder)]
+    [Authorize]
     public async Task<IActionResult> BuildTransferQr(
-        [FromBody] BuildTransferQrRequest request, CancellationToken ct) =>
-        Ok(await posPaymentLogic.BuildTransferQrAsync(request, AccessContext(), ct));
+        [FromBody] BuildTransferQrRequest request, CancellationToken ct)
+    {
+        if (!CanManageTransferQr()) return Forbid();
+        return Ok(await posPaymentLogic.BuildTransferQrAsync(request, AccessContext(), ct));
+    }
 
     [HttpGet("orders/{orderId:guid}/transfer-qr")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
@@ -44,9 +58,12 @@ public class PosPaymentController(
         Ok(await posPaymentLogic.GetTransferQrForOrderAsync(orderId, AccessContext(), ct));
 
     [HttpPost("orders/{orderId:guid}/transfer-qr/refresh")]
-    [Authorize(Policy = PermissionNames.CreatePosOrder)]
-    public async Task<IActionResult> RefreshTransferQr(Guid orderId, CancellationToken ct) =>
-        Ok(await posPaymentLogic.RefreshTransferQrForOrderAsync(orderId, AccessContext(), ct));
+    [Authorize]
+    public async Task<IActionResult> RefreshTransferQr(Guid orderId, CancellationToken ct)
+    {
+        if (!CanManageTransferQr()) return Forbid();
+        return Ok(await posPaymentLogic.RefreshTransferQrForOrderAsync(orderId, AccessContext(), ct));
+    }
 
     [HttpGet("orders/{orderId:guid}/payment-status")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

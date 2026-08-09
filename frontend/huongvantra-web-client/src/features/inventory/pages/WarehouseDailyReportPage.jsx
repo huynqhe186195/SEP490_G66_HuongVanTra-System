@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -484,6 +485,7 @@ export default function WarehouseDailyReportPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Báo cáo cuối ngày"
         titleInfo={
           isPointInTime
@@ -497,7 +499,7 @@ export default function WarehouseDailyReportPage() {
                 type="button"
                 onClick={handleRetryNotify}
                 disabled={notifying}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
               >
                 <span className="material-symbols-outlined text-[18px]">notifications_active</span>
                 {notifying ? 'Đang gửi lại…' : 'Gửi lại thông báo'}
@@ -506,7 +508,7 @@ export default function WarehouseDailyReportPage() {
             {canSendReport && sentSubmissionId ? (
               <Link
                 to={`/inventory/warehouse-daily-report/submissions/${sentSubmissionId}`}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-bold text-amber-900 hover:bg-amber-100"
               >
                 <span className="material-symbols-outlined text-[18px]">check_circle</span>
                 Đã gửi ngày này
@@ -517,7 +519,7 @@ export default function WarehouseDailyReportPage() {
                 type="button"
                 onClick={handleSend}
                 disabled={!report || loading || sending || checkingSent}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] bg-white px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb] disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] bg-white px-3.5 py-2 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb] disabled:opacity-60"
               >
                 <span className="material-symbols-outlined text-[18px]">send</span>
                 {sending ? 'Đang gửi…' : 'Gửi báo cáo'}
@@ -527,7 +529,7 @@ export default function WarehouseDailyReportPage() {
               type="button"
               onClick={handleExport}
               disabled={!report || loading}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[18px]">download</span>
               Xuất Excel
@@ -536,7 +538,7 @@ export default function WarehouseDailyReportPage() {
               type="button"
               onClick={load}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[18px]">refresh</span>
               {loading ? 'Đang tải…' : 'Tải lại'}
@@ -545,46 +547,51 @@ export default function WarehouseDailyReportPage() {
         )}
       />
 
-      {/* Bộ lọc ngày */}
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setDate(today)}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
-              date === today
-                ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Hôm nay
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate(yesterday)}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
-              date === yesterday
-                ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Hôm qua
-          </button>
-        </div>
+      <ListFilterToolbar
+        meta={
+          report ? (
+            <span>
+              Đang xem <strong className="text-slate-700">{dateLabel}</strong>
+              <span className="text-slate-400"> · {doneTotal} việc đã làm</span>
+            </span>
+          ) : (
+            <span>
+              Đang xem <strong className="text-slate-700">{dateLabel}</strong>
+            </span>
+          )
+        }
+      >
+        <button
+          type="button"
+          onClick={() => setDate(today)}
+          className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+            date === today
+              ? 'border-[#356647] bg-[#356647] text-white'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-[#356647]/40 hover:bg-[#f6f4ec]'
+          }`}
+        >
+          Hôm nay
+        </button>
+        <button
+          type="button"
+          onClick={() => setDate(yesterday)}
+          className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+            date === yesterday
+              ? 'border-[#356647] bg-[#356647] text-white'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-[#356647]/40 hover:bg-[#f6f4ec]'
+          }`}
+        >
+          Hôm qua
+        </button>
         <input
           type="date"
           value={date}
           max={today}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          className={listFilterControlClass}
+          aria-label="Chọn ngày báo cáo"
         />
-        <p className="text-sm text-slate-600 md:ml-1">
-          Đang xem <span className="font-semibold text-slate-800">{dateLabel}</span>
-          {report ? (
-            <span className="text-slate-500"> · {doneTotal} việc đã làm</span>
-          ) : null}
-        </p>
-      </div>
+      </ListFilterToolbar>
 
       {loading && !report ? <p className="mb-4 text-sm text-slate-500">Đang tải báo cáo…</p> : null}
       {!loading && !report ? (

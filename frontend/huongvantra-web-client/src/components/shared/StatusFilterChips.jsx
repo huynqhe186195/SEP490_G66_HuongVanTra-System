@@ -10,12 +10,13 @@ export default function StatusFilterChips({
   onChange,
   className = '',
   ariaLabel = 'Lọc theo trạng thái',
+  dense = false,
 }) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`flex flex-wrap items-center gap-2 ${className}`.trim()}
+      className={`flex flex-wrap items-center gap-1.5 ${className}`.trim()}
     >
       {options.map((option) => {
         const selected = String(value || '') === String(option.value || '')
@@ -28,7 +29,9 @@ export default function StatusFilterChips({
             role="tab"
             aria-selected={selected}
             onClick={() => onChange?.(option.value)}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            className={`inline-flex items-center gap-1 rounded-full border font-semibold transition ${
+              dense ? 'px-2.5 py-1 text-[11px]' : 'gap-1.5 px-3 py-1.5 text-xs'
+            } ${
               selected
                 ? 'border-[#356647] bg-[#356647] text-white'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-[#356647]/40 hover:bg-[#f6f4ec]'

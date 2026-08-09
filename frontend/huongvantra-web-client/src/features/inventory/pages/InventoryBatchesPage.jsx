@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -166,63 +167,61 @@ function InventoryBatchesPage() {
           setSearchInput(value)
           setPage(1)
         }}
+        rightContent={(
+          <Link
+            to="/inventory/import/create"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Tạo lô nhập
+          </Link>
+        )}
       />
 
-      <div className="mb-3 space-y-2.5">
+      <ListFilterToolbar
+        meta={(
+          <span>
+            {filteredBatches.length} lô · còn <strong className="text-slate-700">{formatStockQuantity(totalQty)}</strong>
+          </span>
+        )}
+      >
         <StatusFilterChips
+          dense
           options={STOCK_FILTER_OPTIONS}
           value={stockFilter}
-          onChange={setStockFilter}
+          onChange={(value) => {
+            setStockFilter(value)
+            setPage(1)
+          }}
           ariaLabel="Lọc theo tồn lô"
         />
-        <StatusFilterChips
-          options={TYPE_FILTER_OPTIONS}
+        <select
+          aria-label="Lọc theo loại lô"
+          className={listFilterControlClass}
           value={typeFilter}
-          onChange={setTypeFilter}
-          ariaLabel="Lọc theo loại lô"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
-            <div className="inline-flex rounded-xl bg-slate-100 p-0.5" role="group" aria-label="Sắp xếp theo thời gian">
-              {TIME_SORT_OPTIONS.map((option) => {
-                const active = timeSort === option.value
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      setTimeSort(option.value)
-                      setPage(1)
-                    }}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                      active
-                        ? 'bg-white text-[#356647] shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                    aria-pressed={active}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">{option.icon}</span>
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-slate-500">
-              {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
-            </p>
-            <Link
-              to="/inventory/import/create"
-              className="flex items-center gap-1.5 rounded-lg bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              Tạo lô nhập
-            </Link>
-          </div>
-        </div>
-      </div>
+          onChange={(event) => {
+            setTypeFilter(event.target.value)
+            setPage(1)
+          }}
+        >
+          {TYPE_FILTER_OPTIONS.map((option) => (
+            <option key={option.value || 'all-type'} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Sắp xếp theo thời gian"
+          className={listFilterControlClass}
+          value={timeSort}
+          onChange={(event) => {
+            setTimeSort(event.target.value)
+            setPage(1)
+          }}
+        >
+          {TIME_SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </ListFilterToolbar>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">

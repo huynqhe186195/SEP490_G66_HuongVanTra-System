@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { showError, showInfo, showSuccess } from "../../../app/toast.js";
 import AddCustomerModal from "../components/AddCustomerModal.jsx";
+import AddCustomerAddressModal from "../components/AddCustomerAddressModal.jsx";
 import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
 import OrderOfferModal from "../components/OrderOfferModal.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
@@ -60,7 +61,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import {
   getPosBaseUnitLabel,
@@ -1073,7 +1074,7 @@ function PosPage() {
         };
     }, [isTakeaway, selectedCustomer?.customerId]);
 
-    const refreshShippingAddresses = useCallback(() => {
+    const refreshShippingAddresses = useCallback((preferredAddress = null) => {
         if (!selectedCustomer?.customerId) return;
         setIsLoadingShippingAddresses(true);
         fetchPosCustomerContext(selectedCustomer.customerId)
@@ -1085,6 +1086,12 @@ function PosPage() {
                     }))
                     .filter((row) => row.address);
                 setSavedShippingAddresses(addresses);
+                const prefer = String(preferredAddress || '').trim();
+                if (prefer && addresses.some((row) => row.address === prefer)) {
+                    setUseCustomShippingAddress(false);
+                    updateActiveSession({ shippingAddress: prefer });
+                    return;
+                }
                 if (addresses.length > 0 && !shippingAddress?.trim()) {
                     setUseCustomShippingAddress(false);
                     updateActiveSession({ shippingAddress: addresses[0].address });
@@ -3272,7 +3279,7 @@ function PosPage() {
                                                 "Không tìm thấy sản phẩm phù hợp."
                                             :   "Chưa có sản phẩm để hiển thị."}
                                         </p>
-                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
+                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
                                             {visibleProductPageItems.map((item) => {
                                                 const outOfStock = Number(item.stockQuantity) <= 0;
                                                 const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
@@ -3281,16 +3288,16 @@ function PosPage() {
                                                         key={`${item.productId}-${item.sku}`}
                                                         type="button"
                                                         onClick={() => addToCart(item)}
-                                                        className="flex h-full min-h-[80px] w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                        <div className="flex w-[52px] shrink-0 flex-col items-center gap-0.5">
-                                                            <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 rounded-lg" iconClassName="text-[18px]" />
-                                                            <p className={`max-w-[54px] text-center text-[9px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
+                                                        className="flex h-full min-h-[104px] w-full items-start gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                        <div className="flex w-[72px] shrink-0 flex-col items-center gap-1">
+                                                            <ProductImage src={item.imageUrl} alt={item.name} className="h-16 w-16 rounded-xl" iconClassName="text-[26px]" />
+                                                            <p className={`max-w-[72px] text-center text-[10px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
                                                                 {formatCompactStock(item.stockQuantity)}
                                                             </p>
                                                         </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="line-clamp-2 min-h-[31px] text-[13px] font-semibold leading-tight text-[#1b1c17]" title={item.name}>{item.name}</p>
-                                                            <p className="mt-1 text-[13px] font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
+                                                        <div className="min-w-0 flex-1 pt-0.5">
+                                                            <p className="line-clamp-2 min-h-[40px] text-sm font-semibold leading-snug text-[#1b1c17]" title={item.name}>{item.name}</p>
+                                                            <p className="mt-1.5 text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
                                                         </div>
                                                     </button>
                                                 );
@@ -3381,6 +3388,11 @@ function PosPage() {
         onSavedShippingAddressChange={handleSavedShippingAddressChange}
         isLoadingShippingAddresses={isLoadingShippingAddresses}
         onRefreshShippingAddresses={refreshShippingAddresses}
+        onAddShippingAddress={
+          canCreateCustomer(authSession)
+            ? () => setOpenModal('customer-address')
+            : undefined
+        }
         hasShippingAddress={hasShippingAddress}
         orderDiscountPercentInput={orderDiscountPercent}
         onOrderDiscountPercentChange={updateOrderDiscountPercent}
@@ -3493,6 +3505,27 @@ function PosPage() {
                 </div>
             </footer>
 
+            <AddCustomerAddressModal
+                isOpen={openModal === "customer-address"}
+                onClose={() => setOpenModal(null)}
+                customerId={selectedCustomer?.customerId}
+                customerName={selectedCustomer?.fullName || ""}
+                customerPhone={selectedCustomer?.phone || ""}
+                makeDefault={savedShippingAddresses.length === 0}
+                onSaved={(created) => {
+                    const line = [
+                        created?.addressLine,
+                        created?.ward,
+                        created?.district,
+                        created?.province,
+                    ]
+                        .filter(Boolean)
+                        .join(", ")
+                        .trim();
+                    setOpenModal(null);
+                    refreshShippingAddresses(line || null);
+                }}
+            />
             <AddCustomerModal
                 isOpen={openModal === "customer"}
                 initialPhone={customerSearchValue}

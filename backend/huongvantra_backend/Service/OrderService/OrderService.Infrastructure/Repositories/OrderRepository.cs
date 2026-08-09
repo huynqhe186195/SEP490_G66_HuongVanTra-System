@@ -144,6 +144,11 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             {
                 query = query.Where(o => o.OrderStatus == OrderStatus.Completed);
             }
+            else if (codTabKey == "cancelled")
+            {
+                query = query.Where(o => o.OrderStatus == OrderStatus.Cancelled);
+            }
+            // "all" (và giá trị khác): chỉ lọc kênh COD ở trên, không siết trạng thái.
         }
 
         if (!string.IsNullOrWhiteSpace(orderKind) &&

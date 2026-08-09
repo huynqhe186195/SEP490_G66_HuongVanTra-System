@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -655,108 +656,113 @@ function StockTransfersPage() {
         searchValue={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
         rightContent={canOperate ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => navigate('/inventory/stock-transfers/create')}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#538463] px-4 py-2.5 font-bold text-[#356647]"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-3.5 py-2 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
             >
-              <span className="material-symbols-outlined text-[20px]">assignment_turned_in</span>
-              Tạo từ yêu cầu
+              <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
+              Từ yêu cầu
             </button>
             <button
               type="button"
               onClick={() => navigate('/inventory/stock-transfers/create?mode=direct')}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#356647] px-4 py-2.5 font-bold text-white"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
             >
-              <span className="material-symbols-outlined text-[20px]">add</span>
-              Tạo phiếu trực tiếp
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              Tạo trực tiếp
             </button>
-            <Link
-              to="/inventory/stock-requests"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">edit_note</span>
-              Yêu cầu bổ sung Kệ Hàng
-            </Link>
-            <Link
-              to="/inventory/shelf-replenishment-suggestions"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">lightbulb</span>
-              Gợi ý bổ sung Kệ Hàng
-            </Link>
           </div>
         ) : null}
       />
 
-      <div className="my-3 space-y-2.5">
+      <ListFilterToolbar
+        meta={(
+          <>
+            <Link
+              to="/inventory/stock-requests"
+              className="font-semibold text-[#356647] underline-offset-2 hover:underline"
+            >
+              Yêu cầu bổ sung
+            </Link>
+            <span className="text-slate-300">·</span>
+            <Link
+              to="/inventory/shelf-replenishment-suggestions"
+              className="font-semibold text-[#356647] underline-offset-2 hover:underline"
+            >
+              Gợi ý Kệ
+            </Link>
+          </>
+        )}
+      >
         <StatusFilterChips
+          dense
           options={statusChipOptions}
           value={status}
           onChange={(value) => { setStatus(value); setPage(1) }}
         />
-        <StatusFilterChips
-          options={TRANSFER_TYPE_OPTIONS}
+        <select
+          aria-label="Lọc theo loại phiếu"
+          className={listFilterControlClass}
           value={transferType}
-          onChange={(value) => { setTransferType(value); setPage(1) }}
-          ariaLabel="Lọc theo loại phiếu"
+          onChange={(event) => { setTransferType(event.target.value); setPage(1) }}
+        >
+          {TRANSFER_TYPE_OPTIONS.map((option) => (
+            <option key={option.value || 'all-type'} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          aria-label="Từ ngày"
+          className={listFilterControlClass}
+          value={fromDate}
+          onChange={(event) => { setFromDate(event.target.value); setPage(1) }}
         />
-        {sourceRequestId ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-            <span className="material-symbols-outlined text-[18px]">filter_alt</span>
-            <span>
-              Đang lọc theo yêu cầu{' '}
-              <span className="font-mono font-semibold">{filterRequestCode || sourceRequestId}</span>
-            </span>
-            <button
-              type="button"
-              onClick={clearSourceRequestFilter}
-              className="rounded-lg px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
-            >
-              Bỏ lọc
-            </button>
-          </div>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            Từ
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(event) => { setFromDate(event.target.value); setPage(1) }}
-              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            Đến
-            <input
-              type="date"
-              value={toDate}
-              onChange={(event) => { setToDate(event.target.value); setPage(1) }}
-              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </label>
-          <select
-            value={sort}
-            onChange={(event) => { setSort(event.target.value); setPage(1) }}
-            className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+        <input
+          type="date"
+          aria-label="Đến ngày"
+          className={listFilterControlClass}
+          value={toDate}
+          onChange={(event) => { setToDate(event.target.value); setPage(1) }}
+        />
+        <select
+          aria-label="Sắp xếp"
+          className={listFilterControlClass}
+          value={sort}
+          onChange={(event) => { setSort(event.target.value); setPage(1) }}
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value || 'newest'} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className={`${listFilterControlClass} font-semibold hover:bg-slate-50`}
           >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value || 'newest'} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="min-h-[40px] rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Xóa bộ lọc
-            </button>
-          ) : null}
+            Xóa lọc
+          </button>
+        ) : null}
+      </ListFilterToolbar>
+
+      {sourceRequestId ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span className="material-symbols-outlined text-[16px]">filter_alt</span>
+          <span>
+            Đang lọc theo yêu cầu{' '}
+            <span className="font-mono font-semibold">{filterRequestCode || sourceRequestId}</span>
+          </span>
+          <button
+            type="button"
+            onClick={clearSourceRequestFilter}
+            className="rounded-lg px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+          >
+            Bỏ lọc
+          </button>
         </div>
-      </div>
+      ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">

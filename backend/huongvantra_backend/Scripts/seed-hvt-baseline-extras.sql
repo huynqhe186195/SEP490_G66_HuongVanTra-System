@@ -20,7 +20,7 @@ SET @TIER_SILVER = (SELECT Id FROM hvt_customer_db.CustomerTiers WHERE TierName 
 SET @TIER_GOLD   = (SELECT Id FROM hvt_customer_db.CustomerTiers WHERE TierName = 'Gold' AND IsDeleted = 0 LIMIT 1);
 
 -- -----------------------------------------------------------------------------
--- CUSTOMER DB — 5 khách + 2 địa chỉ COD
+-- CUSTOMER DB — 5 khách + địa chỉ COD (mỗi khách ≥1 địa chỉ để lập đơn giao)
 -- -----------------------------------------------------------------------------
 USE `hvt_customer_db`;
 
@@ -74,6 +74,30 @@ SELECT '11111111-0001-4000-8000-000000000002', 'cccccccc-0001-4000-8000-00000000
        'Hoàng Quốc Bảo', '0901000005', '45 Lê Lợi', 'Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh',
        1, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM CustomerAddresses WHERE Id = '11111111-0001-4000-8000-000000000002');
+
+INSERT INTO CustomerAddresses
+  (Id, CustomerId, ReceiverName, ReceiverPhone, AddressLine, Ward, District, Province,
+   IsDefault, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '11111111-0001-4000-8000-000000000003', 'cccccccc-0001-4000-8000-000000000001',
+       'Nguyễn Thị Lan', '0901000001', '88 Láng Hạ', 'Láng Hạ', 'Đống Đa', 'Hà Nội',
+       1, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM CustomerAddresses WHERE Id = '11111111-0001-4000-8000-000000000003');
+
+INSERT INTO CustomerAddresses
+  (Id, CustomerId, ReceiverName, ReceiverPhone, AddressLine, Ward, District, Province,
+   IsDefault, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '11111111-0001-4000-8000-000000000004', 'cccccccc-0001-4000-8000-000000000003',
+       'Lê Hoàng Anh', '0901000003', '15 Trần Phú', 'Phường 5', 'Quận 5', 'TP. Hồ Chí Minh',
+       1, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM CustomerAddresses WHERE Id = '11111111-0001-4000-8000-000000000004');
+
+INSERT INTO CustomerAddresses
+  (Id, CustomerId, ReceiverName, ReceiverPhone, AddressLine, Ward, District, Province,
+   IsDefault, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '11111111-0001-4000-8000-000000000005', 'cccccccc-0001-4000-8000-000000000004',
+       'Phạm Thu Hà', '0901000004', '22 Hoàng Diệu', 'Phường 6', 'Quận 4', 'TP. Hồ Chí Minh',
+       1, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM CustomerAddresses WHERE Id = '11111111-0001-4000-8000-000000000005');
 
 -- -----------------------------------------------------------------------------
 -- INVENTORY DB — 3 nhà cung cấp

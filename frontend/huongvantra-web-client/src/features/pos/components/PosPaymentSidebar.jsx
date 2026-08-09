@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import {
   formatPromotionLabel,
   formatPromotionMinimumOrderText,
@@ -72,6 +71,7 @@ export default function PosPaymentSidebar({
   onSavedShippingAddressChange,
   isLoadingShippingAddresses,
   onRefreshShippingAddresses,
+  onAddShippingAddress,
   hasShippingAddress,
   orderDiscountPercentInput,
   onOrderDiscountPercentChange,
@@ -205,14 +205,14 @@ export default function PosPaymentSidebar({
                   Địa chỉ giao hàng
                 </label>
                 <div className="flex items-center gap-2">
-                  {selectedCustomer?.customerId ? (
-                    <Link
-                      to={`/customers/${selectedCustomer.customerId}/addresses`}
-                      className="text-[11px] font-semibold text-[#356647] underline underline-offset-2"
-                      title="Quản lý địa chỉ khách"
+                  {selectedCustomer?.customerId && typeof onAddShippingAddress === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={onAddShippingAddress}
+                      className="rounded-md border border-[#356647]/40 bg-[#356647]/10 px-1.5 py-0.5 text-[11px] font-semibold text-[#356647] hover:bg-[#356647]/15"
                     >
-                      Quản lý
-                    </Link>
+                      Thêm địa chỉ
+                    </button>
                   ) : null}
                   {typeof onRefreshShippingAddresses === 'function' ? (
                     <button
@@ -258,13 +258,20 @@ export default function PosPaymentSidebar({
                 && savedShippingAddresses.length === 0 ? (
                 <p className="mb-2 rounded-lg border border-dashed border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-xs text-[#717971]">
                   Khách chưa có địa chỉ đã lưu.{' '}
-                  <Link
-                    to={`/customers/${selectedCustomer.customerId}/addresses`}
-                    className="font-semibold text-[#356647] underline underline-offset-2"
-                  >
-                    Thêm địa chỉ
-                  </Link>
-                  {' '}hoặc nhập bên dưới.
+                  {typeof onAddShippingAddress === 'function' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={onAddShippingAddress}
+                        className="font-semibold text-[#356647] underline underline-offset-2"
+                      >
+                        Thêm địa chỉ ngay
+                      </button>
+                      {' '}hoặc nhập bên dưới cho đơn này.
+                    </>
+                  ) : (
+                    'Nhập bên dưới cho đơn này.'
+                  )}
                 </p>
               ) : null}
               {selectedCustomer?.customerId

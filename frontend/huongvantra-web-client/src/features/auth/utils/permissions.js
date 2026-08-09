@@ -237,25 +237,21 @@ export function canAdjustStoreStock(session) {
   return canCreateStockReplenishmentRequest(session)
 }
 
-/** Yêu cầu bổ sung Kệ Hàng: Sale, Manager được tạo; Thủ kho và Admin chỉ được xem/duyệt. */
+/** Yêu cầu bổ sung Kệ Hàng: Manager tạo; Thủ kho và Admin xem/duyệt. Sale không dùng. */
 export function canCreateStockReplenishmentRequest(session) {
   if (hasAdminRole(session)) return false
   if (isWarehouseRole(session)) return false
   return (
-    isSalePosRole(session)
-    || isSaleCodRole(session)
-    || isBranchManager(session)
+    isBranchManager(session)
     || isManagerRole(session)
     || isSystemAdmin(session)
   )
 }
 
-/** Xem Yêu cầu bổ sung Kệ Hàng: Sale (đơn của mình), Manager, Thủ kho, Admin (chỉ xem). */
+/** Xem Yêu cầu bổ sung Kệ Hàng: Manager, Thủ kho, Admin. */
 export function canViewStockReplenishmentRequest(session) {
   return (
-    isSalePosRole(session)
-    || isSaleCodRole(session)
-    || isBranchManager(session)
+    isBranchManager(session)
     || isManagerRole(session)
     || isWarehouseRole(session)
     || hasAdminRole(session)
