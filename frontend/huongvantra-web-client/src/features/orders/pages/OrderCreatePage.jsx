@@ -9,6 +9,9 @@ import { fetchActiveContractForCustomer } from '../../contracts/services/contrac
 import { normalizePosBaseQuantity } from '../../pos/utils/posQuantity.js'
 import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
+import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
+
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateB2BOrder } from '../../auth/utils/permissions.js'
 import { calcOrderLineSubtotal, formatVnd } from '../utils/orderDisplay.js'
@@ -107,7 +110,7 @@ function OrderCreatePage() {
           priceUnit: '',
         })),
     }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contract?.id])
 
   const subtotal = useMemo(() => calcOrderLineSubtotal(form.items), [form.items])
@@ -186,7 +189,29 @@ function OrderCreatePage() {
     }
 
     if (!items.length) {
-      showError('Không có dòng hàng hợp lệ.')
+
+      showError('Vui lòng thêm ít nhất một SKU.')
+
+      return
+
+    }
+
+
+
+    if (needsShippingAddress && !isUsableShippingAddress(form.shippingAddress)) {
+
+      showError('Kênh online/COD cần địa chỉ giao hàng hợp lệ (không dùng placeholder).')
+
+      return
+
+    }
+
+    const zeroTotalCheck = validateZeroTotalCheckout({
+      items,
+      finalAmount,
+    })
+    if (!zeroTotalCheck.ok) {
+      showError(zeroTotalCheck.error)
       return
     }
 

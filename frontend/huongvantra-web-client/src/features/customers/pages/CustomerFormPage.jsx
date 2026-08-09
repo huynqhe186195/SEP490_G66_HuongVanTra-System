@@ -445,7 +445,7 @@ function CustomerFormPage() {
               ? 'Chỉ Quản lý, Kế toán hoặc Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'
               : 'Xem thông tin liên hệ, hạng thành viên và lịch sử giao dịch'
             : isEditMode
-              ? `Chỉ được sửa thông tin phụ (email, nguồn, ${isCorporateProfile ? 'chi nhánh' : 'Sale'} phụ trách). Họ tên, SĐT, địa chỉ và MST giữ nguyên.`
+              ? 'Có thể sửa mọi thông tin, riêng Họ tên/Tên công ty giữ nguyên.'
               : 'Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản'
         }
         rightContent={
@@ -514,15 +514,15 @@ function CustomerFormPage() {
               <label className="space-y-2">
                 <span className="text-xs font-semibold text-[#717971]">Số điện thoại *</span>
                 <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
                   placeholder="0xxxxxxxxx hoặc 02xxxxxxxx"
                   type="tel"
                   inputMode="numeric"
                   maxLength={getPhoneMaxLength(form.phone)}
                   value={form.phone}
                   onChange={handlePhoneChange}
-                  readOnly={isFieldLocked}
-                  disabled={isFieldLocked}
+                  readOnly={isReadOnly}
+                  disabled={isReadOnly}
                 />
                 <FieldError message={fieldErrors.phone} />
               </label>
@@ -544,13 +544,13 @@ function CustomerFormPage() {
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-semibold text-[#717971]">Địa chỉ giao hàng *</span>
                 <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
                   placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
                   type="text"
                   value={form.address}
                   onChange={updateField('address')}
-                  readOnly={isFieldLocked}
-                  disabled={isFieldLocked}
+                  readOnly={isReadOnly}
+                  disabled={isReadOnly}
                 />
                 <FieldError message={fieldErrors.address} />
               </label>
@@ -559,13 +559,13 @@ function CustomerFormPage() {
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold text-[#717971]">Mã số thuế *</span>
                   <input
-                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
+                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
                     placeholder="VD: 0312345678 hoặc 0312345678-001"
                     type="text"
                     value={form.taxCode}
                     onChange={updateField('taxCode')}
-                    readOnly={isFieldLocked}
-                    disabled={isFieldLocked}
+                    readOnly={isReadOnly}
+                    disabled={isReadOnly}
                   />
                   <FieldError message={fieldErrors.taxCode} />
                 </label>

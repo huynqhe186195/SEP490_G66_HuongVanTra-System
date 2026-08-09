@@ -149,6 +149,10 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
   const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
   let session = loadAuthSession()
   if (!session?.accessToken) {
+    // Sau logout local session đã clear: không toast "hết hạn" (gây kẹt UI), chỉ đẩy về login.
+    if (!silentAuthErrors && !window.location.pathname.startsWith('/login')) {
+      window.location.replace('/login')
+    }
     throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
   }
 

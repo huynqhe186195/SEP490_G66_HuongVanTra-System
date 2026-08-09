@@ -36,6 +36,8 @@ function PageHeader({
 }) {
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
+  const hasRightContent = Boolean(rightContent)
+  const showActionRow = hasSearch || hasRightContent
   const searchWidthClass = searchWide ? 'min-w-0 w-full lg:flex-1 lg:max-w-none' : 'min-w-0 w-full lg:max-w-xl'
 
   const searchInput = hasSearch ? (
@@ -67,7 +69,7 @@ function PageHeader({
           : 'rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px] sm:px-6 sm:py-6'
       }
     >
-      <div className={`flex flex-col ${compact ? 'gap-3' : 'gap-5'}`}>
+      <div className={`flex flex-col ${compact ? (showActionRow ? 'gap-3' : 'gap-0') : 'gap-5'}`}>
         {hasTitle ? (
           <div className="min-w-0">
             <div className={compact ? 'space-y-1' : 'space-y-3'}>
@@ -91,7 +93,11 @@ function PageHeader({
                   </h1>
                   <TitleInfoButton text={titleInfo} />
                 </div>
-                {description ? <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>{description}</p> : null}
+                {description ? (
+                  <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>
+                    {description}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -99,16 +105,22 @@ function PageHeader({
           searchInput
         ) : null}
 
-        {hasTitle ? (
+        {hasTitle && showActionRow ? (
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className={searchWide ? 'w-full lg:flex-1' : 'w-full lg:max-w-xl'}>{searchInput}</div>
+            {hasSearch ? (
+              <div className={searchWide ? 'w-full lg:flex-1' : 'w-full lg:max-w-xl'}>{searchInput}</div>
+            ) : (
+              <div className="hidden lg:block lg:flex-1" />
+            )}
 
-            {rightContent ? (
-              <div className="flex flex-wrap items-center gap-3 text-[#356647] lg:justify-end">{rightContent}</div>
+            {hasRightContent ? (
+              <div className={`flex flex-wrap items-center text-[#356647] lg:justify-end ${compact ? 'gap-2' : 'gap-3'}`}>
+                {rightContent}
+              </div>
             ) : null}
           </div>
-        ) : rightContent ? (
-          <div className="flex flex-wrap items-center gap-3 text-[#356647]">{rightContent}</div>
+        ) : !hasTitle && hasRightContent ? (
+          <div className={`flex flex-wrap items-center text-[#356647] ${compact ? 'gap-2' : 'gap-3'}`}>{rightContent}</div>
         ) : null}
       </div>
     </header>

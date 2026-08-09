@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
+import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
-import { canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
+import { canAccessPath, canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -35,10 +37,23 @@ function getStockDeductTabLabel(tab) {
   return tab?.label ?? ''
 }
 
+/** Đọc count từ statusCounts API không phân biệt hoa/thường (key có thể là enum string). */
+function readCount(statusCounts, key) {
+  if (!statusCounts) return 0
+  const found = Object.entries(statusCounts).find(([k]) => String(k).toLowerCase() === key.toLowerCase())
+  return found ? Number(found[1]) || 0 : 0
+}
+
 function StockDeductQueuePage() {
-  const canExecuteDeduct = canConfirmStockDeduct(loadAuthSession())
-  const canCancelQueue = canCancelStockDeduct(loadAuthSession())
-  const [activeTab, setActiveTab] = useState('waiting')
+  const session = loadAuthSession()
+  const canExecuteDeduct = canConfirmStockDeduct(session)
+  const canCancelQueue = canCancelStockDeduct(session)
+  const canOpenOrders = canAccessPath(session, '/orders')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(
+    TABS.some((t) => t.value === tabFromUrl) ? tabFromUrl : 'waiting',
+  )
   const [searchValue, setSearchValue] = useState('')
   const [queues, setQueues] = useState([])
   const [statusCounts, setStatusCounts] = useState(null)
@@ -99,6 +114,100 @@ function StockDeductQueuePage() {
     return () => clearTimeout(timer)
   }, [loadData])
 
+  useEffect(() => {
+    const urlTab = searchParams.get('tab')
+    if (urlTab && TABS.some((t) => t.value === urlTab) && urlTab !== activeTab) {
+      setActiveTab(urlTab)
+      setPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  const selectTab = useCallback((value) => {
+    setActiveTab(value)
+    setPage(1)
+    const next = new URLSearchParams(searchParams)
+    if (value === 'waiting') next.delete('tab')
+    else next.set('tab', value)
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  const waitingCount = readCount(statusCounts, 'waiting')
+  const insufficientCount = readCount(statusCounts, 'insufficient')
+  const confirmedCount = readCount(statusCounts, 'confirmed')
+  const cancelledCount = readCount(statusCounts, 'cancelled')
+  const allCount = waitingCount + insufficientCount + confirmedCount + cancelledCount
+
+  const snapshotItems = useMemo(
+    () => [
+      {
+        id: 'waiting',
+        label: 'Chờ đóng gói',
+        value: waitingCount,
+        active: activeTab === 'waiting',
+        onClick: () => selectTab('waiting'),
+      },
+      {
+        id: 'insufficient',
+        label: 'Chờ nguyên liệu',
+        value: insufficientCount,
+        warn: insufficientCount > 0,
+        active: activeTab === 'insufficient',
+        onClick: () => selectTab('insufficient'),
+      },
+      {
+        id: 'confirmed',
+        label: 'Đã trừ',
+        value: confirmedCount,
+        active: activeTab === 'confirmed',
+        onClick: () => selectTab('confirmed'),
+      },
+      {
+        id: 'all',
+        label: 'Tất cả',
+        value: allCount,
+        active: activeTab === 'all',
+        onClick: () => selectTab('all'),
+      },
+    ],
+    [activeTab, waitingCount, insufficientCount, confirmedCount, allCount, selectTab],
+  )
+
+  const actionItems = useMemo(
+    () => [
+      canExecuteDeduct && {
+        id: 'confirm-waiting',
+        title: 'Xác nhận đóng gói',
+        hint: 'Yêu cầu đang chờ đóng gói / trừ Kho',
+        icon: 'inventory_2',
+        iconBg: 'bg-[#eaf4eb]',
+        iconColor: 'text-[#356647]',
+        count: waitingCount,
+        onClick: () => selectTab('waiting'),
+      },
+      {
+        id: 'insufficient-material',
+        title: 'Chờ nguyên liệu',
+        hint: 'Thiếu tồn Kho, chưa thể đóng gói',
+        icon: 'warning',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-700',
+        count: insufficientCount,
+        onClick: () => selectTab('insufficient'),
+      },
+      canOpenOrders && {
+        id: 'view-orders',
+        title: 'Xem tất cả đơn hàng',
+        hint: 'Theo dõi toàn bộ đơn hàng trong hệ thống',
+        icon: 'receipt_long',
+        alwaysShow: true,
+        to: '/orders',
+      },
+    ].filter(Boolean),
+    [canExecuteDeduct, canOpenOrders, waitingCount, insufficientCount, selectTab],
+  )
+
   return (
     <PageShell>
       <PageHeader
@@ -119,21 +228,24 @@ function StockDeductQueuePage() {
         }}
       />
 
+      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
+
+      <OpsActionQueue items={actionItems} className="mb-3" />
+
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <StatusFilterChips
           options={tabChipOptions}
           value={activeTab}
-          onChange={(value) => {
-            setActiveTab(value)
-            setPage(1)
-          }}
+          onChange={selectTab}
         />
-        <Link
-          className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          to="/orders"
-        >
-          Tất cả đơn hàng
-        </Link>
+        {canOpenOrders ? (
+          <Link
+            className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            to="/orders"
+          >
+            Tất cả đơn hàng
+          </Link>
+        ) : null}
       </div>
 
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
@@ -175,9 +287,13 @@ function StockDeductQueuePage() {
                 ? queues.map((row) => (
                     <tr key={row.queueId} className="transition-colors hover:bg-[#fbf9f1]/30">
                       <td className="px-8 py-5 font-bold text-slate-700">
-                        <Link className="hover:text-[#538463] hover:underline" to={`/orders/${row.orderId}`}>
-                          {row.orderCode}
-                        </Link>
+                        {canOpenOrders ? (
+                          <Link className="hover:text-[#538463] hover:underline" to={`/orders/${row.orderId}`}>
+                            {row.orderCode}
+                          </Link>
+                        ) : (
+                          <span>{row.orderCode}</span>
+                        )}
                         {row.lines?.length ? (
                           <div className="mt-2 space-y-1 text-xs font-medium text-slate-500">
                             {row.lines.slice(0, 2).map((line) => (

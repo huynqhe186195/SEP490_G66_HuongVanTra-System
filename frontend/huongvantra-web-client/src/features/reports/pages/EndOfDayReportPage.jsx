@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
+import ReportKpiCards from '../components/ReportKpiCards.jsx'
 import { endOfDayOrderApi, endOfDayInventoryApi, fetchAllPages } from '../services/endOfDayApi.js'
 import { printEndOfDayReport, exportEndOfDayPdf, printEndOfDayK80 } from '../utils/printEndOfDayReport.js'
 import { exportEndOfDayExcel } from '../utils/exportEndOfDayExcel.js'
@@ -286,6 +288,42 @@ function EndOfDayReportPage() {
     (report.cashOut?.length || 0) > 0 ||
     report.forfeitedDepositOrders > 0
 
+  const exceptionCount =
+    (exceptions?.underpaidCount || 0) +
+    (exceptions?.receiptsOnCancelledCount || 0) +
+    (exceptions?.priorPeriodReceiptCount || 0)
+
+  const actionItems = useMemo(
+    () => [
+      exceptionCount > 0 && {
+        id: 'open-summary-exceptions',
+        title: 'Xem ngoại lệ trong Tổng hợp',
+        hint: 'Đơn chưa thu đủ, thu trên đơn hủy, hoặc thu của kỳ trước',
+        icon: 'warning',
+        iconBg: 'bg-[#b42318]/10',
+        iconColor: 'text-[#b42318]',
+        count: exceptionCount,
+        onClick: () => handleConcernChange('summary'),
+      },
+      {
+        id: 'view-payments',
+        title: 'Xem chi tiết thanh toán',
+        hint: 'Đối soát theo phương thức thanh toán trong kỳ',
+        icon: 'payments',
+        onClick: () => handleConcernChange('payments'),
+      },
+      {
+        id: 'back-to-dashboard',
+        title: 'Về trang tổng quan',
+        hint: 'Xem thống kê bán hàng và việc cần làm hôm nay',
+        icon: 'dashboard',
+        alwaysShow: true,
+        to: '/dashboard',
+      },
+    ].filter(Boolean),
+    [exceptionCount, handleConcernChange],
+  )
+
   const getExportFilename = () => {
     const d = new Date()
     const pad = (n) => String(n).padStart(2, '0')
@@ -422,7 +460,7 @@ function EndOfDayReportPage() {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 [font-family:'Manrope',sans-serif]">
       <PageHeader
         compact
         title={
@@ -457,6 +495,18 @@ function EndOfDayReportPage() {
           </button>
         </div>
       )}
+
+      {hasData && !isLoading ? (
+        <>
+          <ReportKpiCards
+            report={report}
+            exceptionCount={exceptionCount}
+            onOpenExceptions={() => handleConcernChange('summary')}
+            showStoreWideCash={canFilterByEmployee}
+          />
+          <OpsActionQueue items={actionItems} />
+        </>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 gap-3">
         <aside className="hidden w-[268px] shrink-0 overflow-auto rounded-2xl border border-[#c1c9c0]/60 bg-white lg:block">

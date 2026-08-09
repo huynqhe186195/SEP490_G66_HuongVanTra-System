@@ -792,7 +792,7 @@ public class CustomerLogic
                 ct);
 
         if (request.Amount > customer.CurrentDebt)
-            throw new CustomerValidationException(["Số tiền thu không được vượt quá công nợ hiện tại."]);
+            throw new CustomerValidationException(["Payment amount exceeds total outstanding debt"]);
 
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocationPlans = request.Allocations is { Count: > 0 }
@@ -826,7 +826,7 @@ public class CustomerLogic
         }
 
         if (allocatedAmount > customer.CurrentDebt)
-            throw new CustomerValidationException(["Debt allocation must not exceed the current debt."]);
+            throw new CustomerValidationException(["Payment amount exceeds total outstanding debt"]);
 
         if (allocatedAmount <= 0)
             throw new CustomerValidationException(["Khách không có công nợ để trừ."]);

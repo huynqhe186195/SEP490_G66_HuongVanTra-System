@@ -251,10 +251,10 @@ function AdminLayout() {
           </div>
 
           <main
-            className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4 lg:p-6 xl:p-8 ${
+            className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
               isViewportLocked
-                ? 'overflow-hidden'
-                : 'custom-scrollbar overflow-y-auto overscroll-contain'
+                ? 'overflow-hidden p-2 sm:p-3 lg:p-3'
+                : 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6 xl:p-8'
             }`}
           >
             <ModuleRouteGuard session={authSession} isLoadingAccess={isLoadingAccess}>

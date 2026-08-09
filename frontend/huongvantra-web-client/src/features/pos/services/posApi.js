@@ -7,6 +7,7 @@ import {
   fetchCustomerByPhone,
   mapCustomer,
 } from '../../customers/services/customersApi.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import {
   buildCreateOrderBody,
   createOrder,
@@ -787,7 +788,7 @@ export async function fetchPosCustomerContext(customerId) {
 
   const fromAddressApi = (Array.isArray(addressRows) ? addressRows : []).map((row) => {
     const line = [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', ')
-    if (!line.trim()) return null
+    if (!isUsableShippingAddress(line)) return null
     const receiver = [row.receiverName, row.receiverPhone].filter(Boolean).join(' · ')
     return {
       id: row.id,
@@ -802,7 +803,7 @@ export async function fetchPosCustomerContext(customerId) {
 
   const fromCustomerEmbed = (customer.addresses ?? []).map((row) => {
     const line = [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', ')
-    if (!line.trim()) return null
+    if (!isUsableShippingAddress(line)) return null
     const receiver = [row.receiverName, row.receiverPhone].filter(Boolean).join(' · ')
     return {
       id: row.id,
@@ -817,11 +818,12 @@ export async function fetchPosCustomerContext(customerId) {
 
   const shippingAddresses = fromAddressApi.length > 0 ? fromAddressApi : fromCustomerEmbed
 
-  if (customer.address && !shippingAddresses.length) {
+  // Không đẩy addressLine placeholder CRM ("Chưa có địa chỉ giao hàng") vào list COD.
+  if (isUsableShippingAddress(customer.address) && !shippingAddresses.length) {
     shippingAddresses.push({
       id: 'profile',
-      address: customer.address,
-      label: customer.address,
+      address: customer.address.trim(),
+      label: customer.address.trim(),
       lastUsedAt: null,
       isProfileAddress: true,
       receiverName: '',

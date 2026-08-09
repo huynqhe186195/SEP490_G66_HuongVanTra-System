@@ -23,8 +23,12 @@ public class PosCashSessionController(PosCashSessionLogic posCashSessionLogic) :
         || User.HasPermission(PermissionNames.ManageRole);
 
     [HttpGet("current")]
-    public async Task<IActionResult> GetCurrent(CancellationToken ct) =>
-        Ok(await posCashSessionLogic.GetCurrentAsync(ct));
+    public async Task<IActionResult> GetCurrent(CancellationToken ct)
+    {
+        var (actorId, _) = Actor();
+        return Ok(await posCashSessionLogic.GetCurrentAsync(
+            actorId, CanBypassShiftRequirement(), ct));
+    }
 
     /// <summary>Lịch sử ca quỹ — Manager / Admin / Accountant.</summary>
     [HttpGet]

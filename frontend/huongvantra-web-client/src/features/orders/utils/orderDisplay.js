@@ -577,7 +577,8 @@ export function canCancelOrder(order) {
 
 export function canVerifyCod(order) {
   const status = normalizeOrderKey(order?.orderStatus)
-  if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'DRAFT') return false
+  // Enum từ API là PascalCase (Cancelled/Completed/Draft); so sánh UPPERCASE khiến nút vẫn hiện.
+  if (status === 'Cancelled' || status === 'Completed' || status === 'Draft') return false
   const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
   return Boolean(payment && !payment.isCodVerified)
 }

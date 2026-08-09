@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -129,43 +130,56 @@ function InventoryLedgerPage() {
         searchValue={searchInput}
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={exportCsv}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[18px]">download</span>
-              Xuất CSV
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            Xuất CSV
+          </button>
         )}
       />
 
-      <div className="mb-3 space-y-2.5">
+      <ListFilterToolbar>
         <StatusFilterChips
+          dense
           options={LOCATION_OPTIONS}
           value={location}
           onChange={(value) => resetPageAndSet(setLocation, value)}
           ariaLabel="Lọc theo vị trí"
         />
-        <StatusFilterChips
-          options={TRANSACTION_OPTIONS}
+        <select
+          aria-label="Lọc theo loại giao dịch"
+          className={`max-w-[11rem] sm:max-w-[14rem] ${listFilterControlClass}`}
           value={transactionType}
-          onChange={(value) => resetPageAndSet(setTransactionType, value)}
-          ariaLabel="Lọc theo loại giao dịch"
+          onChange={(event) => resetPageAndSet(setTransactionType, event.target.value)}
+        >
+          {TRANSACTION_OPTIONS.map((option) => (
+            <option key={option.value || 'all-txn'} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <input
+          className={`min-w-[8rem] max-w-[10rem] ${listFilterControlClass}`}
+          placeholder="Mã chứng từ"
+          value={referenceCode}
+          onChange={(event) => resetPageAndSet(setReferenceCode, event.target.value)}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Mã chứng từ"
-            value={referenceCode}
-            onChange={(event) => resetPageAndSet(setReferenceCode, event.target.value)}
-          />
-          <input type="date" className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm" value={fromDate} onChange={(event) => resetPageAndSet(setFromDate, event.target.value)} />
-          <input type="date" className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm" value={toDate} onChange={(event) => resetPageAndSet(setToDate, event.target.value)} />
-        </div>
-      </div>
+        <input
+          type="date"
+          aria-label="Từ ngày"
+          className={listFilterControlClass}
+          value={fromDate}
+          onChange={(event) => resetPageAndSet(setFromDate, event.target.value)}
+        />
+        <input
+          type="date"
+          aria-label="Đến ngày"
+          className={listFilterControlClass}
+          value={toDate}
+          onChange={(event) => resetPageAndSet(setToDate, event.target.value)}
+        />
+      </ListFilterToolbar>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">

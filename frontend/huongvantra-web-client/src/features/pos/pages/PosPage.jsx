@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { showError, showInfo, showSuccess } from "../../../app/toast.js";
 import AddCustomerModal from "../components/AddCustomerModal.jsx";
+import AddCustomerAddressModal from "../components/AddCustomerAddressModal.jsx";
 import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
 import OrderOfferModal from "../components/OrderOfferModal.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
@@ -19,6 +20,7 @@ import {
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { formatVietnamDate, formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import { createCustomerForOrder, fetchCustomerByPhone, fetchCustomerOpenDebts } from '../../customers/services/customersApi.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
 import {
   clampDebtSettlement,
@@ -60,7 +62,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import {
   getPosBaseUnitLabel,
@@ -698,17 +700,6 @@ function PosPage() {
         return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(n);
     };
 
-    const formatStockHint = (value) => {
-        const n = Number(value) || 0;
-        if (n <= 0) {
-            return "Số lượng hiện tại: 0 · bán trước, trừ sau";
-        }
-        if (n <= 5) {
-            return `Số lượng hiện tại: ${formatStock(n)} · sắp hết`;
-        }
-        return `Số lượng hiện tại: ${formatStock(n)}`;
-    };
-
     const formatCompactStock = (value) => {
         const n = Number(value) || 0;
         if (n <= 0) return "SL: 0";
@@ -1036,23 +1027,20 @@ function PosPage() {
                         address: String(row.address || '').trim(),
                         label: String(row.label || row.address || '').trim(),
                     }))
-                    .filter((row) => row.address);
+                    .filter((row) => isUsableShippingAddress(row.address));
                 setSavedShippingAddresses(addresses);
-
-                const current = shippingAddress?.trim();
-                if (current && addresses.some((addr) => addr.address === current)) {
-                    setUseCustomShippingAddress(false);
-                    return;
-                }
 
                 if (addresses.length > 0) {
                     setUseCustomShippingAddress(false);
+                    const current = shippingAddress?.trim();
+                    if (current && addresses.some((addr) => addr.address === current)) {
+                        return;
+                    }
                     updateActiveSession({ shippingAddress: addresses[0].address });
                 } else {
-                    setUseCustomShippingAddress(true);
-                    if (!current) {
-                        updateActiveSession({ shippingAddress: "" });
-                    }
+                    // Không giữ địa chỉ stale từ khách/tab trước — COD bắt buộc địa chỉ đã lưu.
+                    setUseCustomShippingAddress(false);
+                    updateActiveSession({ shippingAddress: '' });
                 }
             })
             .catch((error) => {
@@ -1073,7 +1061,7 @@ function PosPage() {
         };
     }, [isTakeaway, selectedCustomer?.customerId]);
 
-    const refreshShippingAddresses = useCallback(() => {
+    const refreshShippingAddresses = useCallback((preferredAddress = null) => {
         if (!selectedCustomer?.customerId) return;
         setIsLoadingShippingAddresses(true);
         fetchPosCustomerContext(selectedCustomer.customerId)
@@ -1083,8 +1071,14 @@ function PosPage() {
                         address: String(row.address || '').trim(),
                         label: String(row.label || row.address || '').trim(),
                     }))
-                    .filter((row) => row.address);
+                    .filter((row) => isUsableShippingAddress(row.address));
                 setSavedShippingAddresses(addresses);
+                const prefer = String(preferredAddress || '').trim();
+                if (prefer && addresses.some((row) => row.address === prefer)) {
+                    setUseCustomShippingAddress(false);
+                    updateActiveSession({ shippingAddress: prefer });
+                    return;
+                }
                 if (addresses.length > 0 && !shippingAddress?.trim()) {
                     setUseCustomShippingAddress(false);
                     updateActiveSession({ shippingAddress: addresses[0].address });
@@ -1560,11 +1554,15 @@ function PosPage() {
     const hasUnavailableItems = cartItems.some((item) => item.isUnavailable);
     const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
-    const hasShippingAddress = Boolean(shippingAddress?.trim());
+    const hasShippingAddress = isUsableShippingAddress(shippingAddress);
+    // COD: chỉ chấp nhận địa chỉ đã lưu trên hồ sơ KH (không dùng địa chỉ gõ tạm / stale / placeholder).
+    const hasSavedShippingAddress = savedShippingAddresses.some(
+        (row) => String(typeof row === 'string' ? row : row.address || '').trim() === shippingAddress?.trim(),
+    ) && hasShippingAddress;
     // Khách DN chỉ bán qua hợp đồng; state cũ khôi phục từ workspace storage vẫn phải bị chặn.
     const hasCorporateCustomer = isCorporateCustomerType(selectedCustomer?.customerType);
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
-    // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
+    // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ đã lưu.
     const canPayCash = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway);
     const canPayTransfer = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway) && total > 0;
     const canPayTakeaway = hasCartItems
@@ -1573,6 +1571,8 @@ function PosPage() {
         && !hasPendingQrOrder
         && hasCustomerSelected
         && hasShippingAddress
+        && hasSavedShippingAddress
+        && !isLoadingShippingAddresses
         && (isTransferPayment ? total > 0 : true);
     // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = !hasCorporateCustomer && (isTakeaway
@@ -1954,8 +1954,15 @@ function PosPage() {
 
     const handleTakeawayPayment = async (debtSettlement = null, idempotencyKey) => {
         const address = shippingAddress?.trim();
-        if (!address) {
-            showError("Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.");
+        if (!isUsableShippingAddress(address) || !hasSavedShippingAddress) {
+            showError("Vui lòng chọn địa chỉ giao hàng đã lưu cho đơn COD.");
+            return;
+        }
+        const addressSaved = savedShippingAddresses.some(
+            (row) => String(typeof row === 'string' ? row : row.address || '').trim() === address,
+        );
+        if (!addressSaved) {
+            showError("Khách chưa có địa chỉ đã lưu. Vui lòng thêm địa chỉ trước khi tạo đơn COD.");
             return;
         }
 
@@ -2281,8 +2288,12 @@ function PosPage() {
                 return;
             }
             if (!canPay) {
-                if (!hasShippingAddress) {
-                    showError("Vui lòng nhập địa chỉ giao hàng.");
+                if (!hasShippingAddress || !hasSavedShippingAddress) {
+                    showError(
+                        savedShippingAddresses.length === 0
+                            ? "Khách chưa có địa chỉ đã lưu. Vui lòng thêm địa chỉ trước khi tạo đơn COD."
+                            : "Vui lòng chọn địa chỉ giao hàng.",
+                    );
                 } else if (isTransferPayment && total <= 0) {
                     showError("Đơn 0 đ không dùng chuyển khoản — chọn COD.");
                 }
@@ -2641,9 +2652,9 @@ function PosPage() {
             }
         >
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
-            <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-3 py-2">
-                <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
-                    <div className="relative w-[min(340px,30%)] shrink-0">
+            <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-3 py-1.5">
+                <div className="flex min-w-0 items-center gap-2">
+                    <div className="relative w-[min(280px,28%)] shrink-0">
                         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">search</Icon>
                         <input
                             className="w-full rounded-full border border-[#c1c9c0] bg-white py-1.5 pl-9 pr-9 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
@@ -2655,7 +2666,7 @@ function PosPage() {
                         <Icon className="absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">barcode_scanner</Icon>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
                         {tabs.map((tab) => {
                             const tabSession = sessions[tab.id];
                             const tabItemCount = tabSession?.cartItems?.length ?? 0;
@@ -2673,7 +2684,7 @@ function PosPage() {
                                             patchWorkspace({ activeTabId: tab.id });
                                         }
                                     }}
-                                    className={`flex items-center gap-1.5 rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                                    className={`flex shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                                         activeTabId === tab.id ? "bg-[#356647] text-white shadow-sm" : "bg-[#eae8e0] text-[#414942] hover:bg-[#e4e3db]"
                                     }`}>
                                     <span>{tab.label}</span>
@@ -2699,7 +2710,7 @@ function PosPage() {
                                                 event.stopPropagation();
                                                 requestCloseTab(tab.id);
                                             }}
-                                            className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
+                                            className="ml-1 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
                                             aria-label={`Đóng ${tab.label}`}>
                                             <Icon className="text-[16px] opacity-80">close</Icon>
                                         </button>
@@ -2708,7 +2719,7 @@ function PosPage() {
                             );
                         })}
 
-                        <button type="button" onClick={addTab} className="rounded-lg px-3 py-1.5 text-[#356647] transition-colors hover:bg-[#356647]/10">
+                        <button type="button" onClick={addTab} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[#356647] transition-colors hover:bg-[#356647]/10">
                             <Icon>add</Icon>
                         </button>
                     </div>
@@ -2720,41 +2731,41 @@ function PosPage() {
                             className="flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] transition-colors hover:bg-[#356647]/10"
                             title={isTakeaway ? 'Báo cáo chốt ca COD / mang đi' : 'Xem báo cáo chốt ca và in phiếu K80'}>
                             <Icon className="text-[16px]">summarize</Icon>
-                            {isTakeaway ? 'Báo cáo chốt ca COD' : 'Báo cáo chốt ca'}
+                            <span className="hidden sm:inline">{isTakeaway ? 'Báo cáo COD' : 'Báo cáo ca'}</span>
                         </button>
                     </div>
-
-                    {showCashSessionUi ? (
-                      <div className="shrink-0">
-                        <PosCashSessionBar
-                          dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
-                          dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
-                          onCashOpened={() => setCashSessionOpen(true)}
-                          sellerName={authSession?.username || ''}
-                          sellerRole={(authSession?.roles || []).join(', ')}
-                          shiftSlotId={shelfOnDuty?.slotId || null}
-                          shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
-                          onRequestDayEnd={
-                            canViewAllOrders(authSession)
-                              ? undefined
-                              : () => setDayEndRequested(true)
-                          }
-                        />
-                      </div>
-                    ) : null}
                 </div>
+
+                {showCashSessionUi ? (
+                  <div className="mt-1.5 min-w-0">
+                    <PosCashSessionBar
+                      dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
+                      dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
+                      onCashOpened={() => setCashSessionOpen(true)}
+                      sellerName={authSession?.username || ''}
+                      sellerRole={(authSession?.roles || []).join(', ')}
+                      shiftSlotId={shelfOnDuty?.slotId || null}
+                      shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
+                      onRequestDayEnd={
+                        canViewAllOrders(authSession)
+                          ? undefined
+                          : () => setDayEndRequested(true)
+                      }
+                    />
+                  </div>
+                ) : null}
             </header>
 
             <ResizableSplitPane
                 storageKey="hvt-pos-panel-ratio"
-                defaultRatio={0.35}
-                minStartPx={360}
+                defaultRatio={0.38}
+                minStartPx={380}
                 minEndPx={520}
                 fallbackMinStartPx={300}
                 fallbackMinEndPx={400}
                 className="grid-cols-1 lg:grid-rows-1"
-                startClassName="flex min-h-[42vh] flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] lg:min-h-0 lg:border-t-0 lg:shadow-[4px_0_20px_rgba(0,0,0,0.04)]"
-                endClassName="flex min-h-[38vh] flex-col bg-white text-base lg:min-h-0"
+                startClassName="flex min-h-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] lg:border-t-0 lg:shadow-[4px_0_20px_rgba(0,0,0,0.04)] max-lg:min-h-[36vh]"
+                endClassName="flex min-h-0 flex-col bg-white text-base max-lg:min-h-[40vh]"
                 startPanel={
                 <div className="flex min-h-0 flex-1 flex-col bg-white">
                         <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
@@ -2833,142 +2844,172 @@ function PosPage() {
                                             isPercent ? "Tối đa 100%"
                                             : lineGross > 0 ? `Tối đa ${formatMoney(lineGross)} đ`
                                             : "Thành tiền dòng: 0 đ";
+                                        const titleName = String(item.productName || item.name || "").trim();
+                                        const variantLabel = String(item.packagingType || "").trim();
+                                        const showVariant =
+                                            Boolean(variantLabel)
+                                            && variantLabel.toLowerCase() !== titleName.toLowerCase();
 
                                         return (
                                             <div
                                                 key={item.sku}
-                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_6.5rem_1.75rem] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
+                                                className={`relative rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:px-3 sm:py-3 ${
                                                     item.isUnavailable ? "border-[#ba1a1a]/60" : "border-[#c1c9c0]/50"
                                                 }`}>
-                                                <div className="min-w-0 overflow-hidden">
-                                                    <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
-                                                        {item.name}
-                                                        {item.isGift ?
-                                                            <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">Quà</span>
+                                                <div className="flex items-start gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p
+                                                            className="line-clamp-2 text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base"
+                                                            title={item.name}>
+                                                            {titleName || item.name}
+                                                            {item.isGift ?
+                                                                <span className="ml-1.5 inline-block rounded-full bg-[#fff8e8] px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase text-[#7e5700]">
+                                                                    Quà
+                                                                </span>
+                                                            :   null}
+                                                            {item.isUnavailable ?
+                                                                <span className="ml-1.5 inline-block rounded-full bg-[#ba1a1a]/10 px-1.5 py-0.5 align-middle text-[10px] font-bold text-[#ba1a1a]">
+                                                                    {item.availabilityIssue === "catalog_error" ? "Chưa xác thực" : "Ngừng bán"}
+                                                                </span>
+                                                            :   null}
+                                                        </p>
+                                                        {showVariant ?
+                                                            <p className="mt-0.5 truncate text-xs text-[#717971]" title={variantLabel}>
+                                                                {variantLabel}
+                                                            </p>
                                                         :   null}
-                                                        {item.isUnavailable ?
-                                                            <span className="ml-1.5 rounded-full bg-[#ba1a1a]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ba1a1a]">
-                                                                {item.availabilityIssue === "catalog_error" ? "Chưa xác thực" : "Ngừng bán"}
+                                                        <p className="mt-0.5 text-xs leading-snug text-[#717971] sm:text-sm">
+                                                            {item.isGift ?
+                                                                <span className="line-through opacity-60">{formatMoney(item.price)} đ</span>
+                                                            :   <span>
+                                                                    {formatMoney(item.price)} đ/{item.unit}
+                                                                </span>}
+                                                            <span
+                                                                className={`ml-1.5 text-[11px] sm:text-xs ${
+                                                                    Number(item.stockQuantity) <= 0 ? "font-semibold text-[#7e5700]" : ""
+                                                                }`}>
+                                                                {formatCompactStock(item.stockQuantity)}
                                                             </span>
-                                                        :   null}
-                                                    </p>
-                                                    <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
-                                                        {item.isGift ?
-                                                            <span className="line-through opacity-60">{formatMoney(item.price)} đ</span>
-                                                        :   <span>{formatMoney(item.price)} đ/{item.unit}</span>}
-                                                        <span
-                                                            className={`ml-1 text-[11px] sm:text-xs ${Number(item.stockQuantity) <= 0 ? "font-semibold text-[#7e5700]" : ""}`}>
-                                                            · {formatStockHint(item.stockQuantity)}
-                                                        </span>
-                                                        {discountLabel ?
-                                                            <span className="ml-1 text-[11px] font-semibold text-[#7e5700] sm:text-xs">{discountLabel}</span>
-                                                        :   null}
-                                                    </p>
-                                                </div>
+                                                            {discountLabel ?
+                                                                <span className="ml-1.5 text-[11px] font-semibold text-[#7e5700] sm:text-xs">
+                                                                    {discountLabel}
+                                                                </span>
+                                                            :   null}
+                                                        </p>
+                                                    </div>
 
-                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-start overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                                                     <button
                                                         type="button"
-                                                        onClick={() => updateQuantity(item.sku, "dec")}
-                                                        className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white">
-                                                        -
-                                                    </button>
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        aria-label={`Số lượng ${item.name}`}
-                                                        className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
-                                                        value={item.qty}
-                                                        onChange={(event) => setLineQuantity(item.sku, event.target.value)}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => updateQuantity(item.sku, "inc")}
-                                                        className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white">
-                                                        +
+                                                        onClick={() => removeItem(item.sku)}
+                                                        className="shrink-0 p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
+                                                        aria-label="Xóa">
+                                                        <Icon className="text-[22px]">close</Icon>
                                                     </button>
                                                 </div>
 
-                                                <div className="relative flex shrink-0 items-center justify-end">
-                                                    {canUseVipManualAdjustments ?
+                                                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="flex w-[7.75rem] shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                                                         <button
                                                             type="button"
-                                                            onClick={() => toggleLineGift(item.sku)}
-                                                            className={`mr-1 rounded-lg px-1.5 py-1 text-[10px] font-bold uppercase ${
-                                                                item.isGift ? "bg-[#7e5700] text-white" : "border border-[#7e5700]/40 text-[#7e5700] hover:bg-[#fff8e8]"
-                                                            }`}
-                                                            title="Đánh dấu quà tặng VIP">
-                                                            Quà
+                                                            onClick={() => updateQuantity(item.sku, "dec")}
+                                                            className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white">
+                                                            -
                                                         </button>
-                                                    :   null}
-                                                    <button
-                                                        type="button"
-                                                        onMouseDown={(event) => event.stopPropagation()}
-                                                        onClick={() => {
-                                                            if (!canUseVipManualAdjustments || item.isGift) return;
-                                                            setOpenDiscountSku(isDiscountOpen ? null : item.sku);
-                                                        }}
-                                                        className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${
-                                                            item.isGift ? "text-[#7e5700]" : isDiscountOpen ? "bg-[#356647] text-white" : "text-[#356647] hover:bg-[#356647]/10"
-                                                        }`}
-                                                        title={item.isGift ? "Dòng quà tặng" : canUseVipManualAdjustments ? "Bấm để chỉnh chiết khấu" : "Chiết khấu chỉ dành khách VIP"}>
-                                                        {item.isGift ? "0" : formatMoney(lineTotal)} đ
-                                                    </button>
+                                                        <input
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            aria-label={`Số lượng ${item.name}`}
+                                                            className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
+                                                            value={item.qty}
+                                                            onChange={(event) => setLineQuantity(item.sku, event.target.value)}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateQuantity(item.sku, "inc")}
+                                                            className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white">
+                                                            +
+                                                        </button>
+                                                    </div>
 
-                                                    {isDiscountOpen && canUseVipManualAdjustments && !item.isGift ?
-                                                        <div
-                                                            ref={discountPopoverRef}
+                                                    <div className="relative flex shrink-0 items-center justify-end gap-1">
+                                                        {canUseVipManualAdjustments ?
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleLineGift(item.sku)}
+                                                                className={`rounded-lg px-1.5 py-1 text-[10px] font-bold uppercase ${
+                                                                    item.isGift ? "bg-[#7e5700] text-white" : "border border-[#7e5700]/40 text-[#7e5700] hover:bg-[#fff8e8]"
+                                                                }`}
+                                                                title="Đánh dấu quà tặng VIP">
+                                                                Quà
+                                                            </button>
+                                                        :   null}
+                                                        <button
+                                                            type="button"
                                                             onMouseDown={(event) => event.stopPropagation()}
-                                                            className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-[#c1c9c0] bg-white p-3 shadow-xl">
-                                                            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu dòng</p>
-                                                            <div className="flex overflow-hidden rounded-lg border border-[#c1c9c0]">
-                                                                <div className="flex shrink-0 border-r border-[#c1c9c0]">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => updateLineDiscountType(item.sku, "percent")}
-                                                                        className={`px-3 py-2 text-xs font-bold ${
-                                                                            isPercent ? "bg-[#356647] text-white" : "text-[#717971] hover:bg-[#f6f4ec]"
-                                                                        }`}>
-                                                                        %
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => updateLineDiscountType(item.sku, "amount")}
-                                                                        className={`px-3 py-2 text-xs font-bold ${
-                                                                            !isPercent ? "bg-[#356647] text-white" : "text-[#717971] hover:bg-[#f6f4ec]"
-                                                                        }`}>
-                                                                        VNĐ
-                                                                    </button>
-                                                                </div>
-                                                                <input
-                                                                    type={isPercent ? "number" : "text"}
-                                                                    inputMode="numeric"
-                                                                    min={isPercent ? 0 : undefined}
-                                                                    max={isPercent ? 100 : undefined}
-                                                                    className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
-                                                                    placeholder={isPercent ? "Nhập %" : "Nhập VNĐ"}
-                                                                    autoFocus
-                                                                    value={
-                                                                        isPercent ? item.lineDiscountValue || ""
-                                                                        : item.lineDiscountValue ?
-                                                                            formatMoney(item.lineDiscountValue)
-                                                                        :   ""
-                                                                    }
-                                                                    onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
-                                                                />
-                                                            </div>
-                                                            <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
-                                                        </div>
-                                                    :   null}
-                                                </div>
+                                                            onClick={() => {
+                                                                if (!canUseVipManualAdjustments || item.isGift) return;
+                                                                setOpenDiscountSku(isDiscountOpen ? null : item.sku);
+                                                            }}
+                                                            className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${
+                                                                item.isGift ? "text-[#7e5700]"
+                                                                : isDiscountOpen ? "bg-[#356647] text-white"
+                                                                : "text-[#356647] hover:bg-[#356647]/10"
+                                                            }`}
+                                                            title={
+                                                                item.isGift ? "Dòng quà tặng"
+                                                                : canUseVipManualAdjustments ? "Bấm để chỉnh chiết khấu"
+                                                                : "Chiết khấu chỉ dành khách VIP"
+                                                            }>
+                                                            {item.isGift ? "0" : formatMoney(lineTotal)} đ
+                                                        </button>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeItem(item.sku)}
-                                                    className="shrink-0 p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
-                                                    aria-label="Xóa">
-                                                    <Icon className="text-[22px]">close</Icon>
-                                                </button>
+                                                        {isDiscountOpen && canUseVipManualAdjustments && !item.isGift ?
+                                                            <div
+                                                                ref={discountPopoverRef}
+                                                                onMouseDown={(event) => event.stopPropagation()}
+                                                                className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-[#c1c9c0] bg-white p-3 shadow-xl">
+                                                                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu dòng</p>
+                                                                <div className="flex overflow-hidden rounded-lg border border-[#c1c9c0]">
+                                                                    <div className="flex shrink-0 border-r border-[#c1c9c0]">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => updateLineDiscountType(item.sku, "percent")}
+                                                                            className={`px-3 py-2 text-xs font-bold ${
+                                                                                isPercent ? "bg-[#356647] text-white" : "text-[#717971] hover:bg-[#f6f4ec]"
+                                                                            }`}>
+                                                                            %
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => updateLineDiscountType(item.sku, "amount")}
+                                                                            className={`px-3 py-2 text-xs font-bold ${
+                                                                                !isPercent ? "bg-[#356647] text-white" : "text-[#717971] hover:bg-[#f6f4ec]"
+                                                                            }`}>
+                                                                            VNĐ
+                                                                        </button>
+                                                                    </div>
+                                                                    <input
+                                                                        type={isPercent ? "number" : "text"}
+                                                                        inputMode="numeric"
+                                                                        min={isPercent ? 0 : undefined}
+                                                                        max={isPercent ? 100 : undefined}
+                                                                        className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
+                                                                        placeholder={isPercent ? "Nhập %" : "Nhập VNĐ"}
+                                                                        autoFocus
+                                                                        value={
+                                                                            isPercent ? item.lineDiscountValue || ""
+                                                                            : item.lineDiscountValue ?
+                                                                                formatMoney(item.lineDiscountValue)
+                                                                            :   ""
+                                                                        }
+                                                                        onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
+                                                                    />
+                                                                </div>
+                                                                <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
+                                                            </div>
+                                                        :   null}
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -3263,7 +3304,7 @@ function PosPage() {
                                     />
                                 </CustomScrollArea>
                             :
-                                <CustomScrollArea className="flex-1" contentClassName="flex h-full min-h-0 px-2.5 py-2">
+                                <CustomScrollArea className="flex-1" contentClassName="px-2.5 py-2">
                                     {isSearchLoading ?
                                         <LoadingIndicator label="Đang tải sản phẩm..." className="min-h-[220px]" />
                                     : filteredSearchProducts.length === 0 ?
@@ -3272,25 +3313,49 @@ function PosPage() {
                                                 "Không tìm thấy sản phẩm phù hợp."
                                             :   "Chưa có sản phẩm để hiển thị."}
                                         </p>
-                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
+                                    :   <div className="grid auto-rows-max grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                             {visibleProductPageItems.map((item) => {
                                                 const outOfStock = Number(item.stockQuantity) <= 0;
                                                 const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
+                                                const titleName = String(item.productName || item.name || "").trim();
+                                                const variantLabel = String(item.packagingType || "").trim();
+                                                const showVariant =
+                                                    Boolean(variantLabel)
+                                                    && variantLabel.toLowerCase() !== titleName.toLowerCase();
                                                 return (
                                                     <button
                                                         key={`${item.productId}-${item.sku}`}
                                                         type="button"
                                                         onClick={() => addToCart(item)}
-                                                        className="flex h-full min-h-[80px] w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                        <div className="flex w-[52px] shrink-0 flex-col items-center gap-0.5">
-                                                            <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 rounded-lg" iconClassName="text-[18px]" />
-                                                            <p className={`max-w-[54px] text-center text-[9px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
-                                                                {formatCompactStock(item.stockQuantity)}
-                                                            </p>
-                                                        </div>
+                                                        className="flex w-full items-start gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                        <ProductImage
+                                                            src={item.imageUrl}
+                                                            alt={item.name}
+                                                            className="h-12 w-12 shrink-0 rounded-lg"
+                                                            iconClassName="text-[22px]"
+                                                        />
                                                         <div className="min-w-0 flex-1">
-                                                            <p className="line-clamp-2 min-h-[31px] text-[13px] font-semibold leading-tight text-[#1b1c17]" title={item.name}>{item.name}</p>
-                                                            <p className="mt-1 text-[13px] font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
+                                                            <p
+                                                                className="line-clamp-2 text-[13px] font-semibold leading-snug text-[#1b1c17]"
+                                                                title={item.name}>
+                                                                {titleName || item.name}
+                                                            </p>
+                                                            {showVariant ?
+                                                                <p className="mt-0.5 truncate text-[11px] leading-snug text-[#717971]" title={variantLabel}>
+                                                                    {variantLabel}
+                                                                </p>
+                                                            :   null}
+                                                            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                                                <span className="text-[13px] font-bold tabular-nums text-[#356647]">
+                                                                    {formatMoney(item.price)} đ
+                                                                </span>
+                                                                <span
+                                                                    className={`text-[11px] leading-tight ${
+                                                                        lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"
+                                                                    }`}>
+                                                                    {formatCompactStock(item.stockQuantity)}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </button>
                                                 );
@@ -3381,6 +3446,11 @@ function PosPage() {
         onSavedShippingAddressChange={handleSavedShippingAddressChange}
         isLoadingShippingAddresses={isLoadingShippingAddresses}
         onRefreshShippingAddresses={refreshShippingAddresses}
+        onAddShippingAddress={
+          canCreateCustomer(authSession)
+            ? () => setOpenModal('customer-address')
+            : undefined
+        }
         hasShippingAddress={hasShippingAddress}
         orderDiscountPercentInput={orderDiscountPercent}
         onOrderDiscountPercentChange={updateOrderDiscountPercent}
@@ -3493,6 +3563,27 @@ function PosPage() {
                 </div>
             </footer>
 
+            <AddCustomerAddressModal
+                isOpen={openModal === "customer-address"}
+                onClose={() => setOpenModal(null)}
+                customerId={selectedCustomer?.customerId}
+                customerName={selectedCustomer?.fullName || ""}
+                customerPhone={selectedCustomer?.phone || ""}
+                makeDefault={savedShippingAddresses.length === 0}
+                onSaved={(created) => {
+                    const line = [
+                        created?.addressLine,
+                        created?.ward,
+                        created?.district,
+                        created?.province,
+                    ]
+                        .filter(Boolean)
+                        .join(", ")
+                        .trim();
+                    setOpenModal(null);
+                    refreshShippingAddresses(line || null);
+                }}
+            />
             <AddCustomerModal
                 isOpen={openModal === "customer"}
                 initialPhone={customerSearchValue}

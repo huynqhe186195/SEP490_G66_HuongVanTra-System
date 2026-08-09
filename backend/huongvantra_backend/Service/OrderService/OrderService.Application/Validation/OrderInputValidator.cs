@@ -6,6 +6,21 @@ namespace OrderService.Application.Validation;
 
 public static class OrderInputValidator
 {
+    /// <summary>
+    /// Placeholder CRM khi KH chưa có địa chỉ thật — không đủ điều kiện giao hàng/COD.
+    /// </summary>
+    public const string PlaceholderShippingAddress = "Chưa có địa chỉ giao hàng";
+
+    public static bool IsMissingOrPlaceholderShippingAddress(string? shippingAddress)
+    {
+        if (string.IsNullOrWhiteSpace(shippingAddress))
+            return true;
+        return string.Equals(
+            shippingAddress.Trim(),
+            PlaceholderShippingAddress,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     public static void ValidateCreateOrder(
         List<CreateOrderDetailInput> items,
         decimal discountAmount,
@@ -47,12 +62,21 @@ public static class OrderInputValidator
 
         if (channel is OrderChannel.Website or OrderChannel.Zalo or OrderChannel.Phone or OrderChannel.COD)
         {
-            if (string.IsNullOrWhiteSpace(shippingAddress))
-                errors.Add("Đơn hàng giao hàng phải có địa chỉ giao hàng.");
+            if (IsMissingOrPlaceholderShippingAddress(shippingAddress))
+                errors.Add("Đơn hàng giao hàng phải có địa chỉ giao hàng hợp lệ (không dùng placeholder).");
         }
 
         if (errors.Count > 0)
             throw new OrderValidationException(errors);
+    }
+
+    public static void ValidateShippingAddressForChannel(OrderChannel channel, string? shippingAddress)
+    {
+        if (channel is not (OrderChannel.Website or OrderChannel.Zalo or OrderChannel.Phone or OrderChannel.COD))
+            return;
+        if (IsMissingOrPlaceholderShippingAddress(shippingAddress))
+            throw new OrderValidationException(
+                "Đơn hàng giao hàng phải có địa chỉ giao hàng hợp lệ (không dùng placeholder).");
     }
 
     public static void ValidatePagination(int page, int pageSize)

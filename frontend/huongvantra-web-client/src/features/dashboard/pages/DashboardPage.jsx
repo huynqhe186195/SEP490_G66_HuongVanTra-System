@@ -1,23 +1,46 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { 
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
     PieChart, Pie, Cell, Legend,
     LineChart, Line, CartesianGrid
 } from 'recharts';
+import ListFilterToolbar, { listFilterSelectClass } from "../../../components/shared/ListFilterToolbar.jsx";
 import PageHeader from "../../../components/shared/PageHeader.jsx";
+import PageShell from "../../../components/shared/PageShell.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
+import DashboardActionQueue from '../components/DashboardActionQueue.jsx'
+import { fetchOrders } from '../../orders/services/ordersApi.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
+  canUsePosCodMode,
+  canUsePosCounterMode,
   hasPermission,
   isAccountantRole,
   isBranchManager,
   isSystemAdmin,
 } from '../../auth/utils/permissions.js'
-import { getDashboardSectionFromSearch, getDashboardSectionLabel } from '../../../app/dashboardSections.js'
+import { canAccessPath } from '../../../app/navigation.js'
+import {
+  buildDashboardPath,
+  getDashboardSectionFromSearch,
+  getDashboardSectionLabel,
+} from '../../../app/dashboardSections.js'
 
 const VALID_SECTIONS = new Set(['overview', 'sales-growth', 'customer-growth']);
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+
+/** Tick Y một dòng + ellipsis — tránh tên SP dài chồng lên nhau trên BarChart ngang. */
+function TruncatedCategoryTick({ x, y, payload, maxChars = 22 }) {
+    const raw = String(payload?.value ?? '');
+    const label = raw.length > maxChars ? `${raw.slice(0, maxChars - 1)}…` : raw;
+    return (
+        <text x={x} y={y} dy={4} textAnchor="end" fill="#6b7280" fontSize={11}>
+            <title>{raw}</title>
+            {label}
+        </text>
+    );
+}
 
 function normalizeRoleToken(role) {
   return String(role || '')
@@ -73,12 +96,95 @@ function DashboardPage() {
 
     const [topCount, setTopCount] = useState(5); // Default top 5
     const [topProductsSortBy, setTopProductsSortBy] = useState('revenue'); // 'revenue' | 'quantity'
+    const [actionCounts, setActionCounts] = useState({ pending: null, overdue: null });
+    const [secondaryOpen, setSecondaryOpen] = useState(false);
+
+    const canOpenCodOps = canAccessPath(session, '/orders/cod');
+    const canOpenPos = canUsePosCounterMode(session) || canUsePosCodMode(session);
+    const canOpenEndOfDay = canAccessPath(session, '/reports/end-of-day');
 
     useEffect(() => {
         if (isPersonalStatsView) {
             setTopProductsSortBy('quantity');
         }
     }, [isPersonalStatsView]);
+
+    useEffect(() => {
+        if (!canOpenCodOps) {
+            setActionCounts({ pending: null, overdue: null });
+            return undefined;
+        }
+        let cancelled = false;
+        const loadActionCounts = async () => {
+            try {
+                const [pending, overdue] = await Promise.all([
+                    fetchOrders({ codTab: 'pending', page: 1, pageSize: 1 }),
+                    fetchOrders({ codTab: 'overdue', page: 1, pageSize: 1 }),
+                ]);
+                if (!cancelled) {
+                    setActionCounts({
+                        pending: Number(pending?.totalCount ?? 0),
+                        overdue: Number(overdue?.totalCount ?? 0),
+                    });
+                }
+            } catch {
+                if (!cancelled) setActionCounts({ pending: null, overdue: null });
+            }
+        };
+        loadActionCounts();
+        return () => {
+            cancelled = true;
+        };
+    }, [canOpenCodOps]);
+
+    const actionItems = useMemo(() => {
+        const items = [];
+        if (canOpenCodOps && actionCounts.overdue != null && actionCounts.overdue > 0) {
+            items.push({
+                id: 'cod-overdue',
+                title: 'COD quá hạn',
+                hint: 'Chưa xử lý hơn 7 ngày — ưu tiên thu/đối soát',
+                to: '/orders/cod?tab=overdue',
+                icon: 'warning',
+                iconBg: 'bg-amber-50',
+                iconColor: 'text-amber-700',
+                count: actionCounts.overdue,
+            });
+        }
+        if (canOpenCodOps && actionCounts.pending != null && actionCounts.pending > 0) {
+            items.push({
+                id: 'cod-pending',
+                title: 'COD chờ thu',
+                hint: 'Đơn COD chưa xác nhận thu tiền',
+                to: '/orders/cod?tab=pending',
+                icon: 'local_shipping',
+                iconBg: 'bg-orange-50',
+                iconColor: 'text-orange-600',
+                count: actionCounts.pending,
+            });
+        }
+        if (canOpenPos) {
+            items.push({
+                id: 'open-pos',
+                title: 'Mở POS bán hàng',
+                hint: 'Tiếp tục bán quầy hoặc tạo đơn COD',
+                to: '/pos',
+                icon: 'point_of_sale',
+                alwaysShow: true,
+            });
+        }
+        if (canOpenEndOfDay) {
+            items.push({
+                id: 'end-of-day',
+                title: 'Báo cáo cuối ngày',
+                hint: 'Đối soát doanh thu / quỹ ca theo ngày',
+                to: '/reports/end-of-day',
+                icon: 'summarize',
+                alwaysShow: true,
+            });
+        }
+        return items;
+    }, [actionCounts, canOpenCodOps, canOpenEndOfDay, canOpenPos]);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -188,45 +294,146 @@ function DashboardPage() {
             { name: 'Đơn trả hàng', value: (stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0) }
         ].filter(d => d.value > 0);
         const totalOrdersRatio = ordersRatioData.reduce((sum, d) => sum + d.value, 0);
+        const returnedOrders = (stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0);
+        const overviewTop = (topProducts || []).slice(0, 5);
 
         return (
         <div className="flex flex-col gap-6">
+            {/* 1. Snapshot KPI chính */}
             <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                 <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
-                
                 {canViewRevenue ? (
                     <>
                         <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
                         <MetricCard title="Doanh thu thuần" value={formatCurrency(stats?.netRevenue)} icon="account_balance_wallet" colorClass="text-[#356647]" bgClass="bg-[#eaf4eb]" />
                         <MetricCard title="Lợi nhuận gộp" value={formatCurrency(stats?.grossProfit)} icon="savings" colorClass="text-yellow-600" bgClass="bg-yellow-50" />
                     </>
-                ) : null}
-
-                <MetricCard title="Số đơn trả hàng" value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
-                
-                {canViewRevenue ? (
+                ) : (
                     <>
-                        <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
-                        <MetricCard title="Tổng chiết khấu" value={formatCurrency(stats?.totalDiscountAmount)} icon="local_offer" colorClass="text-teal-600" bgClass="bg-teal-50" />
-                        <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
+                        <MetricCard title="Số đơn trả hàng" value={returnedOrders} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
                         <MetricCard
-                            title="Thu nhập từ cọc bị mất"
-                            value={formatCurrency(stats?.forfeitedDepositIncome)}
-                            subtitle={`${stats?.forfeitedDepositOrders || 0} đơn hủy giữ cọc`}
-                            icon="savings"
-                            colorClass="text-amber-700"
-                            bgClass="bg-amber-50"
+                            title="Khách hàng mua sắm"
+                            value={stats?.customerCount || 0}
+                            icon="group"
+                            colorClass="text-teal-600"
+                            bgClass="bg-teal-50"
                         />
                     </>
-                ) : null}
+                )}
             </div>
 
+            {/* Metric phụ — gộp, mặc định thu gọn */}
+            {canViewRevenue ? (
+                <div className="rounded-2xl border border-[#c1c9c0]/40 bg-white">
+                    <button
+                        type="button"
+                        onClick={() => setSecondaryOpen((v) => !v)}
+                        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+                    >
+                        <span className="text-sm font-semibold text-[#424941]">Chỉ số phụ (hoàn trả, chiết khấu, giá vốn…)</span>
+                        <span className="material-symbols-outlined text-[20px] text-[#717971]">
+                            {secondaryOpen ? 'expand_less' : 'expand_more'}
+                        </span>
+                    </button>
+                    {secondaryOpen ? (
+                        <div className="grid gap-3 border-t border-slate-100 p-4 grid-cols-2 lg:grid-cols-5">
+                            <MetricCard title="Số đơn trả hàng" value={returnedOrders} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
+                            <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
+                            <MetricCard title="Tổng chiết khấu" value={formatCurrency(stats?.totalDiscountAmount)} icon="local_offer" colorClass="text-teal-600" bgClass="bg-teal-50" />
+                            <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
+                            <MetricCard
+                                title="Thu nhập từ cọc bị mất"
+                                value={formatCurrency(stats?.forfeitedDepositIncome)}
+                                subtitle={`${stats?.forfeitedDepositOrders || 0} đơn hủy giữ cọc`}
+                                icon="savings"
+                                colorClass="text-amber-700"
+                                bgClass="bg-amber-50"
+                            />
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {/* 2. Việc cần làm */}
+            <DashboardActionQueue items={actionItems} />
+
+            {/* 3. Top sản phẩm + link sales-growth */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-base font-bold text-gray-800">Top sản phẩm bán chạy</h3>
+                    <Link
+                        to={buildDashboardPath('sales-growth')}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-[#356647] hover:underline"
+                    >
+                        Xem tăng trưởng bán hàng
+                        <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    </Link>
+                </div>
+                {overviewTop.length > 0 ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="w-full" style={{ height: `${Math.max(260, overviewTop.length * 52)}px` }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={overviewTop} layout="vertical" margin={{ top: 8, right: 24, left: 8, bottom: 8 }} barCategoryGap="28%">
+                                    <XAxis type="number" tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(val)} />
+                                    <YAxis dataKey="skuSnapshotName" type="category" width={148} interval={0} tick={<TruncatedCategoryTick maxChars={20} />} />
+                                    <Tooltip
+                                        labelFormatter={(label) => label}
+                                        formatter={(value) => canViewRevenue && topProductsSortBy === 'revenue' ? formatCurrency(value) : new Intl.NumberFormat('vi-VN').format(value)}
+                                    />
+                                    {canViewRevenue && topProductsSortBy === 'revenue' ? (
+                                        <Bar dataKey="totalRevenue" fill="#3b82f6" name="Doanh thu" radius={[0, 4, 4, 0]} />
+                                    ) : (
+                                        <Bar dataKey="totalQuantitySold" fill="#10b981" name="Số lượng bán" radius={[0, 4, 4, 0]} />
+                                    )}
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-gray-600">
+                                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                    <tr>
+                                        <th className="px-3 py-2 font-medium">Sản phẩm</th>
+                                        <th className="px-3 py-2 font-medium text-right">Đã bán</th>
+                                        {canViewRevenue ? (
+                                            <th className="px-3 py-2 font-medium text-right">Doanh thu</th>
+                                        ) : null}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {overviewTop.map((p, i) => (
+                                        <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
+                                            <td className="px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600">
+                                                        #{i + 1}
+                                                    </span>
+                                                    <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-medium">{p.totalQuantitySold}</td>
+                                            {canViewRevenue ? (
+                                                <td className="px-3 py-2 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                            ) : null}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                        Chưa có dữ liệu sản phẩm trong kỳ đã chọn.
+                    </div>
+                )}
+            </div>
+
+            {/* 4. Biểu đồ phụ — dưới cùng, chiều cao gọn */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {canViewRevenue ? (
-                    <div className="lg:col-span-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                        <h3 className="mb-6 text-lg font-bold text-gray-800">Biểu Đồ Doanh Thu & Lợi Nhuận</h3>
+                    <div className="lg:col-span-3 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <h3 className="mb-4 text-base font-bold text-gray-800">Biểu đồ doanh thu & lợi nhuận</h3>
                         {revenueProfitGrowthData && revenueProfitGrowthData.length > 0 ? (
-                            <div className="h-[300px] w-full">
+                            <div className="h-[240px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={revenueProfitGrowthData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -241,24 +448,23 @@ function DashboardPage() {
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[200px] flex items-center justify-center">
                                 Chưa có dữ liệu doanh thu.
                             </div>
                         )}
                     </div>
                     ) : null}
 
-                    {/* Orders Ratio Chart — luôn hiện */}
-                    <div className={`rounded-2xl border border-gray-100 bg-white p-6 shadow-sm ${canViewRevenue ? '' : 'lg:col-span-3'}`}>
-                        <h3 className="mb-6 text-lg font-bold text-gray-800">Tỷ Lệ Đơn Hàng</h3>
+                    <div className={`rounded-2xl border border-gray-100 bg-white p-5 shadow-sm ${canViewRevenue ? '' : 'lg:col-span-3'}`}>
+                        <h3 className="mb-4 text-base font-bold text-gray-800">Tỷ lệ đơn hàng</h3>
                         {ordersRatioData && ordersRatioData.length > 0 ? (
-                            <div className="h-[300px] w-full flex flex-col items-center">
+                            <div className="h-[240px] w-full flex flex-col items-center">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
                                             data={ordersRatioData}
                                             cx="50%" cy="50%"
-                                            innerRadius={40} outerRadius={80}
+                                            innerRadius={36} outerRadius={72}
                                             paddingAngle={5}
                                             dataKey="value"
                                             nameKey="name"
@@ -274,24 +480,23 @@ function DashboardPage() {
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[200px] flex items-center justify-center">
                                 Chưa có dữ liệu đơn hàng.
                             </div>
                         )}
                     </div>
 
-
                     {canViewRevenue ? (
-                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                        <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Kênh Bán</h3>
+                    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm lg:col-span-2">
+                        <h3 className="mb-4 text-base font-bold text-gray-800">Doanh số theo kênh bán</h3>
                         {salesByChannelData && salesByChannelData.length > 0 ? (
-                            <div className="h-[300px] w-full flex flex-col items-center">
+                            <div className="h-[240px] w-full flex flex-col items-center">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
                                             data={salesByChannelData}
                                             cx="50%" cy="50%"
-                                            innerRadius={40} outerRadius={80}
+                                            innerRadius={36} outerRadius={72}
                                             paddingAngle={5}
                                             dataKey="totalRevenue"
                                             nameKey="categoryName"
@@ -306,7 +511,7 @@ function DashboardPage() {
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[200px] flex items-center justify-center">
                                 Chưa có dữ liệu kênh bán.
                             </div>
                         )}
@@ -319,6 +524,14 @@ function DashboardPage() {
 
     const renderSalesGrowth = () => (
         <div className="flex flex-col gap-8">
+            <Link
+                to={buildDashboardPath('overview')}
+                className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-[#356647] hover:underline"
+            >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                Quay lại tổng quan
+            </Link>
+
             {/* Top Products Section */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
@@ -359,12 +572,15 @@ function DashboardPage() {
 
                 {topProducts && topProducts.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div className="w-full" style={{ height: `${Math.max(300, topProducts.length * 40)}px` }}>
+                        <div className="w-full" style={{ height: `${Math.max(320, topProducts.length * 52)}px` }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={topProducts} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                                <BarChart data={topProducts} layout="vertical" margin={{ top: 8, right: 30, left: 8, bottom: 8 }} barCategoryGap="28%">
                                     <XAxis type="number" tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(val)} />
-                                    <YAxis dataKey="skuSnapshotName" type="category" width={150} tick={{fontSize: 12}} interval={0} />
-                                    <Tooltip formatter={(value) => topProductsSortBy === 'revenue' ? formatCurrency(value) : new Intl.NumberFormat('vi-VN').format(value)} />
+                                    <YAxis dataKey="skuSnapshotName" type="category" width={160} interval={0} tick={<TruncatedCategoryTick maxChars={24} />} />
+                                    <Tooltip
+                                        labelFormatter={(label) => label}
+                                        formatter={(value) => topProductsSortBy === 'revenue' ? formatCurrency(value) : new Intl.NumberFormat('vi-VN').format(value)}
+                                    />
                                     {topProductsSortBy === 'revenue' ? (
                                         <Bar dataKey="totalRevenue" fill="#3b82f6" name="Doanh thu" radius={[0, 4, 4, 0]} />
                                     ) : (
@@ -570,56 +786,74 @@ function DashboardPage() {
     );
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
+        <PageShell className="min-h-0 flex-1">
             <PageHeader
+                compact
                 title="Thống kê bán hàng"
                 titleInfo={
                     isPersonalStatsView
                         ? `${sectionLabel} — số liệu đơn hàng do bạn tạo trong kỳ đã chọn (không bao gồm doanh thu / lợi nhuận).`
                         : `${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`
                 }
-                searchPlaceholder="Tìm kiếm..."
             />
 
-            <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Kỳ báo cáo</span>
-                    <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="rounded-lg border-gray-200 text-sm">
-                        <option value="month">Theo Tháng</option>
-                        <option value="quarter">Theo Quý</option>
-                        <option value="year">Theo Năm</option>
+            <ListFilterToolbar>
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500">Kỳ</span>
+                    <select
+                        value={filterPeriod}
+                        onChange={(e) => setFilterPeriod(e.target.value)}
+                        className={listFilterSelectClass}
+                    >
+                        <option value="month">Theo tháng</option>
+                        <option value="quarter">Theo quý</option>
+                        <option value="year">Theo năm</option>
                     </select>
                 </label>
 
-                {filterPeriod === 'month' && (
-                    <label className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Tháng</span>
-                        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
-                            {Array.from({length: 12}).map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
+                {filterPeriod === 'month' ? (
+                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-500">Tháng</span>
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(Number(e.target.value))}
+                            className={`${listFilterSelectClass} min-w-[6.5rem]`}
+                        >
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
+                            ))}
                         </select>
                     </label>
-                )}
+                ) : null}
 
-                {filterPeriod === 'quarter' && (
-                    <label className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Quý</span>
-                        <select value={filterQuarter} onChange={e => setFilterQuarter(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                {filterPeriod === 'quarter' ? (
+                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-500">Quý</span>
+                        <select
+                            value={filterQuarter}
+                            onChange={(e) => setFilterQuarter(Number(e.target.value))}
+                            className={`${listFilterSelectClass} min-w-[6rem]`}
+                        >
                             <option value={1}>Quý 1</option>
                             <option value={2}>Quý 2</option>
                             <option value={3}>Quý 3</option>
                             <option value={4}>Quý 4</option>
                         </select>
                     </label>
-                )}
+                ) : null}
 
-                <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Năm</span>
-                    <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500">Năm</span>
+                    <select
+                        value={filterYear}
+                        onChange={(e) => setFilterYear(Number(e.target.value))}
+                        className={`${listFilterSelectClass} min-w-[5.5rem]`}
+                    >
                         <option value={2026}>2026</option>
                         <option value={2025}>2025</option>
                     </select>
                 </label>
-            </div>
+            </ListFilterToolbar>
 
             {isLoading ?
                 <div className="flex justify-center p-8">
@@ -633,7 +867,7 @@ function DashboardPage() {
                     {activeSection === 'customer-growth' && canViewCustomerGrowth && renderCustomerGrowth()}
                 </div>
             }
-        </div>
+        </PageShell>
     );
 }
 

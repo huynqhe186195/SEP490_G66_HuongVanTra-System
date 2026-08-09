@@ -44,6 +44,8 @@ public static class CustomerAddressInputValidator
         var addressLine = addressLineValue?.Trim();
         if (string.IsNullOrWhiteSpace(addressLine))
             errors.Add("Địa chỉ (số nhà, đường) là bắt buộc.");
+        else if (string.Equals(addressLine, "Chưa có địa chỉ giao hàng", StringComparison.OrdinalIgnoreCase))
+            errors.Add("Vui lòng nhập địa chỉ giao hàng thật (không dùng placeholder).");
         else if (addressLine.Length < 5)
             errors.Add("Địa chỉ phải có ít nhất 5 ký tự.");
         else if (addressLine.Length > 255)

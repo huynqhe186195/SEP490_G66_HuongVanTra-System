@@ -16,6 +16,8 @@ export function mapCashSession(raw) {
     openedByRole: raw.openedByRole ?? raw.OpenedByRole ?? '',
     shiftLabel: normalizeShiftLabel(raw.shiftLabel ?? raw.ShiftLabel ?? ''),
     shiftSlotId: raw.shiftSlotId ?? raw.ShiftSlotId ?? null,
+    openedByUserId: raw.openedByUserId ?? raw.OpenedByUserId ?? null,
+    shiftEndsAtUtc: raw.shiftEndsAtUtc ?? raw.ShiftEndsAtUtc ?? null,
     openedAt: raw.openedAt ?? raw.OpenedAt ?? null,
     updatedAt: raw.updatedAt ?? raw.UpdatedAt ?? null,
     countedCash: raw.countedCash ?? raw.CountedCash ?? null,
@@ -34,9 +36,15 @@ export function normalizeCashSession(raw) {
   return mapCashSession(raw)
 }
 
-/** Quỹ đang mở và khớp ca hiện tại (đủ điều kiện bán). */
+/** Quỹ đang mở thuộc người hiện tại (đủ điều kiện bán). */
 export function isCashSessionReadyForSale(session) {
-  return Boolean(session && !session.requiresCloseForNewShift)
+  return Boolean(
+    session
+    && session.status !== 'Closed'
+    // Sale không đóng/bán trên quỹ người khác (canCloseSession=false).
+    // Manager vẫn bán được trên quỹ đang mở (canCloseSession=true).
+    && session.canCloseSession !== false,
+  )
 }
 
 export async function fetchCurrentCashSession() {
@@ -47,17 +55,25 @@ export async function fetchCurrentCashSession() {
   const requiresCloseForNewShift = Boolean(
     data?.requiresCloseForNewShift ?? data?.RequiresCloseForNewShift,
   )
+  const canCloseSessionRaw = data?.canCloseSession ?? data?.CanCloseSession
   const previousShiftLabel = normalizeShiftLabel(
     data?.previousShiftLabel
     ?? data?.PreviousShiftLabel
     ?? session.shiftLabel
     ?? '',
   )
+  const closeBlockedMessage = String(
+    data?.closeBlockedMessage ?? data?.CloseBlockedMessage ?? '',
+  )
 
   return {
     ...session,
     requiresCloseForNewShift,
     previousShiftLabel,
+    canCloseSession: canCloseSessionRaw === undefined
+      ? !requiresCloseForNewShift
+      : Boolean(canCloseSessionRaw),
+    closeBlockedMessage,
   }
 }
 
@@ -87,20 +103,29 @@ export async function openCashSessionApi(payload) {
       shiftLabel: payload.shiftLabel || null,
       openedByName: payload.openedByName || null,
       openedByRole: payload.openedByRole || null,
+      workDate: payload.workDate || null,
+      shiftEnd: payload.shiftEnd || null,
     }),
   })
   const session = normalizeCashSession(data)
   return session
-    ? { ...session, requiresCloseForNewShift: false, previousShiftLabel: '' }
+    ? {
+        ...session,
+        requiresCloseForNewShift: false,
+        previousShiftLabel: '',
+        canCloseSession: true,
+        closeBlockedMessage: '',
+      }
     : null
 }
 
-export async function closeCashSessionApi({ countedCash, varianceNote }) {
+export async function closeCashSessionApi({ countedCash, varianceNote, expectedShiftSlotId }) {
   const data = await apiRequestAuth('/api/pos/cash-sessions/current/close', {
     method: 'POST',
     body: JSON.stringify({
       countedCash,
       varianceNote: varianceNote || null,
+      expectedShiftSlotId: expectedShiftSlotId || null,
     }),
   })
   if (!data) return null

@@ -22,6 +22,8 @@ public class PosCashSession : BaseEntity
     public string? OpenedByRole { get; set; }
     public Guid? ShiftSlotId { get; set; }
     public string? ShiftLabel { get; set; }
+    /// <summary>UTC — giờ kết thúc ca gắn quỹ (tham chiếu; không tự đóng).</summary>
+    public DateTime? ShiftEndsAtUtc { get; set; }
     public DateTime OpenedAt { get; set; }
 
     public decimal? CountedCash { get; set; }

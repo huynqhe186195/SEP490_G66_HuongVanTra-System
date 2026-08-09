@@ -1,5 +1,6 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { DEFAULT_MEMBERSHIP_TIER, getMembershipTierLabel, isMemberTierCustomer } from '../utils/customerDisplay.js'
+import { PLACEHOLDER_SHIPPING_ADDRESS } from '../utils/shippingAddress.js'
 
 const CUSTOMER_GROUP_TO_TYPE = {
   phothong: 'GENERAL',
@@ -331,8 +332,10 @@ export function mapTypeToCustomerGroup(customerType) {
 }
 
 export function buildCreateCustomerBody(payload) {
+  // CRM bắt buộc AddressLine; dùng placeholder khi chưa có địa chỉ thật.
+  // POS COD phải lọc placeholder (xem shippingAddress.js / posApi).
   const addressLine = (payload.address ?? payload.addressLine ?? '').trim()
-    || 'Chưa có địa chỉ giao hàng'
+    || PLACEHOLDER_SHIPPING_ADDRESS
   return {
     fullName: payload.fullName,
     phoneNumber: payload.phone ?? payload.phoneNumber,
@@ -357,7 +360,7 @@ export function buildCreateCustomerBody(payload) {
 
 export function buildUpdateCustomerBody(payload) {
   const addressLine = (payload.address ?? payload.addressLine ?? '').trim()
-    || 'Chưa có địa chỉ giao hàng'
+    || PLACEHOLDER_SHIPPING_ADDRESS
   return {
     fullName: payload.fullName,
     phoneNumber: payload.phone ?? payload.phoneNumber,

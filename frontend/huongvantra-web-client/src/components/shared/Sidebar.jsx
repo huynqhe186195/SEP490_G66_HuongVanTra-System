@@ -13,6 +13,8 @@ import {
   isNavigationItemActive,
 } from '../../app/navigation.js'
 import { showError } from '../../app/toast'
+import { confirmLeaveIfCashSessionOpen } from '../../features/pos/utils/confirmLeaveIfCashSessionOpen.js'
+
 function Sidebar({
   items,
   isLoading = false,
@@ -178,9 +180,12 @@ function Sidebar({
   const handleLogout = async () => {
     if (!authSession) {
       clearAuthSession()
-      navigate('/login', { replace: true })
+      window.location.replace('/login')
       return
     }
+
+    const allowed = await confirmLeaveIfCashSessionOpen()
+    if (!allowed) return
 
     setIsLoggingOut(true)
 
@@ -191,7 +196,8 @@ function Sidebar({
     } finally {
       clearAuthSession()
       setIsLoggingOut(false)
-      navigate('/login', { replace: true })
+      // Hard redirect: tránh race request in-flight → toast "phiên hết hạn" + kẹt màn hình cũ.
+      window.location.replace('/login')
     }
   }
 

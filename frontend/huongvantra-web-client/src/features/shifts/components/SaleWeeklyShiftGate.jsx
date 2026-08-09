@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../auth/services/authApi.js'
+import { confirmLeaveIfCashSessionOpen } from '../../pos/utils/confirmLeaveIfCashSessionOpen.js'
 import { clearAuthSession } from '../../auth/services/authSession.js'
 import {
   canUsePosCounterMode,
@@ -216,6 +217,9 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
   }, [trackShelfDayEnd])
 
   const handleLogout = async () => {
+    const allowed = await confirmLeaveIfCashSessionOpen()
+    if (!allowed) return
+
     setLoggingOut(true)
     try {
       await logoutApi(session?.accessToken, session?.refreshToken)
@@ -224,7 +228,7 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
     } finally {
       clearAuthSession()
       setLoggingOut(false)
-      navigate('/login', { replace: true })
+      window.location.replace('/login')
     }
   }
 

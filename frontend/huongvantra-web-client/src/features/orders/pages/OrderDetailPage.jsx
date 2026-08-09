@@ -71,10 +71,12 @@ import {
   resolveOrderPaymentDisplay,
   getOrderRemainingDebt,
   getPrimaryPayment,
+  requiresShippingAddress,
 } from '../utils/orderDisplay.js'
 import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchStoreProducts } from '../../products/services/productsApi.js'
 import { fetchCustomerById } from '../../customers/services/customersApi.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
@@ -726,8 +728,12 @@ function OrderDetailPage() {
           <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Khách hàng</h2>
             <OrderCustomerCell snapshot={order.customerSnapshotName} customerId={order.customerId} />
-            {order.shippingAddress ? (
+            {isUsableShippingAddress(order.shippingAddress) ? (
               <p className="mt-2 text-sm text-slate-600">{order.shippingAddress}</p>
+            ) : requiresShippingAddress(order.orderChannel) ? (
+              <p className="mt-2 text-sm font-medium text-amber-700">
+                Chưa có địa chỉ giao hàng hợp lệ
+              </p>
             ) : null}
           </section>
 

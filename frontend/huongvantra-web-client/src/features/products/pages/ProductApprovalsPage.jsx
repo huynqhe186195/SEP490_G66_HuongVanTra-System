@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
+import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -2663,6 +2665,12 @@ export default function ProductApprovalsPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isTemplateGenerating, setIsTemplateGenerating] = useState(false)
+  const [snapshotCounts, setSnapshotCounts] = useState({
+    pendingApproval: 0,
+    draft: 0,
+    rejected: 0,
+    completed: 0,
+  })
 
   const materialsById = useMemo(() => new Map(materials.map((material) => [String(material.id), material])), [materials])
   const attributeNameOptions = useMemo(() => buildAttributeNameOptions(attributeNames, rows), [attributeNames, rows])
@@ -2711,6 +2719,30 @@ export default function ProductApprovalsPage() {
       setIsLoading(false)
     }
   }, [])
+
+  const loadSnapshotCounts = useCallback(async () => {
+    try {
+      const [pendingApproval, draft, rejected, completed] = await Promise.all([
+        fetchProductCreationRequests({ status: 'PendingApproval', page: 1, pageSize: 1 }),
+        fetchProductCreationRequests({ status: 'Draft', page: 1, pageSize: 1 }),
+        fetchProductCreationRequests({ status: 'Rejected', page: 1, pageSize: 1 }),
+        fetchProductCreationRequests({ status: 'Completed', page: 1, pageSize: 1 }),
+      ])
+      setSnapshotCounts({
+        pendingApproval: pendingApproval.totalCount,
+        draft: draft.totalCount,
+        rejected: rejected.totalCount,
+        completed: completed.totalCount,
+      })
+    } catch {
+      setSnapshotCounts({ pendingApproval: 0, draft: 0, rejected: 0, completed: 0 })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showCreateForm) return
+    loadSnapshotCounts()
+  }, [showCreateForm, loadSnapshotCounts])
 
   useEffect(() => {
     let cancelled = false
@@ -2781,12 +2813,79 @@ export default function ProductApprovalsPage() {
     setImportMode('replace')
   }
 
-  function handleStatusFilterChange(value) {
+  const handleStatusFilterChange = useCallback((value) => {
     setStatusFilter(value)
     setListPage(1)
     setRequestSearch('')
     loadRequests(value)
-  }
+  }, [loadRequests])
+
+  const snapshotItems = useMemo(
+    () => [
+      {
+        id: 'pending-approval',
+        label: 'Chờ Manager duyệt',
+        value: snapshotCounts.pendingApproval,
+        warn: snapshotCounts.pendingApproval > 0,
+        active: statusFilter === 'PendingApproval',
+        onClick: () => handleStatusFilterChange('PendingApproval'),
+      },
+      {
+        id: 'draft',
+        label: 'Nháp',
+        value: snapshotCounts.draft,
+        active: statusFilter === 'Draft',
+        onClick: () => handleStatusFilterChange('Draft'),
+      },
+      {
+        id: 'rejected',
+        label: 'Bị từ chối',
+        value: snapshotCounts.rejected,
+        active: statusFilter === 'Rejected',
+        onClick: () => handleStatusFilterChange('Rejected'),
+      },
+      {
+        id: 'completed',
+        label: 'Đã tạo hàng hóa',
+        value: snapshotCounts.completed,
+        active: statusFilter === 'Completed',
+        onClick: () => handleStatusFilterChange('Completed'),
+      },
+    ],
+    [snapshotCounts, statusFilter, handleStatusFilterChange],
+  )
+
+  const actionItems = useMemo(
+    () => [
+      canDecideApprovals && {
+        id: 'decide-pending',
+        title: 'Duyệt yêu cầu chờ xử lý',
+        hint: 'Yêu cầu tạo hàng hóa đang chờ Manager quyết định',
+        icon: 'fact_check',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-700',
+        count: snapshotCounts.pendingApproval,
+        onClick: () => handleStatusFilterChange('PendingApproval'),
+      },
+      warehouse && {
+        id: 'fix-drafts',
+        title: 'Sửa bản nháp',
+        hint: 'Hoàn thiện yêu cầu đang lưu nháp trước khi gửi duyệt',
+        icon: 'edit_note',
+        count: snapshotCounts.draft,
+        onClick: () => handleStatusFilterChange('Draft'),
+      },
+      warehouse && {
+        id: 'create-request',
+        title: 'Tạo yêu cầu tạo hàng hóa mới',
+        hint: 'Lập biên bản nhiều sản phẩm, gửi Manager duyệt',
+        icon: 'add_box',
+        alwaysShow: true,
+        to: '/inventory/products/create',
+      },
+    ].filter(Boolean),
+    [canDecideApprovals, warehouse, snapshotCounts, handleStatusFilterChange],
+  )
 
   function loadIntoForm(request) {
     setActiveRequestId(request.id)
@@ -2899,7 +2998,7 @@ export default function ProductApprovalsPage() {
     setIsSaving(true)
     try {
       await submitProductCreationRequest(saved.id, warehouseNote)
-      showSuccess('Đã gửi yêu cầu cho Admin duyệt.')
+      showSuccess('Đã gửi yêu cầu cho Manager duyệt.')
       resetForm()
       navigate('/inventory/product-approvals')
       return
@@ -2927,6 +3026,7 @@ export default function ProductApprovalsPage() {
       setDetailRequest(null)
       setDecisionModal(null)
       await loadRequests(statusFilter)
+      await loadSnapshotCounts()
     } catch (error) {
       showError(error.message)
     } finally {
@@ -3329,13 +3429,18 @@ export default function ProductApprovalsPage() {
             </button>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={isSaving} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50" onClick={() => saveDraft()}>{isSaving ? 'Đang lưu...' : 'Lưu nháp'}</button>
-              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d] disabled:opacity-50" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Admin duyệt'}</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d] disabled:opacity-50" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Manager duyệt'}</button>
             </div>
           </div>
         </section>
       ) : null}
 
       {!showCreateForm ? (
+      <>
+      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
+
+      <OpsActionQueue items={actionItems} className="mb-3" />
+
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
@@ -3448,6 +3553,7 @@ export default function ProductApprovalsPage() {
         </>
         )}
       </section>
+      </>
       ) : null}
       <ProductCreationRequestDetailModal
         request={detailRequest}

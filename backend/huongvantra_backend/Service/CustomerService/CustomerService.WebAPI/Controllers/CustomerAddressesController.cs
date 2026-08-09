@@ -39,7 +39,7 @@ public class CustomerAddressesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.CreateCustomerProfile)]
     public async Task<IActionResult> Create(Guid customerId, [FromBody] CreateCustomerAddressRequest request, CancellationToken ct = default)
     {
         await EnsureCorporateMutationAllowedAsync(customerId, ct);
