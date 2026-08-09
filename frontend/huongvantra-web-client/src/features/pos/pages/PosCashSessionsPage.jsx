@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import ListFilterToolbar, {
+  listFilterControlClass,
+} from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
@@ -89,7 +93,7 @@ export default function PosCashSessionsPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-3 sm:gap-3">
       <PageHeader
         compact
         title="Quỹ ca POS"
@@ -99,107 +103,130 @@ export default function PosCashSessionsPage() {
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-4">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+      <StatusFilterChips
+        ariaLabel="Lọc trạng thái ca quỹ"
+        value={status}
+        onChange={(value) => resetPageAndSet(setStatus, value)}
+        options={[
+          { value: '', label: 'Tất cả' },
+          { value: 'Open', label: 'Đang mở' },
+          { value: 'Closed', label: 'Đã đóng' },
+        ]}
+      />
+
+      <ListFilterToolbar
+        meta={
+          <span className="tabular-nums">
+            {isLoading ? 'Đang tải…' : `${data.totalItems || 0} ca quỹ`}
+          </span>
+        }
+      >
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
           Từ ngày
           <input
             type="date"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+            className={listFilterControlClass}
             value={from}
             onChange={(event) => resetPageAndSet(setFrom, event.target.value)}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
           Đến ngày
           <input
             type="date"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+            className={listFilterControlClass}
             value={to}
             onChange={(event) => resetPageAndSet(setTo, event.target.value)}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-slate-500">
-          Trạng thái
-          <select
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
-            value={status}
-            onChange={(event) => resetPageAndSet(setStatus, event.target.value)}
-          >
-            <option value="">Tất cả</option>
-            <option value="Open">Đang mở</option>
-            <option value="Closed">Đã đóng</option>
-          </select>
-        </label>
-        <div className="flex items-end">
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-          >
-            <span className="material-symbols-outlined text-[18px]">refresh</span>
-            Làm mới
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          onClick={load}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <span className="material-symbols-outlined text-[16px]">refresh</span>
+          Làm mới
+        </button>
+      </ListFilterToolbar>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
+            <thead className="sticky top-0 z-[1] bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-6 py-3">Ca / mở</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3 text-right">Đầu ca</th>
-                <th className="px-4 py-3 text-right">Thu TM</th>
-                <th className="px-4 py-3 text-right">Hoàn TM</th>
-                <th className="px-4 py-3 text-right">Đơn</th>
-                <th className="px-4 py-3 text-right">Kỳ vọng</th>
-                <th className="px-4 py-3 text-right">Đếm</th>
-                <th className="px-4 py-3 text-right">Lệch</th>
-                <th className="px-4 py-3">Đóng ca</th>
+                <th className="px-4 py-2.5">Ca / mở</th>
+                <th className="px-3 py-2.5">Trạng thái</th>
+                <th className="px-3 py-2.5 text-right">Đầu ca</th>
+                <th className="px-3 py-2.5 text-right">Thu TM</th>
+                <th className="px-3 py-2.5 text-right">Hoàn TM</th>
+                <th className="px-3 py-2.5 text-right">Đơn</th>
+                <th className="px-3 py-2.5 text-right">Kỳ vọng</th>
+                <th className="px-3 py-2.5 text-right">Đếm</th>
+                <th className="px-3 py-2.5 text-right">Lệch</th>
+                <th className="px-3 py-2.5">Đóng ca</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
-                <tr><td colSpan={10} className="px-6 py-8 text-slate-500">Đang tải...</td></tr>
-              ) : data.items.length === 0 ? (
-                <tr><td colSpan={10} className="px-6 py-8 text-slate-500">Chưa có ca quỹ phù hợp.</td></tr>
-              ) : data.items.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50/80">
-                  <td className="px-6 py-4">
-                    <p className="font-semibold text-slate-800">{row.shiftLabel || 'Ca quỹ'}</p>
-                    <p className="text-xs text-slate-500">
-                      {row.openedByName || '—'} · {formatVietnamDateTime(row.openedAt)}
-                    </p>
-                    {row.note ? <p className="mt-1 text-xs text-slate-500">{row.note}</p> : null}
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${getStatusClass(row.status)}`}>
-                      {getStatusLabel(row.status)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-right tabular-nums">{formatVnd(row.openingCash)}</td>
-                  <td className="px-4 py-4 text-right tabular-nums text-emerald-700">{formatVnd(row.cashSalesTotal)}</td>
-                  <td className="px-4 py-4 text-right tabular-nums text-rose-700">{formatVnd(row.cashRefundTotal)}</td>
-                  <td className="px-4 py-4 text-right tabular-nums">{row.orderCount}</td>
-                  <td className="px-4 py-4 text-right tabular-nums">{formatVnd(row.expectedCash)}</td>
-                  <td className="px-4 py-4 text-right tabular-nums">{row.countedCash == null ? '—' : formatVnd(row.countedCash)}</td>
-                  <td className={`px-4 py-4 text-right tabular-nums font-semibold ${varianceClass(row.variance)}`}>
-                    {row.variance == null ? '—' : formatVnd(row.variance)}
-                    {row.varianceNote ? (
-                      <p className="mt-1 text-left text-xs font-normal text-slate-500">{row.varianceNote}</p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-4 text-slate-600">
-                    {row.closedAt ? (
-                      <>
-                        <p>{row.closedByName || '—'}</p>
-                        <p className="text-xs">{formatVietnamDateTime(row.closedAt)}</p>
-                      </>
-                    ) : '—'}
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-slate-500">
+                    Đang tải...
                   </td>
                 </tr>
-              ))}
+              ) : data.items.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-slate-500">
+                    Chưa có ca quỹ phù hợp.
+                  </td>
+                </tr>
+              ) : (
+                data.items.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/80">
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800">{row.shiftLabel || 'Ca quỹ'}</p>
+                      <p className="text-xs text-slate-500">
+                        {row.openedByName || '—'} · {formatVietnamDateTime(row.openedAt)}
+                      </p>
+                      {row.note ? (
+                        <p className="mt-0.5 truncate text-xs text-slate-500" title={row.note}>
+                          {row.note}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${getStatusClass(row.status)}`}>
+                        {getStatusLabel(row.status)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatVnd(row.openingCash)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-emerald-700">{formatVnd(row.cashSalesTotal)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-rose-700">{formatVnd(row.cashRefundTotal)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{row.orderCount}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{formatVnd(row.expectedCash)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                      {row.countedCash == null ? '—' : formatVnd(row.countedCash)}
+                    </td>
+                    <td className={`px-3 py-3 text-right tabular-nums font-semibold ${varianceClass(row.variance)}`}>
+                      {row.variance == null ? '—' : formatVnd(row.variance)}
+                      {row.varianceNote ? (
+                        <p className="mt-0.5 max-w-[9rem] truncate text-left text-xs font-normal text-slate-500" title={row.varianceNote}>
+                          {row.varianceNote}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {row.closedAt ? (
+                        <>
+                          <p className="text-sm">{row.closedByName || '—'}</p>
+                          <p className="text-xs text-slate-500">{formatVietnamDateTime(row.closedAt)}</p>
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -209,7 +236,10 @@ export default function PosCashSessionsPage() {
           pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
-          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           disabled={isLoading}
           itemLabel="ca quỹ"
         />
