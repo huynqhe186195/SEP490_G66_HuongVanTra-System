@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canUsePosCounterMode } from '../../auth/utils/permissions.js'
+import { canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import { isCashSessionReadyForSale } from '../services/posCashSessionApi.js'
 import {
   closeCashSession,
@@ -64,8 +65,9 @@ function StatusDot({ ok }) {
 }
 
 /**
- * Thanh thao tác POS: Quỹ (theo ca) và Kệ (theo ngày) độc lập.
- * Đóng quỹ không đẩy ra màn bắt mở quỹ lại — vẫn chốt kệ cuối ngày được.
+ * Thanh Quỹ / Kệ POS.
+ * Sale chỉ đóng quỹ mình mở; Sale ca sau không đóng hộ — Manager đóng hộ được (POS / Lịch).
+ * Không tự đóng hết ca; logout/tab vẫn nhắc nếu quỹ mình còn Open.
  */
 export default function PosCashSessionBar({
   dayStartDone = true,
@@ -78,6 +80,7 @@ export default function PosCashSessionBar({
   shiftLabel = null,
 }) {
   const auth = loadAuthSession()
+  const isManager = canViewAllOrders(auth)
   const [session, setSession] = useState(() => loadOpenCashSession())
   const [modal, setModal] = useState(null)
   const [countedInput, setCountedInput] = useState('')
@@ -91,7 +94,6 @@ export default function PosCashSessionBar({
     return subscribeCashSession(() => setSession(loadOpenCashSession()))
   }, [])
 
-  // Đổi ca (sáng → tối) → refresh để biết quỹ ca trước còn mở không
   useEffect(() => {
     if (!shiftSlotId) return
     refreshCashSession().then((s) => setSession(s))
@@ -100,24 +102,54 @@ export default function PosCashSessionBar({
   if (!canUsePosCounterMode(auth)) return null
 
   const requiresClose = Boolean(session?.requiresCloseForNewShift)
-  const readyForSale = isCashSessionReadyForSale(session)
+    || (
+      Boolean(session)
+      && session.status !== 'Closed'
+      && session.canCloseSession === false
+      && !isManager
+    )
+  const canCloseForeign = requiresClose && isManager
+  const readyForSale = isCashSessionReadyForSale(session) && !requiresClose
   const expected = expectedCash(session)
   const canDayEnd = typeof onRequestDayEnd === 'function'
   const showDayEndAction = canDayEnd && !dayEndDone
-  const previousLabel = session?.previousShiftLabel || session?.shiftLabel || 'ca trước'
+  const previousLabelRaw = String(session?.previousShiftLabel || session?.shiftLabel || '').trim()
+  const previousLabel = previousLabelRaw || 'quỹ đang mở'
+  const openerName = session?.openedByName || 'Sale ca trước'
+  const blockedCloseMessage =
+    session?.closeBlockedMessage
+    || `Quỹ «${previousLabel}» vẫn đang mở (do ${openerName}). Báo họ đóng — bạn không đóng hộ được.`
 
   const statusLabel = requiresClose
-    ? `Chưa đóng · ${previousLabel}`
+    ? (previousLabelRaw ? `Chưa đóng · ${previousLabelRaw}` : 'Chưa đóng quỹ')
     : readyForSale
-      ? 'Đang mở'
+      ? (session?.shiftLabel ? `Đang mở · ${session.shiftLabel}` : 'Đang mở')
       : 'Đã đóng'
+
+  const foreignHint = canCloseForeign
+    ? (previousLabelRaw
+      ? `Đóng quỹ «${previousLabelRaw}» (QL) — hoặc đóng đúng ô trên Lịch làm việc`
+      : 'Đóng quỹ đang mở (QL) — hoặc đóng đúng ô trên Lịch làm việc')
+    : `Báo ${openerName} đóng quỹ`
 
   const openModal = (type) => {
     if (type === 'close') {
+      if (requiresClose && !canCloseForeign) {
+        showError(blockedCloseMessage)
+        return
+      }
       setCountedInput(formatMoneyInput(expectedCash(loadOpenCashSession())))
       setVarianceNote('')
     }
     if (type === 'open') {
+      if (isManager) {
+        showError('Quản lý mở quỹ tại «Lịch làm việc» — chọn đúng ô ca rồi bấm Mở quỹ ca này.')
+        return
+      }
+      if (requiresClose) {
+        showError(blockedCloseMessage)
+        return
+      }
       setOpeningCashInput('500.000')
       setOpenNote('')
     }
@@ -154,6 +186,11 @@ export default function PosCashSessionBar({
   }
 
   const handleClose = async () => {
+    if (requiresClose && !canCloseForeign) {
+      showError(blockedCloseMessage)
+      setModal(null)
+      return
+    }
     setBusy(true)
     try {
       const counted = parseMoney(countedInput)
@@ -167,18 +204,21 @@ export default function PosCashSessionBar({
         countedCash: counted,
         varianceNote,
       })
+      await refreshCashSession()
       setModal(null)
-      showSuccess(
-        Number(closed?.variance || 0) === 0
-          ? requiresClose
-            ? `Đã đóng quỹ «${previousLabel}». Bấm «Mở quỹ» cho ca hiện tại.`
-            : 'Đã đóng quỹ. Vẫn có thể chốt kệ cuối ngày.'
-          : `Đã đóng quỹ. Chênh lệch ${formatVnd(closed.variance)}. ${
-              requiresClose
-                ? 'Bấm «Mở quỹ» cho ca hiện tại.'
-                : 'Vẫn có thể chốt kệ cuối ngày.'
-            }`,
-      )
+      if (requiresClose && canCloseForeign) {
+        showSuccess(
+          Number(closed?.variance || 0) === 0
+            ? `Đã đóng quỹ «${previousLabel}». Sale ca hiện tại có thể mở quỹ.`
+            : `Đã đóng quỹ «${previousLabel}». Chênh lệch ${formatVnd(closed.variance)}.`,
+        )
+      } else {
+        showSuccess(
+          Number(closed?.variance || 0) === 0
+            ? 'Đã đóng quỹ.'
+            : `Đã đóng quỹ. Chênh lệch ${formatVnd(closed.variance)}.`,
+        )
+      }
     } catch (error) {
       showError(error.message)
     } finally {
@@ -205,8 +245,8 @@ export default function PosCashSessionBar({
           <span className="hidden h-7 w-px bg-[#e7e8e0] sm:block" aria-hidden />
           {requiresClose ? (
             <>
-              <p className="max-w-[9.5rem] text-[10px] leading-snug text-amber-800 sm:max-w-none">
-                Đóng quỹ ca trước rồi mở quỹ ca này
+              <p className="max-w-[14rem] text-[10px] leading-snug text-amber-800 sm:max-w-xs">
+                {foreignHint}
               </p>
               <button
                 type="button"
@@ -215,13 +255,15 @@ export default function PosCashSessionBar({
               >
                 Xem tiền
               </button>
-              <button
-                type="button"
-                onClick={() => openModal('close')}
-                className="rounded-full bg-amber-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-800"
-              >
-                Đóng quỹ ca trước
-              </button>
+              {canCloseForeign ? (
+                <button
+                  type="button"
+                  onClick={() => openModal('close')}
+                  className="rounded-full bg-amber-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-800"
+                >
+                  Đóng quỹ ca trước (QL)
+                </button>
+              ) : null}
             </>
           ) : readyForSale ? (
             <>
@@ -242,6 +284,13 @@ export default function PosCashSessionBar({
             </>
           ) : dayEndDone ? (
             <p className="text-[11px] text-slate-500">Không mở quỹ — ngày đã chốt kệ</p>
+          ) : isManager ? (
+            <Link
+              to="/shifts"
+              className="rounded-full border border-[#356647]/40 bg-[#f0f7f0] px-2.5 py-1 text-xs font-bold text-[#356647] hover:bg-[#e5f0e6]"
+            >
+              Mở quỹ trên Lịch ca
+            </Link>
           ) : (
             <button
               type="button"
@@ -371,10 +420,10 @@ export default function PosCashSessionBar({
       {modal === 'close' ? (
         <ModalShell
           eyebrow="Quỹ · theo ca"
-          title={requiresClose ? `Đóng quỹ «${previousLabel}»` : 'Đóng quỹ'}
+          title={canCloseForeign ? `Đóng quỹ «${previousLabel}» (QL)` : 'Đóng quỹ'}
           subtitle={
-            requiresClose
-              ? `Quỹ ca trước còn mở. Đếm tiền rồi đóng trước khi mở quỹ ca hiện tại. Ước tính: ${formatVnd(expected)}`
+            canCloseForeign
+              ? `Đóng hộ quỹ do ${openerName} mở. Ước tính: ${formatVnd(expected)}`
               : `Đếm tiền rồi đóng quỹ. Ước tính: ${formatVnd(expected)}`
           }
           onClose={() => setModal(null)}
@@ -399,14 +448,13 @@ export default function PosCashSessionBar({
           }
         >
           <p className="mb-3 rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-xs text-slate-700">
-            {requiresClose ? (
+            {canCloseForeign ? (
               <>
-                Sau khi đóng quỹ ca trước, bấm <strong>Mở quỹ</strong> để bắt đầu quỹ ca hiện tại.
+                Sau khi đóng, Sale ca hiện tại bấm <strong>Mở quỹ</strong>. Quỹ không tự đóng — QL đóng trên «Lịch làm việc» hoặc POS.
               </>
             ) : (
               <>
-                Đóng quỹ không chặn <strong>chốt kệ cuối ngày</strong>. Muốn bán tiếp thì bấm{' '}
-                <strong>Mở quỹ</strong>.
+                Nên đóng khi hết ca. Quên đóng → nhắc khi đăng xuất; nhờ Quản lý đóng trên «Lịch làm việc» nếu cần.
               </>
             )}
           </p>
@@ -457,24 +505,16 @@ export function assertCashSessionOpenForPayment(shelfOnDuty) {
     return false
   }
   const session = loadOpenCashSession()
-  if (!session) {
+  if (!session || session.status === 'Closed') {
     showError('Quỹ đang đóng — bấm «Mở quỹ» trên thanh POS trước khi bán.')
     return false
   }
-  if (session.requiresCloseForNewShift) {
-    const label = session.previousShiftLabel || session.shiftLabel || 'ca trước'
+  if (session.requiresCloseForNewShift || session.canCloseSession === false) {
+    const label = session.previousShiftLabel || session.shiftLabel || 'quỹ đang mở'
+    const opener = session.openedByName || 'Sale ca trước'
     showError(
-      `Quỹ «${label}» vẫn đang mở — hãy đóng quỹ ca đó rồi mở quỹ cho ca hiện tại trước khi bán.`,
-    )
-    return false
-  }
-  if (
-    shelfOnDuty.slotId
-    && session.shiftSlotId
-    && String(session.shiftSlotId) !== String(shelfOnDuty.slotId)
-  ) {
-    showError(
-      'Quỹ đang mở không khớp ca quầy hiện tại — đóng quỹ ca trước rồi mở quỹ cho ca này.',
+      session.closeBlockedMessage
+      || `Quỹ «${label}» vẫn đang mở (do ${opener}). Báo họ đóng rồi mở quỹ ca bạn trước khi bán.`,
     )
     return false
   }

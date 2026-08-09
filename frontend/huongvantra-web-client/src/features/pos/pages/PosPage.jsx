@@ -79,6 +79,7 @@ import {
   persistPosWorkspace,
 } from '../utils/posWorkspaceStorage.js'
 import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../components/PosCashSessionBar.jsx'
+import CashSessionUnloadGuard from '../components/CashSessionUnloadGuard.jsx'
 import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
   isOpenCashSessionReady,
@@ -2748,6 +2749,7 @@ function PosPage() {
 
                     {showCashSessionUi ? (
                       <div className="shrink-0">
+                        <CashSessionUnloadGuard enabled />
                         <PosCashSessionBar
                           dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
                           dayEndDone={Boolean(shelfDayStatus.dayEndDone)}

@@ -29,6 +29,7 @@ import {
   updateShiftTemplateHours,
   upsertShiftRegistrationWindow,
 } from '../services/shiftsApi.js'
+import ManagerSlotCashFundPanel from '../../pos/components/ManagerSlotCashFundPanel.jsx'
 
 function statusTone(status) {
   if (status === 'Approved') return 'bg-emerald-100 text-emerald-900'
@@ -166,7 +167,6 @@ function ShiftManagePage() {
 
   const reloadWeek = (nextOffset) => {
     setWeekOffset(nextOffset)
-    setSelectedSlotId(null)
   }
 
   const visibleTemplates = useMemo(() => {
@@ -178,6 +178,27 @@ function ShiftManagePage() {
     [slots, selectedSlotId],
   )
   const selectedTpl = selected ? getTemplate(templates, selected.templateId) : null
+
+  // Giữ panel chi tiết luôn có ô: ưu tiên hôm nay + khung đầu, không cho đóng/ẩn panel.
+  useEffect(() => {
+    if (loading || slots.length === 0) return
+    if (selectedSlotId && slots.some((s) => s.id === selectedSlotId)) return
+    const todayIso = weekDays.find((d) => d.isToday)?.iso
+    let next = null
+    if (todayIso) {
+      for (const tpl of visibleTemplates) {
+        const slot = findSlot(slots, todayIso, tpl.id)
+        if (slot) {
+          next = slot
+          break
+        }
+      }
+    }
+    if (!next) {
+      next = slots.find((s) => visibleTemplates.some((t) => t.id === s.templateId)) || slots[0]
+    }
+    if (next?.id) setSelectedSlotId(next.id)
+  }, [loading, slots, selectedSlotId, weekDays, visibleTemplates])
 
   useEffect(() => {
     setSelectedStaffId('')
@@ -339,6 +360,27 @@ function ShiftManagePage() {
       showError('Vui lòng nhập đủ giờ bắt đầu và kết thúc.')
       return
     }
+    const startHm = normalizeTimeHm(start)
+    const endHm = normalizeTimeHm(end)
+    if (startHm >= endHm) {
+      showError('Giờ kết thúc phải sau giờ bắt đầu (cùng ngày).')
+      return
+    }
+    // Cùng khu vực: không chồng giờ (chạm đúng mốc vẫn OK).
+    const peer = templates.find((t) => {
+      if (t.id === template.id) return false
+      if (String(t.area || '') !== String(template.area || '')) return false
+      const peerStart = normalizeTimeHm(t.start)
+      const peerEnd = normalizeTimeHm(t.end)
+      return startHm < peerEnd && peerStart < endHm
+    })
+    if (peer) {
+      showError(
+        `Giờ trùng với «${peer.name}» (${normalizeTimeHm(peer.start)}–${normalizeTimeHm(peer.end)}). `
+        + 'Hai ca cùng khu không được chồng giờ.',
+      )
+      return
+    }
     setSavingTemplateId(template.id)
     try {
       const updated = await updateShiftTemplateHours(template.id, { start, end })
@@ -360,7 +402,7 @@ function ShiftManagePage() {
       <PageHeader
         compact
         title="Phân ca làm"
-        titleInfo="Manager chỉnh giờ khung ca, mở/đóng đăng ký theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
+        titleInfo="Manager chỉnh giờ khung ca (cùng khu không chồng giờ), mở/đóng quỹ POS theo từng ô ca, mở/đóng đăng ký tuần, chỉ định / gỡ Sale."
       />
 
       {canManage ? (
@@ -438,23 +480,24 @@ function ShiftManagePage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="inline-flex items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-white p-1 shadow-sm">
           <button
             type="button"
             onClick={() => reloadWeek(weekOffset - 1)}
-            className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-slate-50"
+            className="rounded-xl px-2 py-1.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
             aria-label="Tuần trước"
           >
             <span className="material-symbols-outlined text-[20px]">chevron_left</span>
           </button>
-          <div className="min-w-[8.5rem] px-1 text-center text-sm font-bold text-slate-900">
-            {formatWeekRange(weekDays)}
+          <div className="min-w-[9rem] px-1.5 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tuần</p>
+            <p className="text-sm font-bold tabular-nums text-slate-900">{formatWeekRange(weekDays)}</p>
           </div>
           <button
             type="button"
             onClick={() => reloadWeek(weekOffset + 1)}
-            className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-slate-50"
+            className="rounded-xl px-2 py-1.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
             aria-label="Tuần sau"
           >
             <span className="material-symbols-outlined text-[20px]">chevron_right</span>
@@ -463,7 +506,7 @@ function ShiftManagePage() {
             <button
               type="button"
               onClick={() => reloadWeek(0)}
-              className="mr-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-slate-50"
+              className="mr-0.5 rounded-xl bg-[#356647]/10 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/15"
             >
               Tuần này
             </button>
@@ -471,20 +514,20 @@ function ShiftManagePage() {
         </div>
 
         {!loading ? (
-          <div className="flex min-w-0 flex-1 flex-wrap items-stretch gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-stretch gap-2">
             {stats.map((item) => (
               <div
                 key={item.id}
-                className={`flex min-w-[6.5rem] flex-1 items-center gap-2 rounded-xl border bg-white px-2.5 py-1.5 shadow-sm ${
-                  item.warn ? 'border-rose-200' : 'border-slate-200'
+                className={`flex min-w-[5.75rem] flex-1 items-center justify-between gap-2 rounded-2xl border bg-white px-3 py-2 shadow-sm ${
+                  item.warn ? 'border-rose-200/80 bg-rose-50/40' : 'border-slate-200/90'
                 }`}
               >
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
-                  <p className={`text-base font-bold tabular-nums leading-tight ${item.warn ? 'text-rose-700' : 'text-slate-900'}`}>
-                    {item.value}
-                  </p>
-                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {item.label}
+                </p>
+                <p className={`text-lg font-bold tabular-nums leading-none ${item.warn ? 'text-rose-700' : 'text-slate-900'}`}>
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
@@ -492,31 +535,45 @@ function ShiftManagePage() {
       </div>
 
       {loading ? (
-        <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm">
+        <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm">
           Đang tải lịch ca…
         </p>
       ) : (
-        <div className={`grid gap-3 ${selected ? 'xl:grid-cols-[minmax(0,1fr)_280px]' : ''}`}>
-          <div className="min-w-0 space-y-2">
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+        <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_292px]">
+          <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+            <div className="min-h-0 flex-1 overflow-x-auto">
+              <table className="h-full min-w-[780px] w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+                <colgroup>
+                  <col style={{ width: '10.75rem' }} />
+                  {weekDays.map((day) => (
+                    <col key={`col-${day.iso}`} />
+                  ))}
+                </colgroup>
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="sticky left-0 z-10 w-36 min-w-[9rem] border-b border-r border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                  <tr className="bg-[#f7f6f1]">
+                    <th className="sticky left-0 z-20 w-[10.75rem] max-w-[10.75rem] overflow-hidden border-b border-r border-slate-200/80 bg-[#f7f6f1] px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
                       Khung ca
                     </th>
                     {weekDays.map((day) => (
                       <th
                         key={day.iso}
-                        className={`border-b border-slate-200 px-1 py-2 text-center ${
-                          day.isToday ? 'bg-[#356647]/10' : ''
+                        className={`border-b border-slate-200/80 px-1 py-2.5 text-center ${
+                          day.isToday ? 'bg-[#356647]/[0.08]' : ''
                         }`}
                       >
-                        <div className={`text-[10px] font-bold uppercase ${day.isToday ? 'text-[#356647]' : 'text-slate-500'}`}>
-                          {day.label}
-                        </div>
-                        <div className={`text-sm font-bold ${day.isToday ? 'text-[#356647]' : 'text-slate-800'}`}>
-                          {day.dayNum}/{day.monthNum}
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={`text-[10px] font-bold uppercase tracking-wide ${day.isToday ? 'text-[#356647]' : 'text-slate-400'}`}>
+                            {day.label}
+                          </span>
+                          <span
+                            className={`inline-flex min-w-[1.75rem] items-center justify-center rounded-full px-1.5 py-0.5 text-sm font-bold tabular-nums ${
+                              day.isToday
+                                ? 'bg-[#356647] text-white'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            {day.dayNum}
+                          </span>
                         </div>
                       </th>
                     ))}
@@ -525,12 +582,15 @@ function ShiftManagePage() {
                 <tbody>
                   {visibleTemplates.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                        Chưa có khung ca{weekStart ? ` cho tuần ${weekStart}` : ''}.
+                      <td
+                        colSpan={weekDays.length + 1}
+                        className="px-4 py-12 text-center text-sm text-slate-500"
+                      >
+                        Không có khung ca phù hợp bộ lọc.
                       </td>
                     </tr>
                   ) : (
-                    visibleTemplates.map((tpl) => {
+                    visibleTemplates.map((tpl, rowIdx) => {
                       const draft = hoursDraft[tpl.id] || {
                         start: normalizeTimeHm(tpl.start),
                         end: normalizeTimeHm(tpl.end),
@@ -541,57 +601,74 @@ function ShiftManagePage() {
                         normalizeTimeHm(draft.start) !== currentStart
                         || normalizeTimeHm(draft.end) !== currentEnd
                       const savingHours = savingTemplateId === tpl.id
+                      const isLastRow = rowIdx === visibleTemplates.length - 1
+                      const rowHeightPct = `${(100 / visibleTemplates.length).toFixed(4)}%`
 
                       return (
-                        <tr key={tpl.id} className="align-top">
-                          <th className="sticky left-0 z-10 w-36 min-w-[9rem] border-b border-r border-slate-200 bg-white px-2.5 py-2 text-left">
-                            <div className="flex items-start gap-1.5">
+                        <tr key={tpl.id} style={{ height: rowHeightPct }}>
+                          <th
+                            className={`sticky left-0 z-20 w-[10.75rem] max-w-[10.75rem] overflow-hidden border-r border-slate-200/80 bg-white px-2 py-2 text-left align-middle ${
+                              isLastRow ? '' : 'border-b'
+                            }`}
+                          >
+                            <div className="flex min-w-0 gap-1.5">
                               <span
-                                className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
-                                style={{ background: tpl.color }}
+                                className={`mt-1 h-8 w-1 shrink-0 rounded-full ${
+                                  tpl.area === 'Warehouse' ? 'bg-sky-500' : 'bg-[#356647]'
+                                }`}
                               />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold leading-tight text-slate-900">{tpl.name}</p>
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <p className="truncate text-xs font-bold leading-snug text-slate-900">{tpl.name}</p>
+                                <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500">
+                                  {tpl.areaLabel}
+                                </p>
                                 {canManage ? (
-                                  <div
-                                    className="mt-1 space-y-1"
-                                    onClick={(e) => e.stopPropagation()}
-                                    onKeyDown={(e) => e.stopPropagation()}
-                                  >
-                                    <div className="flex items-center gap-0.5">
+                                  <div className="mt-1.5 space-y-1">
+                                    <label className="block space-y-0.5">
+                                      <span className="text-[9px] font-semibold text-slate-500">Bắt đầu</span>
                                       <input
                                         type="time"
-                                        step="60"
-                                        value={normalizeTimeHm(draft.start) || ''}
-                                        onChange={(e) => setTemplateHourField(tpl.id, 'start', e.target.value)}
-                                        className="min-w-0 flex-1 rounded border border-slate-200 bg-slate-50 px-0.5 py-0.5 text-[10px] font-semibold text-slate-800"
+                                        value={draft.start}
+                                        onChange={(e) =>
+                                          setHoursDraft((prev) => ({
+                                            ...prev,
+                                            [tpl.id]: { ...draft, start: e.target.value },
+                                          }))
+                                        }
+                                        className="w-full min-w-0 rounded-md border border-slate-200 bg-[#fbf9f1]/70 px-1 py-0.5 text-[11px] font-semibold text-slate-700 outline-none focus:border-[#356647]"
                                         title="Giờ bắt đầu"
                                         aria-label={`${tpl.name} bắt đầu`}
                                       />
-                                      <span className="shrink-0 text-[10px] text-slate-400">–</span>
+                                    </label>
+                                    <label className="block space-y-0.5">
+                                      <span className="text-[9px] font-semibold text-slate-500">Kết thúc</span>
                                       <input
                                         type="time"
-                                        step="60"
-                                        value={normalizeTimeHm(draft.end) || ''}
-                                        onChange={(e) => setTemplateHourField(tpl.id, 'end', e.target.value)}
-                                        className="min-w-0 flex-1 rounded border border-slate-200 bg-slate-50 px-0.5 py-0.5 text-[10px] font-semibold text-slate-800"
+                                        value={draft.end}
+                                        onChange={(e) =>
+                                          setHoursDraft((prev) => ({
+                                            ...prev,
+                                            [tpl.id]: { ...draft, end: e.target.value },
+                                          }))
+                                        }
+                                        className="w-full min-w-0 rounded-md border border-slate-200 bg-[#fbf9f1]/70 px-1 py-0.5 text-[11px] font-semibold text-slate-700 outline-none focus:border-[#356647]"
                                         title="Giờ kết thúc"
                                         aria-label={`${tpl.name} kết thúc`}
                                       />
-                                    </div>
+                                    </label>
                                     {dirty || savingHours ? (
                                       <button
                                         type="button"
                                         disabled={savingHours || !dirty}
                                         onClick={() => saveTemplateHours(tpl)}
-                                        className="w-full rounded bg-[#356647] px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-[#2d553b] disabled:opacity-40"
+                                        className="w-full rounded-md bg-[#356647] px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-[#2d553b] disabled:opacity-40"
                                       >
                                         {savingHours ? 'Đang lưu…' : 'Lưu giờ'}
                                       </button>
                                     ) : null}
                                   </div>
                                 ) : (
-                                  <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
+                                  <p className="mt-1 text-[11px] font-bold tabular-nums text-slate-600">
                                     {currentStart}–{currentEnd}
                                   </p>
                                 )}
@@ -610,36 +687,38 @@ function ShiftManagePage() {
                             return (
                               <td
                                 key={`${day.iso}-${tpl.id}`}
-                                className={`border-b border-slate-200 p-0.5 ${day.isToday ? 'bg-[#356647]/[0.03]' : ''}`}
+                                className={`p-1 align-middle ${isLastRow ? '' : 'border-b border-slate-100'} ${
+                                  day.isToday ? 'bg-[#356647]/[0.03]' : ''
+                                }`}
                               >
                                 <button
                                   type="button"
                                   onClick={() => slot && setSelectedSlotId(slot.id)}
-                                  className={`flex min-h-[68px] w-full flex-col rounded-md border px-1.5 py-1 text-left transition ${
+                                  className={`group flex h-full min-h-[72px] w-full flex-col rounded-xl border px-1.5 py-1.5 text-left transition ${
                                     isSelected
-                                      ? 'border-[#356647] bg-[#356647]/10 ring-1 ring-[#356647]/40'
+                                      ? 'border-[#356647] bg-[#356647]/[0.09] shadow-sm ring-1 ring-[#356647]/30'
                                       : isClosed
-                                        ? 'border-slate-200 bg-slate-50 opacity-80'
+                                        ? 'border-slate-200/80 bg-slate-50/80 opacity-75'
                                         : isEmpty
-                                          ? 'border-dashed border-slate-300 bg-white hover:border-[#356647]/50'
-                                          : 'border-slate-200 bg-white hover:border-slate-300'
+                                          ? 'border-dashed border-slate-300/90 bg-[#fbf9f1]/40 hover:border-[#356647]/45 hover:bg-[#356647]/[0.03]'
+                                          : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/60'
                                   }`}
                                 >
                                   {isClosed ? (
-                                    <span className="text-[9px] font-bold uppercase text-slate-400">Khóa</span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Khóa</span>
                                   ) : isEmpty ? (
-                                    <span className="text-[10px] font-semibold text-slate-400">Trống</span>
+                                    <span className="text-[10px] font-semibold text-slate-400 group-hover:text-[#356647]/80">Trống</span>
                                   ) : (
-                                    <span className="text-[9px] font-bold uppercase text-slate-400">
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                                       {approved.length}/{tpl.capacity}
                                       {pending.length ? ` · +${pending.length}` : ''}
                                     </span>
                                   )}
-                                  <div className="mt-0.5 flex flex-col gap-0.5">
+                                  <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
                                     {(slot?.assignments || []).slice(0, 3).map((a) => (
                                       <span
                                         key={a.id || `${slot.id}-${a.staffId}`}
-                                        className={`truncate rounded px-1 py-0.5 text-[10px] font-semibold ${statusTone(a.status)}`}
+                                        className={`truncate rounded-md px-1 py-0.5 text-[10px] font-semibold ${statusTone(a.status)}`}
                                         title={`${a.name} · ${assignmentStatusLabel(a.status)}`}
                                       >
                                         {shortName(a.name)}
@@ -647,7 +726,9 @@ function ShiftManagePage() {
                                     ))}
                                   </div>
                                   {!isClosed && isFull && pending.length === 0 ? (
-                                    <span className="mt-auto text-[9px] font-semibold text-emerald-700">Đủ</span>
+                                    <span className="mt-auto pt-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                                      Đủ
+                                    </span>
                                   ) : null}
                                 </button>
                               </td>
@@ -661,110 +742,129 @@ function ShiftManagePage() {
               </table>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600">
-              <span className="font-semibold text-slate-700">Chú thích</span>
+            <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-slate-200/80 bg-[#f7f6f1]/80 px-3 py-2 text-[11px] text-slate-600">
+              <span className="font-bold text-slate-700">Chú thích</span>
               <span className="inline-flex items-center gap-1">
-                <span className="rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-900">A.</span>
-                Duyệt
+                <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">Duyệt</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-900">B.</span>
-                Chờ
+                <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Chờ</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="rounded border border-dashed border-slate-300 px-1 text-[10px] text-slate-400">···</span>
-                Trống
+                <span className="rounded-md border border-dashed border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-400">Trống</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="rounded border border-slate-200 bg-slate-50 px-1 text-[9px] font-bold uppercase text-slate-400">khóa</span>
-                Khóa
+                <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-400">Khóa</span>
               </span>
+              <span className="hidden text-slate-400 sm:inline">·</span>
               <span className="text-slate-500">1 POS + 1 COD / ca</span>
-              {!selected ? (
-                <span className="ml-auto text-slate-400">Chọn ô trên lịch để xem chi tiết</span>
-              ) : null}
-            </div>
-          </div>
+              <span className="ml-auto text-[10px] text-slate-400">Chọn ô để xem chi tiết</span>
+            </footer>
+          </section>
 
-          {selected ? (
-          <aside className="xl:sticky xl:top-3 xl:self-start">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Chi tiết ô ca</p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSlotId(null)}
-                  className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                  aria-label="Đóng chi tiết"
-                >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
-                </button>
+          <aside className="flex h-full min-h-[14rem] flex-col xl:min-h-0">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+              <div className="border-b border-slate-100 bg-[#f7f6f1]/80 px-3.5 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#538463]">Chi tiết ca</p>
+                {selected && selectedTpl ? (
+                  <div className="mt-1">
+                    <h3 className="text-[15px] font-bold leading-snug text-slate-900">{selectedTpl.name}</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {formatWorkDate(selected.workDate)}
+                      {' · '}
+                      <span className="font-semibold tabular-nums text-slate-600">
+                        {selectedTpl.start}–{selectedTpl.end}
+                      </span>
+                      {selectedTpl.areaLabel ? ` · ${selectedTpl.areaLabel}` : ''}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-500">Đang tải…</p>
+                )}
               </div>
-                  <h3 className="mt-1.5 text-base font-bold text-slate-900">{selectedTpl?.name}</h3>
-                  <p className="text-sm text-slate-600">
-                    {formatWorkDate(selected.workDate)} · {selectedTpl?.start}–{selectedTpl?.end}
-                  </p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#356647]">{selectedTpl?.areaLabel}</p>
 
-                  <ul className="mt-3 space-y-2">
+              {selected && selectedTpl ? (
+                <div className="flex min-h-0 flex-1 flex-col px-3.5 py-3">
+                  {canManage ? (
+                    <ManagerSlotCashFundPanel
+                      enabled={canManage}
+                      slot={selected}
+                      template={selectedTpl}
+                      compact
+                    />
+                  ) : null}
+
+                  <div className={`min-h-0 flex-1 ${canManage ? 'mt-3 border-t border-slate-100 pt-2.5' : ''}`}>
+                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Nhân sự
+                      {' '}
+                      ({selected.assignments.length})
+                    </p>
                     {selected.assignments.length === 0 ? (
-                      <li className="text-sm text-slate-500">Chưa có đăng ký.</li>
+                      <p className="rounded-xl border border-dashed border-slate-200 bg-[#fbf9f1]/50 px-3 py-4 text-center text-xs text-slate-500">
+                        Chưa có đăng ký.
+                      </p>
                     ) : (
-                      selected.assignments.map((a) => (
-                        <li key={a.id || a.staffId} className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-semibold text-slate-900">{a.name}</p>
-                              <p className="text-xs text-slate-500">{a.role}</p>
+                      <ul className="space-y-1.5">
+                        {selected.assignments.map((a) => (
+                          <li
+                            key={a.id || a.staffId}
+                            className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-2.5 py-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">{a.name}</p>
+                                <p className="truncate text-[11px] text-slate-500">{a.role}</p>
+                              </div>
+                              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusTone(a.status)}`}>
+                                {assignmentStatusLabel(a.status)}
+                              </span>
                             </div>
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(a.status)}`}>
-                              {assignmentStatusLabel(a.status)}
-                            </span>
-                          </div>
-                          {canReview && a.status === 'Pending' && selected.status !== 'Closed' ? (
-                            <div className="mt-2 flex gap-2">
+                            {canReview && a.status === 'Pending' && selected.status !== 'Closed' ? (
+                              <div className="mt-1.5 flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => reviewAssignment(a.id, 'Approved')}
+                                  className="rounded-lg bg-[#356647] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#2d553b]"
+                                >
+                                  Duyệt
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => reviewAssignment(a.id, 'Rejected')}
+                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                                >
+                                  Từ chối
+                                </button>
+                              </div>
+                            ) : null}
+                            {canManage
+                            && selected.status !== 'Closed'
+                            && (a.status === 'Approved' || a.status === 'Pending') ? (
                               <button
                                 type="button"
-                                onClick={() => reviewAssignment(a.id, 'Approved')}
-                                className="rounded-lg bg-[#356647] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2d553b]"
+                                disabled={unassigningId === a.id}
+                                onClick={() => unassignStaff(a.id, a.name)}
+                                className="mt-1.5 w-full rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
                               >
-                                Duyệt
+                                {unassigningId === a.id ? 'Đang gỡ…' : 'Gỡ khỏi ca'}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => reviewAssignment(a.id, 'Rejected')}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                              >
-                                Từ chối
-                              </button>
-                            </div>
-                          ) : null}
-                          {canManage
-                          && selected.status !== 'Closed'
-                          && (a.status === 'Approved' || a.status === 'Pending') ? (
-                            <button
-                              type="button"
-                              disabled={unassigningId === a.id}
-                              onClick={() => unassignStaff(a.id, a.name)}
-                              className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
-                            >
-                              {unassigningId === a.id ? 'Đang gỡ…' : 'Gỡ khỏi ca'}
-                            </button>
-                          ) : null}
-                        </li>
-                      ))
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </ul>
+                  </div>
 
                   {canManage && canAssignSelected ? (
-                    <div className="mt-3 rounded-xl border border-[#356647]/25 bg-[#356647]/[0.04] px-3 py-3">
-                      <p className="text-xs font-semibold uppercase text-slate-500">Chỉ định nhân viên</p>
+                    <div className="mt-auto space-y-1.5 border-t border-slate-100 pt-2.5">
                       <select
                         value={selectedStaffId}
                         onChange={(e) => setSelectedStaffId(e.target.value)}
-                        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-800"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-[#356647]"
+                        aria-label="Chỉ định nhân viên"
                       >
-                        <option value="">Chọn nhân viên Sale…</option>
+                        <option value="">Chỉ định Sale…</option>
                         {assignableStaffOptions.map((s) => (
                           <option key={s.userId} value={s.userId}>
                             {s.fullName} · {s.roleName}
@@ -775,20 +875,16 @@ function ShiftManagePage() {
                         type="button"
                         disabled={!selectedStaffId || assigning}
                         onClick={assignSlot}
-                        className="mt-2 w-full rounded-lg bg-[#356647] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2d553b] disabled:opacity-60"
+                        className="w-full rounded-xl bg-[#356647] px-2.5 py-2 text-xs font-bold text-white hover:bg-[#2d553b] disabled:opacity-60"
                       >
-                        {assigning ? 'Đang chỉ định…' : 'Chỉ định vào ca'}
+                        {assigning ? 'Đang chỉ định…' : 'Chỉ định'}
                       </button>
-                      {assignableStaffOptions.length === 0 ? (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Không còn nhân viên Sale nào khả dụng cho ô ca này.
-                        </p>
-                      ) : null}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
             </div>
           </aside>
-          ) : null}
         </div>
       )}
     </PageShell>

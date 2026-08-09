@@ -310,7 +310,9 @@ public class PosCashSessionConfiguration : IEntityTypeConfiguration<PosCashSessi
         builder.Property(e => e.OpenedByName).HasMaxLength(100).IsRequired();
         builder.Property(e => e.OpenedByRole).HasMaxLength(100);
         builder.Property(e => e.ShiftLabel).HasMaxLength(200);
+        builder.Property(e => e.ShiftEndsAtUtc);
         builder.Property(e => e.OpenedAt).IsRequired();
+        builder.HasIndex(e => e.ShiftEndsAtUtc);
         builder.Property(e => e.CountedCash).HasColumnType("decimal(18,2)");
         builder.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
         builder.Property(e => e.Variance).HasColumnType("decimal(18,2)");

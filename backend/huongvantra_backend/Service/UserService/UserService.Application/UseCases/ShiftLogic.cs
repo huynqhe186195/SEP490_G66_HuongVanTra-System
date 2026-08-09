@@ -62,6 +62,23 @@ public class ShiftLogic(
         if (duration < TimeSpan.FromMinutes(30))
             throw new UserValidationException("Mỗi ca phải dài tối thiểu 30 phút.");
 
+        // Cùng khu vực (Shelf / Warehouse): khung giờ không được chồng nhau.
+        // Chạm đúng mốc (ca A kết thúc 12:00, ca B bắt đầu 12:00) vẫn hợp lệ.
+        var peers = await shiftRepo.GetActiveTemplatesAsync(template.Area);
+        var overlapping = peers
+            .Where(t => t.Id != template.Id)
+            .Where(t => start < t.EndTime && t.StartTime < end)
+            .OrderBy(t => t.StartTime)
+            .FirstOrDefault();
+
+        if (overlapping is not null)
+        {
+            throw new UserValidationException(
+                $"Giờ «{template.Name}» ({FormatTime(start)}–{FormatTime(end)}) trùng với "
+                + $"«{overlapping.Name}» ({FormatTime(overlapping.StartTime)}–{FormatTime(overlapping.EndTime)}). "
+                + "Hai ca cùng khu không được chồng giờ.");
+        }
+
         template.StartTime = start;
         template.EndTime = end;
         shiftRepo.UpdateTemplate(template);
