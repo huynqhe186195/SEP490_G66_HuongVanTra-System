@@ -66,6 +66,8 @@ import {
   getOrderStatusClass,
   getOrderStatusLabel,
   getPickupDueBadge,
+  getPaymentMethodLabel,
+  getPaymentPurposeLabel,
   getRefundStatusLabel,
   getOrderPaymentMethodLabel,
   resolveOrderPaymentDisplay,
@@ -490,6 +492,10 @@ function OrderDetailPage() {
   const inventorySyncMeta = resolveInventorySyncMeta(order)
   const pickupDueBadge = getPickupDueBadge(order)
   const hasDeposit = Number(order.depositAmount) > 0
+  const paymentBreakdown = (order.payments || []).filter((row) => row?.paymentPurpose === 'Deposit' || row?.paymentPurpose === 'RemainingAtPickup')
+  const deliveredByName = String(order.deliveredByName || '').startsWith('SePay Webhook')
+    ? order.sellerName
+    : order.deliveredByName
   const remainingAtPickup = hasDeposit ? Math.max(0, Number(order.remainingAmountDue) || 0) : 0
   const normalizedStatus = String(order.orderStatus || '').trim()
   const isAwaitingFulfillment = ['WaitingMaterials', 'WaitingTransfer', 'WaitingProduction', 'ReadyToDeliver']
@@ -790,7 +796,7 @@ function OrderDetailPage() {
           {order.backorderAcceptedAt ? (
             <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-violet-700">
-                Đơn chờ nguyên liệu
+                ĐƠN HẸN KHÁCH GIAO SAU
               </h2>
               <dl className="space-y-1.5 text-sm text-slate-700">
                 <div className="flex justify-between gap-3">
@@ -877,7 +883,7 @@ function OrderDetailPage() {
                   <div className="flex justify-between gap-3">
                     <dt>Đã giao</dt>
                     <dd className="font-semibold text-emerald-700">
-                      {order.deliveredByName || '—'} · {formatVietnamDateTime(order.deliveredAt)}
+                      {deliveredByName || order.sellerName || '—'} · {formatVietnamDateTime(order.deliveredAt)}
                     </dd>
                   </div>
                 ) : null}
@@ -923,6 +929,16 @@ function OrderDetailPage() {
                 {payment ? (
                   <>
                     <p className="text-sm text-slate-700">{getOrderPaymentMethodLabel(order)}</p>
+                    {paymentBreakdown.length > 0 ? (
+                      <dl className="mt-2 space-y-1 text-xs text-slate-600">
+                        {paymentBreakdown.map((row) => (
+                          <div key={row.id} className="flex justify-between gap-3">
+                            <dt>{getPaymentPurposeLabel(row.paymentPurpose)}: {getPaymentMethodLabel(row.paymentMethod)}</dt>
+                            <dd className="font-semibold text-slate-800">{formatVnd(row.amount)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
                     <p className="mt-1 text-sm">
                       <span className="text-slate-500">{paymentDisplay.amountCaption}: </span>
                       <span className="font-semibold text-slate-800">{formatVnd(paymentDisplay.displayAmount)}</span>

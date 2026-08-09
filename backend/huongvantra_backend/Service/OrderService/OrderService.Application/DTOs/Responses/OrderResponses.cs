@@ -253,7 +253,15 @@ public record ReceiptReprintDataResponse(
     decimal DebtAmount,
     bool IsReprint,
     int ReprintNumber,
-    DateTime ReprintedAt);
+    DateTime ReprintedAt,
+    bool IsBackorder = false,
+    string? FulfillmentPreference = null,
+    DateTime? EstimatedReadyFrom = null,
+    DateTime? EstimatedReadyTo = null,
+    DateTime? PickupDate = null,
+    string? PickupContactName = null,
+    string? PickupContactPhone = null,
+    string? PickupCode = null);
 
 public record ReceiptReprintResponse(
     ReceiptReprintLogResponse Log,

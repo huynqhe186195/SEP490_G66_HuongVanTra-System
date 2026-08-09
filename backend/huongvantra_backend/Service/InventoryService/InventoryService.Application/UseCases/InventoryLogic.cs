@@ -6556,13 +6556,11 @@ public class InventoryLogic(
                 throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC là bắt buộc.");
             if (!item.ManufacturedAt.HasValue)
                 throw new InventoryValidationException($"Dòng {index + 1}: Ngày sản xuất là bắt buộc.");
-            if (!item.ExpiresAt.HasValue)
-                throw new InventoryValidationException($"Dòng {index + 1}: Hạn dùng là bắt buộc.");
             var lineIdentity = BuildSupplierReceiptLineIdentity(item.SkuId, lotCode)!;
             if (!lineIdentities.Add(lineIdentity))
                 throw new InventoryValidationException(
                     $"Dòng {index + 1}: Trùng SKU và Mã lô NCC trong cùng phiếu. Gộp thành một dòng duy nhất.");
-            if (item.ExpiresAt.Value.Date <= item.ManufacturedAt.Value.Date)
+            if (item.ExpiresAt.HasValue && item.ExpiresAt.Value.Date <= item.ManufacturedAt.Value.Date)
                 throw new InventoryValidationException($"Dòng {index + 1}: Hạn dùng phải sau ngày sản xuất.");
             if (item.ExpiresAt.HasValue && item.ExpiresAt.Value.Date < receipt.ReceivedDate.Date)
                 throw new InventoryValidationException($"Dòng {index + 1}: Hạn sử dụng không được trước ngày nhận hàng.");
