@@ -41,7 +41,8 @@ export function isCashSessionReadyForSale(session) {
   return Boolean(
     session
     && session.status !== 'Closed'
-    && !session.requiresCloseForNewShift
+    // Sale không đóng/bán trên quỹ người khác (canCloseSession=false).
+    // Manager vẫn bán được trên quỹ đang mở (canCloseSession=true).
     && session.canCloseSession !== false,
   )
 }

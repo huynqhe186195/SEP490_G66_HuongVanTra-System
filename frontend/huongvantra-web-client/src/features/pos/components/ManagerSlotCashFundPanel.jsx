@@ -94,6 +94,8 @@ export default function ManagerSlotCashFundPanel({
   const hoursLabel = `${template?.start || '—'}–${template?.end || '—'}`
   const exp = expectedCash(session)
   const variancePreview = parseMoney(countedInput) - exp
+  const needsVarianceNote = Math.abs(variancePreview) >= 1000
+  const closeBlockedByNote = needsVarianceNote && !varianceNote.trim()
   const openLabel = session?.previousShiftLabel || session?.shiftLabel || 'quỹ đang mở'
   const openerName = session?.openedByName || '—'
 
@@ -230,18 +232,27 @@ export default function ManagerSlotCashFundPanel({
             <p className={`text-[11px] font-semibold ${variancePreview === 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
               Lệch: {formatVnd(variancePreview)}
             </p>
+            <label className="block text-[10px] font-semibold text-slate-500">
+              {needsVarianceNote ? 'Lý do lệch (bắt buộc)' : 'Lý do lệch (nếu có)'}
+            </label>
             <input
-              className="w-full rounded-lg border border-[#c1c9c0] px-2.5 py-1.5 text-xs outline-none focus:border-[#356647]"
+              className={`w-full rounded-lg border px-2.5 py-1.5 text-xs outline-none focus:border-[#356647] ${
+                closeBlockedByNote ? 'border-amber-400 bg-amber-50/40' : 'border-[#c1c9c0]'
+              }`}
               value={varianceNote}
               onChange={(e) => setVarianceNote(e.target.value)}
-              placeholder="Lý do lệch (≥ 1.000 đ)"
+              placeholder={needsVarianceNote ? 'Bắt buộc — lệch ≥ 1.000 đ' : 'Không bắt buộc'}
             />
+            {closeBlockedByNote ? (
+              <p className="text-[10px] font-semibold text-amber-800">Nhập lý do để mở nút đóng.</p>
+            ) : null}
             <div className="flex gap-1.5">
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || closeBlockedByNote}
                 onClick={handleClose}
-                className="flex-1 rounded-lg bg-[#8a5a2b] px-2 py-1.5 text-[11px] font-bold text-white hover:bg-[#734a22] disabled:opacity-60"
+                className="flex-1 rounded-lg bg-[#8a5a2b] px-2 py-1.5 text-[11px] font-bold text-white hover:bg-[#734a22] disabled:cursor-not-allowed disabled:opacity-60"
+                title={closeBlockedByNote ? 'Nhập lý do lệch trước khi đóng quỹ' : undefined}
               >
                 {busy ? '…' : 'Đóng quỹ'}
               </button>

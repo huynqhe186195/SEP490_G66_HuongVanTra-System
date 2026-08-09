@@ -109,7 +109,7 @@ export default function PosCashSessionBar({
       && !isManager
     )
   const canCloseForeign = requiresClose && isManager
-  const readyForSale = isCashSessionReadyForSale(session) && !requiresClose
+  const readyForSale = isCashSessionReadyForSale(session)
   const expected = expectedCash(session)
   const canDayEnd = typeof onRequestDayEnd === 'function'
   const showDayEndAction = canDayEnd && !dayEndDone
@@ -118,18 +118,18 @@ export default function PosCashSessionBar({
   const openerName = session?.openedByName || 'Sale ca trước'
   const blockedCloseMessage =
     session?.closeBlockedMessage
-    || `Quỹ «${previousLabel}» vẫn đang mở (do ${openerName}). Báo họ đóng — bạn không đóng hộ được.`
+    || `Quỹ «${previousLabel}» vẫn đang mở (do ${openerName}). Báo họ đóng — bạn không đóng được.`
 
-  const statusLabel = requiresClose
-    ? (previousLabelRaw ? `Chưa đóng · ${previousLabelRaw}` : 'Chưa đóng quỹ')
-    : readyForSale
-      ? (session?.shiftLabel ? `Đang mở · ${session.shiftLabel}` : 'Đang mở')
+  const statusLabel = readyForSale
+    ? (session?.shiftLabel ? `Đang mở · ${session.shiftLabel}` : 'Đang mở')
+    : requiresClose
+      ? (previousLabelRaw ? `Chưa đóng · ${previousLabelRaw}` : 'Chưa đóng quỹ')
       : 'Đã đóng'
 
   const foreignHint = canCloseForeign
     ? (previousLabelRaw
-      ? `Đóng quỹ «${previousLabelRaw}» (QL) — hoặc đóng đúng ô trên Lịch làm việc`
-      : 'Đóng quỹ đang mở (QL) — hoặc đóng đúng ô trên Lịch làm việc')
+      ? `Quỹ «${previousLabelRaw}» còn mở — Quản lý đóng giúp`
+      : 'Quỹ còn mở — Quản lý đóng giúp')
     : `Báo ${openerName} đóng quỹ`
 
   const openModal = (type) => {
@@ -227,86 +227,89 @@ export default function PosCashSessionBar({
   }
 
   const variancePreview = parseMoney(countedInput) - expected
+  const needsVarianceNote = Math.abs(variancePreview) >= 1000
+  const closeBlockedByNote = needsVarianceNote && !varianceNote.trim()
 
   return (
     <>
-      <div className="relative z-30 flex max-w-full flex-row items-stretch gap-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-[#c1c9c0]/70 bg-white px-2.5 py-1.5 shadow-sm">
-          <div className="flex items-center gap-1.5 pr-1.5">
-            <span className="material-symbols-outlined text-[18px] text-[#356647]">payments</span>
-            <div className="leading-tight">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#717971]">Quỹ · theo ca</p>
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+      <div className="relative z-30 flex w-full min-w-0 flex-wrap items-stretch gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-xl border border-[#c1c9c0]/70 bg-white px-2 py-1 shadow-sm">
+          <div className="flex min-w-0 items-center gap-1.5 pr-1">
+            <span className="material-symbols-outlined shrink-0 text-[16px] text-[#356647]">payments</span>
+            <div className="min-w-0 leading-tight">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-[#717971]">Quỹ · theo ca</p>
+              <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-800">
                 <StatusDot ok={readyForSale} />
-                {statusLabel}
+                <span className="truncate">{statusLabel}</span>
               </p>
             </div>
           </div>
-          <span className="hidden h-7 w-px bg-[#e7e8e0] sm:block" aria-hidden />
-          {requiresClose ? (
-            <>
-              <p className="max-w-[14rem] text-[10px] leading-snug text-amber-800 sm:max-w-xs">
-                {foreignHint}
-              </p>
-              <button
-                type="button"
-                onClick={() => openModal('check')}
-                className="rounded-full border border-[#c1c9c0] bg-[#fbf9f1] px-2.5 py-1 text-xs font-bold text-[#356647] hover:bg-[#f0f7f0]"
-              >
-                Xem tiền
-              </button>
+          <span className="hidden h-6 w-px bg-[#e7e8e0] sm:block" aria-hidden />
+          {readyForSale ? (
+            <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5">
               {canCloseForeign ? (
-                <button
-                  type="button"
-                  onClick={() => openModal('close')}
-                  className="rounded-full bg-amber-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-800"
-                >
-                  Đóng quỹ ca trước (QL)
-                </button>
+                <p className="hidden max-w-[14rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
+                  {foreignHint}
+                </p>
               ) : null}
-            </>
-          ) : readyForSale ? (
-            <>
               <button
                 type="button"
                 onClick={() => openModal('check')}
-                className="rounded-full border border-[#c1c9c0] bg-[#fbf9f1] px-2.5 py-1 text-xs font-bold text-[#356647] hover:bg-[#f0f7f0]"
+                className="rounded-full border border-[#c1c9c0] bg-[#fbf9f1] px-2 py-0.5 text-[11px] font-bold text-[#356647] hover:bg-[#f0f7f0]"
               >
                 Xem tiền
               </button>
               <button
                 type="button"
                 onClick={() => openModal('close')}
-                className="rounded-full bg-[#356647] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#2d553b]"
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold text-white ${
+                  canCloseForeign
+                    ? 'bg-amber-700 hover:bg-amber-800'
+                    : 'bg-[#356647] hover:bg-[#2d553b]'
+                }`}
+                title={canCloseForeign ? foreignHint : undefined}
               >
-                Đóng quỹ
+                {canCloseForeign ? 'Đóng quỹ giúp' : 'Đóng quỹ'}
               </button>
-            </>
+            </div>
+          ) : requiresClose ? (
+            <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <p className="hidden max-w-[14rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
+                {foreignHint}
+              </p>
+              <button
+                type="button"
+                onClick={() => openModal('check')}
+                className="rounded-full border border-[#c1c9c0] bg-[#fbf9f1] px-2 py-0.5 text-[11px] font-bold text-[#356647] hover:bg-[#f0f7f0]"
+              >
+                Xem tiền
+              </button>
+            </div>
           ) : dayEndDone ? (
-            <p className="text-[11px] text-slate-500">Không mở quỹ — ngày đã chốt kệ</p>
+            <p className="ml-auto text-[11px] text-slate-500">Không mở quỹ — ngày đã chốt kệ</p>
           ) : isManager ? (
             <Link
               to="/shifts"
-              className="rounded-full border border-[#356647]/40 bg-[#f0f7f0] px-2.5 py-1 text-xs font-bold text-[#356647] hover:bg-[#e5f0e6]"
+              className="ml-auto rounded-full border border-[#356647]/40 bg-[#f0f7f0] px-2 py-0.5 text-[11px] font-bold text-[#356647] hover:bg-[#e5f0e6]"
             >
-              Mở quỹ trên Lịch ca
+              Mở trên Lịch ca
             </Link>
           ) : (
             <button
               type="button"
               onClick={() => openModal('open')}
-              className="rounded-full bg-[#356647] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#2d553b]"
+              className="ml-auto rounded-full bg-[#356647] px-2 py-0.5 text-[11px] font-bold text-white hover:bg-[#2d553b]"
             >
               Mở quỹ
             </button>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1.5 shadow-sm">
-          <div className="flex items-center gap-1.5 pr-1.5">
-            <span className="material-symbols-outlined text-[18px] text-amber-800">inventory_2</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2 py-1 shadow-sm">
+          <div className="flex items-center gap-1.5 pr-1">
+            <span className="material-symbols-outlined text-[16px] text-amber-800">inventory_2</span>
             <div className="leading-tight">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800/70">Kệ · theo ngày</p>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-amber-800/70">Kệ · theo ngày</p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold text-amber-950">
                 <span className="inline-flex items-center gap-1">
                   <StatusDot ok={dayStartDone} />
@@ -420,10 +423,10 @@ export default function PosCashSessionBar({
       {modal === 'close' ? (
         <ModalShell
           eyebrow="Quỹ · theo ca"
-          title={canCloseForeign ? `Đóng quỹ «${previousLabel}» (QL)` : 'Đóng quỹ'}
+          title={canCloseForeign ? `Đóng quỹ «${previousLabel}» giúp` : 'Đóng quỹ'}
           subtitle={
             canCloseForeign
-              ? `Đóng hộ quỹ do ${openerName} mở. Ước tính: ${formatVnd(expected)}`
+              ? `Quản lý đóng quỹ do ${openerName} mở. Ước tính: ${formatVnd(expected)}`
               : `Đếm tiền rồi đóng quỹ. Ước tính: ${formatVnd(expected)}`
           }
           onClose={() => setModal(null)}
@@ -438,9 +441,10 @@ export default function PosCashSessionBar({
               </button>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || closeBlockedByNote}
                 onClick={handleClose}
-                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                title={closeBlockedByNote ? 'Nhập lý do lệch trước khi đóng quỹ' : undefined}
               >
                 {busy ? 'Đang đóng…' : 'Xác nhận đóng quỹ'}
               </button>
@@ -483,14 +487,21 @@ export default function PosCashSessionBar({
             Chênh lệch: {formatVnd(variancePreview)}
           </p>
           <label className="mt-3 block text-xs font-semibold uppercase text-slate-500">
-            Lý do lệch (nếu có)
+            {needsVarianceNote ? 'Lý do lệch (bắt buộc)' : 'Lý do lệch (nếu có)'}
           </label>
           <input
-            className="mt-1 w-full rounded-xl border border-[#c1c9c0] px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
+            className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-[#356647] ${
+              closeBlockedByNote ? 'border-amber-400 bg-amber-50/40' : 'border-[#c1c9c0]'
+            }`}
             value={varianceNote}
             onChange={(e) => setVarianceNote(e.target.value)}
-            placeholder="Bắt buộc khi lệch ≥ 1.000 đ"
+            placeholder={needsVarianceNote ? 'Bắt buộc — lệch ≥ 1.000 đ' : 'Không bắt buộc khi khớp hoặc lệch < 1.000 đ'}
           />
+          {closeBlockedByNote ? (
+            <p className="mt-1.5 text-xs font-semibold text-amber-800">
+              Có chênh lệch quỹ — nhập lý do để mở nút đóng.
+            </p>
+          ) : null}
         </ModalShell>
       ) : null}
     </>
@@ -509,7 +520,8 @@ export function assertCashSessionOpenForPayment(shelfOnDuty) {
     showError('Quỹ đang đóng — bấm «Mở quỹ» trên thanh POS trước khi bán.')
     return false
   }
-  if (session.requiresCloseForNewShift || session.canCloseSession === false) {
+  // Chỉ chặn Sale trên quỹ người khác; Manager được bán trên quỹ đang mở.
+  if (session.canCloseSession === false) {
     const label = session.previousShiftLabel || session.shiftLabel || 'quỹ đang mở'
     const opener = session.openedByName || 'Sale ca trước'
     showError(
