@@ -13,7 +13,8 @@ import {
   applyPromotionPreview,
   fetchAvailablePromotions,
 } from '../../pos/services/posApi.js'
-import { formatVnd } from '../utils/orderDisplay.js'
+import { formatVnd, requiresShippingAddress } from '../utils/orderDisplay.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 
 function parseMoneyInput(value) {
   const digits = String(value).replace(/\D/g, '')
@@ -317,6 +318,11 @@ function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSavin
       manual = discountResult.orderDiscountAmountFixed > 0
         ? discountResult.orderDiscountAmountFixed
         : Math.round((orderSubtotal * (discountResult.orderDiscountPercent || 0)) / 100)
+    }
+
+    if (requiresShippingAddress(order.orderChannel) && !isUsableShippingAddress(shippingAddress)) {
+      showError('Đơn giao hàng/COD cần địa chỉ giao hàng hợp lệ (không dùng placeholder).')
+      return
     }
 
     await onSave({

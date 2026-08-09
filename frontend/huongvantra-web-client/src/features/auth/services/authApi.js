@@ -38,7 +38,7 @@ const ROLE_MODULE_MAP = {
   salecod: ['pos', 'cod_ops', 'customers', 'dashboard'],
   // Legacy single Sale → quầy (không COD ops).
   sale: ['pos', 'orders', 'customers', 'dashboard'],
-  warehouse: ['products', 'product_creation_requests', 'stock_adjustment_ops', 'stock_transfer_ops', 'inventory', 'inventory_statistics', 'warehouse_daily_report'],
+  warehouse: ['products', 'product_creation_requests', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'inventory', 'inventory_statistics', 'warehouse_daily_report'],
   accountant: [
     'orders',
     'customers',

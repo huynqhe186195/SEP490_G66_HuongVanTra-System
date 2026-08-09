@@ -1139,6 +1139,7 @@ public class OrderLogic(
             throw new OrderValidationException("Tổng giảm giá (thủ công + khuyến mãi) không được lớn hơn tạm tính.");
 
         order.ShippingAddress = req.ShippingAddress?.Trim();
+        OrderInputValidator.ValidateShippingAddressForChannel(order.OrderChannel, order.ShippingAddress);
         order.Note = req.Note?.Trim();
         order.DiscountAmount = totalDiscount;
         order.PromotionId = promotionDiscount.PromotionId;

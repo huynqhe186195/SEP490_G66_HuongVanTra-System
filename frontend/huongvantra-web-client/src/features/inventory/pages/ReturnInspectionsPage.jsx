@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
+import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { canAccessPath } from '../../../app/navigation.js'
 import { canInspectReturn } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -117,7 +120,9 @@ function InspectModal({ inspection, onClose, onDone }) {
 }
 
 function ReturnInspectionsPage() {
-  const canInspect = canInspectReturn(loadAuthSession())
+  const session = loadAuthSession()
+  const canInspect = canInspectReturn(session)
+  const canOpenOrders = canAccessPath(session, '/orders')
   const [activeTab, setActiveTab] = useState('pending')
   const [searchValue, setSearchValue] = useState('')
   const [rows, setRows] = useState([])
@@ -131,6 +136,35 @@ function ReturnInspectionsPage() {
   }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [snapshotCounts, setSnapshotCounts] = useState({
+    pending: 0,
+    restock: 0,
+    quarantined: 0,
+    all: 0,
+  })
+
+  const loadSnapshotCounts = useCallback(async () => {
+    try {
+      const [pending, restock, quarantined, all] = await Promise.all([
+        fetchReturnInspections({ disposition: 'Pending', page: 1, pageSize: 1 }),
+        fetchReturnInspections({ disposition: 'RestockApproved', page: 1, pageSize: 1 }),
+        fetchReturnInspections({ disposition: 'Quarantined', page: 1, pageSize: 1 }),
+        fetchReturnInspections({ page: 1, pageSize: 1 }),
+      ])
+      setSnapshotCounts({
+        pending: pending.totalCount,
+        restock: restock.totalCount,
+        quarantined: quarantined.totalCount,
+        all: all.totalCount,
+      })
+    } catch {
+      setSnapshotCounts({ pending: 0, restock: 0, quarantined: 0, all: 0 })
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSnapshotCounts()
+  }, [loadSnapshotCounts])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -163,6 +197,70 @@ function ReturnInspectionsPage() {
     [rows],
   )
 
+  const selectTab = (key) => {
+    setActiveTab(key)
+    setPage(1)
+  }
+
+  const snapshotItems = useMemo(
+    () => [
+      {
+        id: 'pending',
+        label: 'Chờ kiểm tra',
+        value: snapshotCounts.pending,
+        warn: snapshotCounts.pending > 0,
+        active: activeTab === 'pending',
+        onClick: () => selectTab('pending'),
+      },
+      {
+        id: 'restock',
+        label: 'Duyệt nhập lại',
+        value: snapshotCounts.restock,
+        active: activeTab === 'restock',
+        onClick: () => selectTab('restock'),
+      },
+      {
+        id: 'quarantined',
+        label: 'Kiểm dịch',
+        value: snapshotCounts.quarantined,
+        active: activeTab === 'quarantined',
+        onClick: () => selectTab('quarantined'),
+      },
+      {
+        id: 'all',
+        label: 'Tất cả',
+        value: snapshotCounts.all,
+        active: activeTab === 'all',
+        onClick: () => selectTab('all'),
+      },
+    ],
+    [snapshotCounts, activeTab],
+  )
+
+  const actionItems = useMemo(
+    () => [
+      canInspect && {
+        id: 'inspect-pending',
+        title: 'Kiểm tra hàng trả chờ xử lý',
+        hint: 'Quyết định nhập lại / kiểm dịch / tiêu hủy',
+        icon: 'fact_check',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-700',
+        count: snapshotCounts.pending,
+        onClick: () => selectTab('pending'),
+      },
+      {
+        id: 'view-returns',
+        title: 'Xem trang trả hàng',
+        hint: 'Danh sách yêu cầu trả / đổi hàng của khách',
+        icon: 'undo',
+        alwaysShow: true,
+        to: '/inventory/returns',
+      },
+    ].filter(Boolean),
+    [canInspect, snapshotCounts.pending],
+  )
+
   return (
     <PageShell>
       <PageHeader
@@ -181,15 +279,16 @@ function ReturnInspectionsPage() {
         }}
       />
 
+      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
+
+      <OpsActionQueue items={actionItems} className="mb-3" />
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
-            onClick={() => {
-              setActiveTab(tab.key)
-              setPage(1)
-            }}
+            onClick={() => selectTab(tab.key)}
             className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
@@ -242,7 +341,7 @@ function ReturnInspectionsPage() {
                       <tr key={row.id} className="transition-colors hover:bg-[#fbf9f1]/30">
                         <td className="px-8 py-5">
                           <p className="font-bold text-slate-700">{row.returnCode || '—'}</p>
-                          {row.orderId ? (
+                          {row.orderId && canOpenOrders ? (
                             <Link
                               className="text-xs text-slate-500 hover:text-[#538463] hover:underline"
                               to={`/orders/${row.orderId}`}
@@ -323,6 +422,7 @@ function ReturnInspectionsPage() {
           onDone={() => {
             setSelected(null)
             loadData()
+            loadSnapshotCounts()
           }}
         />
       ) : null}

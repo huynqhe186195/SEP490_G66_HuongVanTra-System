@@ -20,6 +20,7 @@ import {
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { formatVietnamDate, formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import { createCustomerForOrder, fetchCustomerByPhone, fetchCustomerOpenDebts } from '../../customers/services/customersApi.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
 import {
   clampDebtSettlement,
@@ -1037,23 +1038,20 @@ function PosPage() {
                         address: String(row.address || '').trim(),
                         label: String(row.label || row.address || '').trim(),
                     }))
-                    .filter((row) => row.address);
+                    .filter((row) => isUsableShippingAddress(row.address));
                 setSavedShippingAddresses(addresses);
-
-                const current = shippingAddress?.trim();
-                if (current && addresses.some((addr) => addr.address === current)) {
-                    setUseCustomShippingAddress(false);
-                    return;
-                }
 
                 if (addresses.length > 0) {
                     setUseCustomShippingAddress(false);
+                    const current = shippingAddress?.trim();
+                    if (current && addresses.some((addr) => addr.address === current)) {
+                        return;
+                    }
                     updateActiveSession({ shippingAddress: addresses[0].address });
                 } else {
-                    setUseCustomShippingAddress(true);
-                    if (!current) {
-                        updateActiveSession({ shippingAddress: "" });
-                    }
+                    // Không giữ địa chỉ stale từ khách/tab trước — COD bắt buộc địa chỉ đã lưu.
+                    setUseCustomShippingAddress(false);
+                    updateActiveSession({ shippingAddress: '' });
                 }
             })
             .catch((error) => {
@@ -1084,7 +1082,7 @@ function PosPage() {
                         address: String(row.address || '').trim(),
                         label: String(row.label || row.address || '').trim(),
                     }))
-                    .filter((row) => row.address);
+                    .filter((row) => isUsableShippingAddress(row.address));
                 setSavedShippingAddresses(addresses);
                 const prefer = String(preferredAddress || '').trim();
                 if (prefer && addresses.some((row) => row.address === prefer)) {
@@ -1567,11 +1565,15 @@ function PosPage() {
     const hasUnavailableItems = cartItems.some((item) => item.isUnavailable);
     const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
-    const hasShippingAddress = Boolean(shippingAddress?.trim());
+    const hasShippingAddress = isUsableShippingAddress(shippingAddress);
+    // COD: chỉ chấp nhận địa chỉ đã lưu trên hồ sơ KH (không dùng địa chỉ gõ tạm / stale / placeholder).
+    const hasSavedShippingAddress = savedShippingAddresses.some(
+        (row) => String(typeof row === 'string' ? row : row.address || '').trim() === shippingAddress?.trim(),
+    ) && hasShippingAddress;
     // Khách DN chỉ bán qua hợp đồng; state cũ khôi phục từ workspace storage vẫn phải bị chặn.
     const hasCorporateCustomer = isCorporateCustomerType(selectedCustomer?.customerType);
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
-    // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
+    // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ đã lưu.
     const canPayCash = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway);
     const canPayTransfer = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway) && total > 0;
     const canPayTakeaway = hasCartItems
@@ -1580,6 +1582,8 @@ function PosPage() {
         && !hasPendingQrOrder
         && hasCustomerSelected
         && hasShippingAddress
+        && hasSavedShippingAddress
+        && !isLoadingShippingAddresses
         && (isTransferPayment ? total > 0 : true);
     // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = !hasCorporateCustomer && (isTakeaway
@@ -1961,8 +1965,15 @@ function PosPage() {
 
     const handleTakeawayPayment = async (debtSettlement = null, idempotencyKey) => {
         const address = shippingAddress?.trim();
-        if (!address) {
-            showError("Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.");
+        if (!isUsableShippingAddress(address) || !hasSavedShippingAddress) {
+            showError("Vui lòng chọn địa chỉ giao hàng đã lưu cho đơn COD.");
+            return;
+        }
+        const addressSaved = savedShippingAddresses.some(
+            (row) => String(typeof row === 'string' ? row : row.address || '').trim() === address,
+        );
+        if (!addressSaved) {
+            showError("Khách chưa có địa chỉ đã lưu. Vui lòng thêm địa chỉ trước khi tạo đơn COD.");
             return;
         }
 
@@ -2288,8 +2299,12 @@ function PosPage() {
                 return;
             }
             if (!canPay) {
-                if (!hasShippingAddress) {
-                    showError("Vui lòng nhập địa chỉ giao hàng.");
+                if (!hasShippingAddress || !hasSavedShippingAddress) {
+                    showError(
+                        savedShippingAddresses.length === 0
+                            ? "Khách chưa có địa chỉ đã lưu. Vui lòng thêm địa chỉ trước khi tạo đơn COD."
+                            : "Vui lòng chọn địa chỉ giao hàng.",
+                    );
                 } else if (isTransferPayment && total <= 0) {
                     showError("Đơn 0 đ không dùng chuyển khoản — chọn COD.");
                 }

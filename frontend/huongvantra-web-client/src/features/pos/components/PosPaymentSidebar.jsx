@@ -205,7 +205,11 @@ export default function PosPaymentSidebar({
                   Địa chỉ giao hàng
                 </label>
                 <div className="flex items-center gap-2">
-                  {selectedCustomer?.customerId && typeof onAddShippingAddress === 'function' ? (
+                  {/* Chỉ hiện khi đã có địa chỉ — khi trống dùng CTA trong khối cảnh báo bên dưới. */}
+                  {selectedCustomer?.customerId
+                    && !isLoadingShippingAddresses
+                    && savedShippingAddresses.length > 0
+                    && typeof onAddShippingAddress === 'function' ? (
                     <button
                       type="button"
                       onClick={onAddShippingAddress}
@@ -238,7 +242,7 @@ export default function PosPaymentSidebar({
                 <select
                   id="sidebar-shipping-address-select"
                   className="mb-2 w-full rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                  value={useCustomShippingAddress ? '__custom__' : shippingAddress}
+                  value={shippingAddress}
                   onChange={(event) => onSavedShippingAddressChange(event.target.value)}
                 >
                   {savedShippingAddresses.map((addr) => {
@@ -250,44 +254,29 @@ export default function PosPaymentSidebar({
                       </option>
                     )
                   })}
-                  <option value="__custom__">Nhập địa chỉ khác...</option>
                 </select>
               ) : null}
               {selectedCustomer?.customerId
                 && !isLoadingShippingAddresses
                 && savedShippingAddresses.length === 0 ? (
-                <p className="mb-2 rounded-lg border border-dashed border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-xs text-[#717971]">
-                  Khách chưa có địa chỉ đã lưu.{' '}
+                <p className="mb-2 rounded-lg border border-dashed border-[#ba1a1a]/40 bg-[#fff5f5] px-3 py-2 text-xs text-[#ba1a1a]">
+                  Khách chưa có địa chỉ đã lưu — không tạo được đơn COD.{' '}
                   {typeof onAddShippingAddress === 'function' ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={onAddShippingAddress}
-                        className="font-semibold text-[#356647] underline underline-offset-2"
-                      >
-                        Thêm địa chỉ ngay
-                      </button>
-                      {' '}hoặc nhập bên dưới cho đơn này.
-                    </>
-                  ) : (
-                    'Nhập bên dưới cho đơn này.'
-                  )}
+                    <button
+                      type="button"
+                      onClick={onAddShippingAddress}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Thêm địa chỉ ngay
+                    </button>
+                  ) : null}
                 </p>
               ) : null}
               {selectedCustomer?.customerId
-                && (useCustomShippingAddress || savedShippingAddresses.length === 0)
+                && savedShippingAddresses.length > 0
+                && !hasShippingAddress
                 && !isLoadingShippingAddresses ? (
-                <textarea
-                  id="sidebar-shipping-address"
-                  rows={3}
-                  className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                  placeholder="Số nhà, phường, quận, tỉnh..."
-                  value={shippingAddress}
-                  onChange={(event) => onShippingAddressChange(event.target.value)}
-                />
-              ) : null}
-              {selectedCustomer?.customerId && !hasShippingAddress && !isLoadingShippingAddresses ? (
-                <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn hoặc nhập địa chỉ giao.</p>
+                <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn địa chỉ giao.</p>
               ) : null}
             </div>
           ) : null}
