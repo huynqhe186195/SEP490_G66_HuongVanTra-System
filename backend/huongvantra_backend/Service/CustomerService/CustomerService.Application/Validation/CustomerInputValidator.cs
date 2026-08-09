@@ -32,7 +32,15 @@ public static class CustomerInputValidator
         int? tierId,
         Guid? assignedSaleId,
         CustomerSource? source,
-        string? department)
+        string? department,
+        string? registeredAddress = null,
+        string? legalRepresentativeName = null,
+        string? legalRepresentativePosition = null,
+        string? legalRepresentativeIdNumber = null,
+        string? legalRepresentativeIdIssuePlace = null,
+        DateOnly? legalRepresentativeIdIssueDate = null,
+        string? bankAccountNumber = null,
+        string? bankName = null)
     {
         var errors = new List<string>();
         var isCorporate = customerGroup == CustomerGroup.DoanhNghiep;
@@ -99,6 +107,48 @@ public static class CustomerInputValidator
         if (source.HasValue && !Enum.IsDefined(typeof(CustomerSource), source.Value))
             errors.Add("Nguồn khách hàng không hợp lệ.");
 
+        var normalizedRegisteredAddress = registeredAddress?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedRegisteredAddress))
+            normalizedRegisteredAddress = null;
+        else if (normalizedRegisteredAddress.Length > 255)
+            errors.Add("Địa chỉ trụ sở chính tối đa 255 ký tự.");
+
+        var normalizedLegalRepName = legalRepresentativeName?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLegalRepName))
+            normalizedLegalRepName = null;
+        else if (normalizedLegalRepName.Length > 100)
+            errors.Add("Tên đại diện theo pháp luật tối đa 100 ký tự.");
+
+        var normalizedLegalRepPosition = legalRepresentativePosition?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLegalRepPosition))
+            normalizedLegalRepPosition = null;
+        else if (normalizedLegalRepPosition.Length > 100)
+            errors.Add("Chức vụ đại diện theo pháp luật tối đa 100 ký tự.");
+
+        var normalizedLegalRepIdNumber = legalRepresentativeIdNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLegalRepIdNumber))
+            normalizedLegalRepIdNumber = null;
+        else if (normalizedLegalRepIdNumber.Length > 50)
+            errors.Add("Số CMND/CCCD tối đa 50 ký tự.");
+
+        var normalizedLegalRepIdIssuePlace = legalRepresentativeIdIssuePlace?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLegalRepIdIssuePlace))
+            normalizedLegalRepIdIssuePlace = null;
+        else if (normalizedLegalRepIdIssuePlace.Length > 100)
+            errors.Add("Nơi cấp CMND/CCCD tối đa 100 ký tự.");
+
+        var normalizedBankAccountNumber = bankAccountNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedBankAccountNumber))
+            normalizedBankAccountNumber = null;
+        else if (normalizedBankAccountNumber.Length > 50)
+            errors.Add("Số tài khoản ngân hàng tối đa 50 ký tự.");
+
+        var normalizedBankName = bankName?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedBankName))
+            normalizedBankName = null;
+        else if (normalizedBankName.Length > 150)
+            errors.Add("Tên ngân hàng tối đa 150 ký tự.");
+
         if (errors.Count > 0)
             throw new CustomerValidationException(errors);
 
@@ -112,7 +162,15 @@ public static class CustomerInputValidator
             tierId,
             assignedSaleId,
             source,
-            normalizedDepartment);
+            normalizedDepartment,
+            normalizedRegisteredAddress,
+            normalizedLegalRepName,
+            normalizedLegalRepPosition,
+            normalizedLegalRepIdNumber,
+            normalizedLegalRepIdIssuePlace,
+            legalRepresentativeIdIssueDate,
+            normalizedBankAccountNumber,
+            normalizedBankName);
     }
 }
 
@@ -126,4 +184,12 @@ public record ValidatedCustomerInput(
     int? TierId,
     Guid? AssignedSaleId,
     CustomerSource? Source,
-    string? Department);
+    string? Department,
+    string? RegisteredAddress = null,
+    string? LegalRepresentativeName = null,
+    string? LegalRepresentativePosition = null,
+    string? LegalRepresentativeIdNumber = null,
+    string? LegalRepresentativeIdIssuePlace = null,
+    DateOnly? LegalRepresentativeIdIssueDate = null,
+    string? BankAccountNumber = null,
+    string? BankName = null);

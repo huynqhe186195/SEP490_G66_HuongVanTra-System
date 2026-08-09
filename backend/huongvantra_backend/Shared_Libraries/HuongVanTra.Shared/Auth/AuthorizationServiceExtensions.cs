@@ -69,6 +69,13 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.ManageCatalog,
                     PermissionNames.ViewCost)));
 
+            // Lập hợp đồng B2B cần thấy cả nguyên liệu/bao bì — không phụ thuộc role Thủ kho.
+            options.AddPolicy(PermissionNames.ContractCatalogAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageCorporateCustomer,
+                    PermissionNames.CreateB2BOrder,
+                    PermissionNames.ApproveContract)));
+
             options.AddPolicy(PermissionNames.WarehouseOrManagerOps, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.OperateWarehouse,

@@ -54,6 +54,33 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetOrderCatalogBySkuIdsAsync(skuIds, ct));
 
     /// <summary>
+    /// Internal catalog for DocumentService contract line items (SkuCode, ProductName, UnitName, RetailPrice).
+    /// </summary>
+    [HttpGet("contract-catalog")]
+    [AllowAnonymous]
+    [RequireInternalApiKey]
+    public async Task<IActionResult> GetContractCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetContractCatalogBySkuIdsAsync(skuIds, ct));
+
+    /// <summary>
+    /// Live SKU search for lập hợp đồng B2B (ContractFormPage). Always uses Warehouse scope so
+    /// nguyên liệu/bao bì are searchable too — B2B contracts can sell raw materials wholesale.
+    /// Independent from GetCatalogViewScope() (role "Warehouse") since Kế toán/Manager create contracts.
+    /// </summary>
+    [HttpGet("contract-search")]
+    [Authorize(Policy = PermissionNames.ContractCatalogAccess)]
+    public async Task<IActionResult> ContractSearch(
+        [FromQuery] string? search,
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20) =>
+        Ok(await _skuLogic.GetPagedAsync(
+            new GetProductSkusRequest(search, null, isActive, page, pageSize),
+            CatalogViewScope.Warehouse));
+
+    /// <summary>
     /// Internal catalog for InventoryService Supplier Receipt validation.
     /// It intentionally contains SKU capability only and never resolves BOM.
     /// </summary>

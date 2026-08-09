@@ -28,7 +28,15 @@ public record CustomerResponse(
     CustomerSource? Source,
     string? Department,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? RegisteredAddress = null,
+    string? LegalRepresentativeName = null,
+    string? LegalRepresentativePosition = null,
+    string? LegalRepresentativeIdNumber = null,
+    string? LegalRepresentativeIdIssuePlace = null,
+    DateOnly? LegalRepresentativeIdIssueDate = null,
+    string? BankAccountNumber = null,
+    string? BankName = null
 );
 
 public record CheckoutCustomerSearchResponse(
@@ -59,7 +67,15 @@ public record CustomerDetailResponse(
     string? Department,
     IEnumerable<CustomerAddressResponse> Addresses,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? RegisteredAddress = null,
+    string? LegalRepresentativeName = null,
+    string? LegalRepresentativePosition = null,
+    string? LegalRepresentativeIdNumber = null,
+    string? LegalRepresentativeIdIssuePlace = null,
+    DateOnly? LegalRepresentativeIdIssueDate = null,
+    string? BankAccountNumber = null,
+    string? BankName = null
 );
 
 public record CustomerDebtTransactionResponse(

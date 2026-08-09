@@ -42,6 +42,14 @@ export function mapCustomer(item) {
     taxCode: item.taxCode ?? item.TaxCode ?? '',
     tier: item.tier ?? item.Tier ?? null,
     address: item.address ?? item.Address ?? '',
+    legalRepresentativeName: item.legalRepresentativeName ?? item.LegalRepresentativeName ?? '',
+    legalRepresentativePosition: item.legalRepresentativePosition ?? item.LegalRepresentativePosition ?? '',
+    legalRepresentativeIdNumber: item.legalRepresentativeIdNumber ?? item.LegalRepresentativeIdNumber ?? '',
+    legalRepresentativeIdIssuePlace: item.legalRepresentativeIdIssuePlace ?? item.LegalRepresentativeIdIssuePlace ?? '',
+    legalRepresentativeIdIssueDate: item.legalRepresentativeIdIssueDate ?? item.LegalRepresentativeIdIssueDate ?? '',
+    bankAccountNumber: item.bankAccountNumber ?? item.BankAccountNumber ?? '',
+    bankName: item.bankName ?? item.BankName ?? '',
+    registeredAddress: item.registeredAddress ?? item.RegisteredAddress ?? '',
   }
 }
 
@@ -336,6 +344,14 @@ export function buildCreateCustomerBody(payload) {
     assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
+    legalRepresentativeName: payload.legalRepresentativeName || null,
+    legalRepresentativePosition: payload.legalRepresentativePosition || null,
+    legalRepresentativeIdNumber: payload.legalRepresentativeIdNumber || null,
+    legalRepresentativeIdIssuePlace: payload.legalRepresentativeIdIssuePlace || null,
+    legalRepresentativeIdIssueDate: payload.legalRepresentativeIdIssueDate || null,
+    bankAccountNumber: payload.bankAccountNumber || null,
+    bankName: payload.bankName || null,
+    registeredAddress: payload.registeredAddress || null,
   }
 }
 
@@ -353,6 +369,14 @@ export function buildUpdateCustomerBody(payload) {
     assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
+    legalRepresentativeName: payload.legalRepresentativeName || null,
+    legalRepresentativePosition: payload.legalRepresentativePosition || null,
+    legalRepresentativeIdNumber: payload.legalRepresentativeIdNumber || null,
+    legalRepresentativeIdIssuePlace: payload.legalRepresentativeIdIssuePlace || null,
+    legalRepresentativeIdIssueDate: payload.legalRepresentativeIdIssueDate || null,
+    bankAccountNumber: payload.bankAccountNumber || null,
+    bankName: payload.bankName || null,
+    registeredAddress: payload.registeredAddress || null,
   }
 }
 

@@ -270,6 +270,35 @@ public class ProductSkuLogic(
             .ToListAsync(ct);
     }
 
+    public async Task<List<ProductSkuContractCatalogResponse>> GetContractCatalogBySkuIdsAsync(
+        List<Guid>? skuIds,
+        CancellationToken ct = default)
+    {
+        var targetIds = (skuIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToHashSet();
+        if (targetIds.Count == 0)
+            return [];
+
+        return await _db.ProductVariants
+            .AsNoTracking()
+            .Include(v => v.Product)
+            .Where(v =>
+                targetIds.Contains(v.Id) &&
+                !v.IsDeleted &&
+                !v.Product.IsDeleted &&
+                v.IsActive &&
+                v.Product.IsActive)
+            .Select(v => new ProductSkuContractCatalogResponse(
+                v.Id,
+                v.SkuCode,
+                v.Product.Name,
+                v.UnitName,
+                v.RetailPrice))
+            .ToListAsync(ct);
+    }
+
     public async Task<List<ProductSkuAccountingResponse>> GetAccountingCostProfitAsync(
         CancellationToken ct = default)
     {

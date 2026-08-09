@@ -17,6 +17,14 @@ public class Customer : BaseEntity
     public Guid? AssignedSaleId { get; set; }
     public CustomerSource? Source { get; set; }
     public string? Department { get; set; }
+    public string? RegisteredAddress { get; set; }
+    public string? LegalRepresentativeName { get; set; }
+    public string? LegalRepresentativePosition { get; set; }
+    public string? LegalRepresentativeIdNumber { get; set; }
+    public string? LegalRepresentativeIdIssuePlace { get; set; }
+    public DateOnly? LegalRepresentativeIdIssueDate { get; set; }
+    public string? BankAccountNumber { get; set; }
+    public string? BankName { get; set; }
 
     public CustomerTier? Tier { get; set; }
     public ICollection<CustomerAddress> Addresses { get; set; } = new List<CustomerAddress>();

@@ -1,4 +1,5 @@
 using DocumentService.Application.DTOs.Requests;
+using DocumentService.Application.Interfaces;
 using DocumentService.Application.UseCases;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -12,8 +13,18 @@ namespace DocumentService.WebAPI.Controllers;
 public class ContractsController : ControllerBase
 {
     private readonly ContractLogic _logic;
+    private readonly IContractDocumentGenerator _docxGen;
+    private readonly IContractDocumentGenerator _pdfGen;
 
-    public ContractsController(ContractLogic logic) => _logic = logic;
+    public ContractsController(
+        ContractLogic logic,
+        [FromKeyedServices("docx")] IContractDocumentGenerator docxGen,
+        [FromKeyedServices("pdf")] IContractDocumentGenerator pdfGen)
+    {
+        _logic = logic;
+        _docxGen = docxGen;
+        _pdfGen = pdfGen;
+    }
 
     private DocumentAccessContext AccessContext() => new(
         User.GetUserId(),
@@ -47,6 +58,22 @@ public class ContractsController : ControllerBase
     {
         var result = await _logic.GetActiveForCustomerAsync(customerId, ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{id:guid}/export-docx")]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    public async Task<IActionResult> ExportDocx(Guid id, CancellationToken ct = default)
+    {
+        var (data, contentType, fileName) = await _logic.ExportAsync(id, "docx", AccessContext(), _docxGen, _pdfGen, ct);
+        return File(data, contentType, fileName);
+    }
+
+    [HttpGet("{id:guid}/export-pdf")]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    public async Task<IActionResult> ExportPdf(Guid id, CancellationToken ct = default)
+    {
+        var (data, contentType, fileName) = await _logic.ExportAsync(id, "pdf", AccessContext(), _docxGen, _pdfGen, ct);
+        return File(data, contentType, fileName);
     }
 
     [HttpPost]
@@ -85,3 +112,4 @@ public class ContractsController : ControllerBase
         return Ok(result);
     }
 }
+

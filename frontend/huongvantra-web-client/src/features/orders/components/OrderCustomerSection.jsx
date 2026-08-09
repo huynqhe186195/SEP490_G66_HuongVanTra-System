@@ -23,6 +23,7 @@ function OrderCustomerSection({
   customerSnapshotName,
   shippingAddress,
   requireShippingAddress = false,
+  customerTypeFilter = null,
   onChange,
 }) {
   const [mode, setMode] = useState(customerId ? 'existing' : 'existing')
@@ -55,7 +56,7 @@ function OrderCustomerSection({
     const timer = window.setTimeout(async () => {
       setIsSearching(true)
       try {
-        const items = await fetchCustomers({ keyword: searchValue.trim() })
+        const items = await fetchCustomers({ keyword: searchValue.trim(), customerType: customerTypeFilter || undefined })
         if (mounted) setSearchResults(items.slice(0, 12))
       } catch {
         if (mounted) setSearchResults([])
@@ -68,7 +69,7 @@ function OrderCustomerSection({
       mounted = false
       window.clearTimeout(timer)
     }
-  }, [mode, searchValue, selectedCustomer])
+  }, [mode, searchValue, selectedCustomer, customerTypeFilter])
 
   useEffect(() => {
     if (mode !== 'existing' || !selectedCustomer?.customerId) {

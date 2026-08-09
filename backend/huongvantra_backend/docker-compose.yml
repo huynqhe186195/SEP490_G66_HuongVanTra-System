@@ -255,6 +255,8 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_document_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
       CustomerService__BaseUrl: http://customer-service:8080
+      ProductService__BaseUrl: http://product-service:8080
+      InternalApi__Key: ${INTERNAL_API_KEY:-hvt-internal-secret-key}
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
@@ -271,6 +273,8 @@ services:
       rabbitmq:
         condition: service_healthy
       customer-service:
+        condition: service_healthy
+      product-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]

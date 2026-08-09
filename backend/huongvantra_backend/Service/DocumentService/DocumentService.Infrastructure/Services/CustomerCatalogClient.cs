@@ -20,7 +20,17 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
                     response.Id,
                     response.FullName ?? string.Empty,
                     response.CustomerCode ?? string.Empty,
-                    response.CustomerGroup ?? string.Empty);
+                    response.CustomerGroup ?? string.Empty,
+                    response.TaxCode,
+                    response.RegisteredAddress,
+                    response.LegalRepresentativeName,
+                    response.LegalRepresentativePosition,
+                    response.LegalRepresentativeIdNumber,
+                    response.LegalRepresentativeIdIssuePlace,
+                    response.LegalRepresentativeIdIssueDate?.ToString("dd/MM/yyyy"),
+                    response.BankAccountNumber,
+                    response.BankName,
+                    response.PhoneNumber);
         }
         catch (Exception ex) when (
             ex is HttpRequestException or NotSupportedException ||
@@ -35,5 +45,16 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
         Guid Id,
         string? FullName,
         string? CustomerCode,
-        string? CustomerGroup);
+        string? CustomerGroup,
+        string? PhoneNumber = null,
+        string? TaxCode = null,
+        string? RegisteredAddress = null,
+        string? LegalRepresentativeName = null,
+        string? LegalRepresentativePosition = null,
+        string? LegalRepresentativeIdNumber = null,
+        string? LegalRepresentativeIdIssuePlace = null,
+        DateOnly? LegalRepresentativeIdIssueDate = null,
+        string? BankAccountNumber = null,
+        string? BankName = null);
 }
+

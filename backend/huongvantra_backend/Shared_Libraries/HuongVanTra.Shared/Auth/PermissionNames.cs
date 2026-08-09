@@ -45,6 +45,9 @@ public static class PermissionNames
     public const string StocktakeCreateAccess = "STOCKTAKE_CREATE_ACCESS";
 
     public const string ViewCatalogAccess = "VIEW_CATALOG_ACCESS";
+
+    /// <summary>Tìm SKU để lập hợp đồng B2B — luôn thấy cả nguyên liệu/bao bì (scope Kho), không phụ thuộc role Thủ kho.</summary>
+    public const string ContractCatalogAccess = "CONTRACT_CATALOG_ACCESS";
     public const string WarehouseOrManagerOps = "WAREHOUSE_OR_MANAGER_OPS";
     public const string MaterialsDeductAccess = "MATERIALS_DEDUCT_ACCESS";
     public const string CancelRetailPriceAccess = "CANCEL_RETAIL_PRICE_ACCESS";

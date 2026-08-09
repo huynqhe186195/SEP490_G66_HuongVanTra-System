@@ -8,6 +8,7 @@ public class DocumentDbContext : DbContext
     public DocumentDbContext(DbContextOptions<DocumentDbContext> options) : base(options) { }
 
     public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<ContractLineItem> ContractLineItems => Set<ContractLineItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

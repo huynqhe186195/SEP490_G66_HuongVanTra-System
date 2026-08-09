@@ -48,6 +48,17 @@ export async function fetchAllActiveSkus(pageSize = 100) {
   return items
 }
 
+/** SKU cho lập hợp đồng B2B — luôn scope Kho, thấy cả nguyên liệu/bao bì. */
+export async function fetchContractSkus(params = {}) {
+  const query = buildSkuQuery(params)
+  const data = await apiRequestAuth(`/api/v1/skus/contract-search?${query}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProductSku).filter(Boolean),
+  }
+}
+
 function mapAccountingCostProfitSku(item) {
   if (!item || typeof item !== 'object') return null
   return {

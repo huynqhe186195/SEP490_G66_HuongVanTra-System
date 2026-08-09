@@ -1,6 +1,7 @@
 using DocumentService.Application.DTOs.Requests;
 using DocumentService.Application.DTOs.Responses;
 using DocumentService.Application.Interfaces;
+using DocumentService.Application.Models;
 using DocumentService.Domain.Entities;
 using DocumentService.Domain.Enums;
 using DocumentService.Domain.Exceptions;
@@ -16,11 +17,19 @@ public class ContractLogic
 
     private readonly IContractRepository _contractRepo;
     private readonly ICustomerCatalogClient _customerClient;
+    private readonly IProductCatalogClient _productClient;
+    private readonly SellerProfileOptions _seller;
 
-    public ContractLogic(IContractRepository contractRepo, ICustomerCatalogClient customerClient)
+    public ContractLogic(
+        IContractRepository contractRepo,
+        ICustomerCatalogClient customerClient,
+        IProductCatalogClient productClient,
+        SellerProfileOptions seller)
     {
         _contractRepo = contractRepo;
         _customerClient = customerClient;
+        _productClient = productClient;
+        _seller = seller;
     }
 
     public async Task<ContractPagedResponse> GetPagedAsync(
@@ -79,6 +88,8 @@ public class ContractLogic
         if (!customer.IsDoanhNghiep)
             throw new ContractValidationException("Hợp đồng chỉ có thể được tạo cho khách doanh nghiệp.");
 
+        var lineItems = await ResolveLineItemsAsync(request.LineItems, ct);
+
         var code = await _contractRepo.GenerateNextContractCodeAsync(ct);
         var now = DateTime.UtcNow;
 
@@ -99,6 +110,11 @@ public class ContractLogic
             CreditLimit = request.CreditLimit,
             PaymentTermDays = request.PaymentTermDays,
             Notes = request.Notes?.Trim(),
+            SignedAtLocation = request.SignedAtLocation?.Trim(),
+            PaymentMethod = request.PaymentMethod?.Trim(),
+            DeliveryTerms = request.DeliveryTerms?.Trim(),
+            ShippingResponsibility = request.ShippingResponsibility?.Trim(),
+            LineItems = lineItems,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -121,6 +137,8 @@ public class ContractLogic
         ValidateContractFields(request.Title, request.EffectiveDate, request.ExpiryDate,
             request.DiscountPercent, request.CreditLimit, request.PaymentTermDays, request.Notes);
 
+        var lineItems = await ResolveLineItemsAsync(request.LineItems, ct);
+
         contract.Title = request.Title.Trim();
         contract.ContractType = request.ContractType;
         contract.EffectiveDate = request.EffectiveDate;
@@ -129,7 +147,18 @@ public class ContractLogic
         contract.CreditLimit = request.CreditLimit;
         contract.PaymentTermDays = request.PaymentTermDays;
         contract.Notes = request.Notes?.Trim();
+        contract.SignedAtLocation = request.SignedAtLocation?.Trim();
+        contract.PaymentMethod = request.PaymentMethod?.Trim();
+        contract.DeliveryTerms = request.DeliveryTerms?.Trim();
+        contract.ShippingResponsibility = request.ShippingResponsibility?.Trim();
         contract.UpdatedAt = DateTime.UtcNow;
+
+        if (request.LineItems is not null)
+        {
+            contract.LineItems.Clear();
+            foreach (var li in lineItems)
+                contract.LineItems.Add(li);
+        }
 
         _contractRepo.Update(contract);
         await _contractRepo.SaveChangesAsync(ct);
@@ -322,6 +351,69 @@ public class ContractLogic
         string.IsNullOrWhiteSpace(value) ? null
         : Enum.TryParse<ContractStatus>(value, ignoreCase: true, out var result) ? result : null;
 
+    public async Task<(byte[] Data, string ContentType, string FileName)> ExportAsync(
+        Guid id, string format, DocumentAccessContext access,
+        IContractDocumentGenerator docxGen, IContractDocumentGenerator pdfGen,
+        CancellationToken ct = default)
+    {
+        var contract = await _contractRepo.GetByIdAsync(id, ct)
+            ?? throw new ContractNotFoundException(id);
+
+        EnsureCanView(contract, access);
+
+        var customer = await _customerClient.GetCustomerAsync(contract.CustomerId, ct)
+            ?? throw new ContractValidationException("Không tìm thấy thông tin khách hàng.");
+
+        var data = new ContractDocumentData(contract, customer, _seller);
+
+        if (format.Equals("pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            var pdf = pdfGen.GeneratePdf(data);
+            return (pdf, "application/pdf", $"HopDong_{contract.ContractCode}.pdf");
+        }
+
+        var docx = await docxGen.GenerateDocxAsync(data, ct);
+        return (docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            $"HopDong_{contract.ContractCode}.docx");
+    }
+
+    private async Task<List<ContractLineItem>> ResolveLineItemsAsync(
+        List<ContractLineItemRequest>? requests, CancellationToken ct)
+    {
+        if (requests is null || requests.Count == 0)
+            return [];
+
+        if (requests.Any(r => r.Quantity <= 0))
+            throw new ContractValidationException("Số lượng mỗi dòng hàng phải lớn hơn 0.");
+        if (requests.Any(r => r.UnitPrice < 0))
+            throw new ContractValidationException("Đơn giá không được âm.");
+
+        var skuIds = requests.Select(r => r.SkuId).Distinct().ToList();
+        var skuMap = (await _productClient.GetSkusAsync(skuIds, ct))
+            .ToDictionary(s => s.SkuId);
+
+        var result = new List<ContractLineItem>();
+        for (int i = 0; i < requests.Count; i++)
+        {
+            var req = requests[i];
+            skuMap.TryGetValue(req.SkuId, out var sku);
+            result.Add(new ContractLineItem
+            {
+                Id = Guid.NewGuid(),
+                LineNumber = i + 1,
+                SkuId = req.SkuId,
+                SkuCode = sku?.SkuCode ?? req.SkuId.ToString(),
+                ProductName = sku?.ProductName ?? "—",
+                Unit = sku?.UnitName,
+                Quantity = req.Quantity,
+                UnitPrice = req.UnitPrice,
+                LineAmount = req.Quantity * req.UnitPrice,
+                Note = req.Note?.Trim()
+            });
+        }
+        return result;
+    }
+
     private static ContractResponse MapToResponse(Contract c) => new(
         c.Id,
         c.ContractCode,
@@ -342,5 +434,12 @@ public class ContractLogic
         c.SubmittedAt,
         c.ReviewedAt,
         c.CreatedAt,
-        c.UpdatedAt);
+        c.UpdatedAt,
+        c.SignedAtLocation,
+        c.PaymentMethod,
+        c.DeliveryTerms,
+        c.ShippingResponsibility,
+        c.LineItems.OrderBy(l => l.LineNumber).Select(l => new ContractLineItemResponse(
+            l.Id, l.LineNumber, l.SkuId, l.SkuCode, l.ProductName,
+            l.Unit, l.Quantity, l.UnitPrice, l.LineAmount, l.Note)).ToList());
 }

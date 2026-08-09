@@ -1,4 +1,5 @@
 using DocumentService.Application.Interfaces;
+using DocumentService.Application.Models;
 using DocumentService.Application.UseCases;
 using DocumentService.Infrastructure.Data;
 using DocumentService.Infrastructure.Repositories;
@@ -8,6 +9,7 @@ using HuongVanTra.Shared.Audit;
 using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +38,18 @@ builder.Services.AddScoped<IContractRepository, ContractRepository>();
 builder.Services.AddScoped<ContractLogic>();
 builder.Services.AddHostedService<DocumentService.WebAPI.Services.ContractExpiryHostedService>();
 
+builder.Services.Configure<SellerProfileOptions>(builder.Configuration.GetSection("SellerProfile"));
+builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractDocxGenerator>("docx");
+builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractPdfGenerator>("pdf");
+builder.Services.AddScoped<ContractLogic>(sp =>
+{
+    var repo = sp.GetRequiredService<IContractRepository>();
+    var customerClient = sp.GetRequiredService<ICustomerCatalogClient>();
+    var productClient = sp.GetRequiredService<IProductCatalogClient>();
+    var seller = sp.GetRequiredService<IOptions<SellerProfileOptions>>().Value;
+    return new ContractLogic(repo, customerClient, productClient, seller);
+});
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
@@ -43,6 +57,15 @@ builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(cl
     var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+
+builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    var internalKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalKey))
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalKey);
+});
 
 builder.Services.AddMassTransit(x =>
 {
