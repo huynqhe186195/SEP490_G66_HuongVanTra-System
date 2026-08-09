@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
+import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -39,7 +41,10 @@ function CodOrdersPage() {
   const activeView = searchParams.get('view') === 'report' ? 'report' : 'list'
   const canOpenGeneralOrders = canAccessModule(session, 'orders')
   const canOpenReturns = canAccessModule(session, 'pos') || canAccessModule(session, 'orders')
-  const [activeTab, setActiveTab] = useState('pending')
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(
+    LIST_TABS.some((t) => t.key === tabFromUrl) ? tabFromUrl : 'pending',
+  )
   const [searchValue, setSearchValue] = useState('')
   const [orders, setOrders] = useState([])
   const [counts, setCounts] = useState({ all: 0, pending: 0, overdue: 0, done: 0, cancelled: 0 })
@@ -104,38 +109,83 @@ function CodOrdersPage() {
     loadData()
   }, [loadData])
 
-  const listCards = useMemo(
+  useEffect(() => {
+    const urlTab = searchParams.get('tab')
+    if (urlTab && LIST_TABS.some((t) => t.key === urlTab) && urlTab !== activeTab) {
+      setActiveTab(urlTab)
+      setPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  const snapshotItems = useMemo(
     () => [
       {
-        key: 'all',
-        label: 'Tất cả',
-        value: counts.all,
-        note: 'Mọi đơn kênh COD',
-      },
-      {
-        key: 'pending',
+        id: 'pending',
         label: 'Chờ thu',
         value: counts.pending,
         note: 'Chưa xác nhận thu tiền',
+        active: activeTab === 'pending',
+        onClick: () => selectListTab('pending'),
       },
       {
-        key: 'overdue',
+        id: 'overdue',
         label: 'Quá hạn',
         value: counts.overdue,
         note: 'Chưa xử lý > 7 ngày',
         warn: counts.overdue > 0,
+        active: activeTab === 'overdue',
+        onClick: () => selectListTab('overdue'),
       },
       {
-        key: 'done',
+        id: 'done',
         label: 'Đã hoàn tất',
         value: counts.done,
         note: 'Đơn COD đã thu',
+        active: activeTab === 'done',
+        onClick: () => selectListTab('done'),
       },
       {
-        key: 'cancelled',
-        label: 'Đã hủy',
-        value: counts.cancelled,
-        note: 'Đơn COD đã hủy',
+        id: 'all',
+        label: 'Tất cả',
+        value: counts.all,
+        note: 'Mọi đơn kênh COD',
+        active: activeTab === 'all',
+        onClick: () => selectListTab('all'),
+      },
+    ],
+    [counts, activeTab],
+  )
+
+  const actionItems = useMemo(
+    () => [
+      {
+        id: 'cod-overdue',
+        title: 'COD quá hạn',
+        hint: 'Chưa xử lý hơn 7 ngày — ưu tiên thu/đối soát',
+        icon: 'warning',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-700',
+        count: counts.overdue,
+        onClick: () => selectListTab('overdue'),
+      },
+      {
+        id: 'cod-pending',
+        title: 'COD chờ thu',
+        hint: 'Đơn COD chưa xác nhận thu tiền',
+        icon: 'local_shipping',
+        iconBg: 'bg-orange-50',
+        iconColor: 'text-orange-600',
+        count: counts.pending,
+        onClick: () => selectListTab('pending'),
+      },
+      {
+        id: 'cod-report',
+        title: 'Xem báo cáo COD',
+        hint: 'Đối soát theo ca hoặc theo khoảng ngày',
+        icon: 'summarize',
+        alwaysShow: true,
+        onClick: () => setActiveView('report'),
       },
     ],
     [counts],
@@ -155,6 +205,10 @@ function CodOrdersPage() {
   const selectListTab = (key) => {
     setActiveTab(key)
     setPage(1)
+    const next = new URLSearchParams(searchParams)
+    if (key === 'pending') next.delete('tab')
+    else next.set('tab', key)
+    setSearchParams(next, { replace: true })
   }
 
   return (
@@ -204,31 +258,9 @@ function CodOrdersPage() {
         <CodShiftReportPanel searchValue={searchValue} />
       ) : (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {listCards.map((card) => {
-              const active = activeTab === card.key
-              return (
-                <button
-                  key={card.key}
-                  type="button"
-                  onClick={() => selectListTab(card.key)}
-                  className={`rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition ${
-                    active
-                      ? 'border-[#356647] ring-1 ring-[#356647]/30'
-                      : card.warn
-                        ? 'border-rose-200 hover:border-rose-300'
-                        : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{card.label}</p>
-                  <p className={`mt-1 text-xl font-bold tabular-nums ${card.warn ? 'text-rose-700' : 'text-slate-900'}`}>
-                    {card.value}
-                  </p>
-                  <p className="mt-0.5 truncate text-[11px] text-slate-500" title={card.note}>{card.note}</p>
-                </button>
-              )
-            })}
-          </div>
+          <OpsSnapshotStrip items={snapshotItems} />
+
+          <OpsActionQueue items={actionItems} />
 
           <StatusFilterChips
             options={listChips}

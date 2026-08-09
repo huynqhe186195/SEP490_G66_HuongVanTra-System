@@ -19,13 +19,17 @@ public record PosCashSessionResponse(
     decimal? Variance,
     string? VarianceNote,
     string? ClosedByName,
-    DateTime? ClosedAt);
+    DateTime? ClosedAt,
+    Guid? OpenedByUserId = null,
+    DateTime? ShiftEndsAtUtc = null);
 
 /// <summary>
-/// Phiên quỹ hiện tại. Khi RequiresCloseForNewShift = true, Session vẫn là quỹ Open
-/// của ca trước — phải đóng trước khi mở quỹ cho ca đang on-duty.
+/// RequiresCloseForNewShift: quỹ Open do người khác mở — Sale không đóng hộ.
+/// CanCloseSession: false với Sale ca sau; true với người mở / Manager.
 /// </summary>
 public record CurrentPosCashSessionResponse(
     PosCashSessionResponse? Session,
     bool RequiresCloseForNewShift = false,
-    string? PreviousShiftLabel = null);
+    string? PreviousShiftLabel = null,
+    bool CanCloseSession = true,
+    string? CloseBlockedMessage = null);

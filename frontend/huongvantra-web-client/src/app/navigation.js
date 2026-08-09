@@ -228,17 +228,11 @@ export const navigationItems = [
   },
   {
     label: 'Báo cáo',
-    path: '/reports',
+    path: '/reports/end-of-day',
     module: 'reports',
     icon: 'description',
-    roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
+    roles: ['admin', 'agencyManager', 'accountant'],
     children: [
-      {
-        label: 'Tổng quan báo cáo',
-        path: '/reports',
-        module: 'reports',
-        roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
-      },
       {
         label: 'Báo cáo cuối ngày',
         path: '/reports/end-of-day',
@@ -500,7 +494,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
-      ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
@@ -511,7 +504,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
-      ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
@@ -648,11 +640,13 @@ function groupAdminManagerSidebar(items, isAdmin) {
     })
   }
 
-  const reportsParent = byPath.get('/reports')
+  const reportsParent = byPath.get('/reports/end-of-day')
+    || byPath.get('/reports')
     || items.find((item) => item.module === 'reports' && item.children?.length)
   if (reportsParent) {
     consumed.add(reportsParent.path)
     for (const child of reportsParent.children || []) {
+      if (child.path === '/reports' || child.path === '/reports/') continue
       insightsChildren.push({
         label: child.label,
         path: child.path,
@@ -661,13 +655,8 @@ function groupAdminManagerSidebar(items, isAdmin) {
       })
     }
   } else {
-    for (const [path, label] of [
-      ['/reports', 'Tổng quan báo cáo'],
-      ['/reports/end-of-day', 'Báo cáo cuối ngày'],
-    ]) {
-      const leaf = takeNavLeaf(byPath, consumed, path, label)
-      if (leaf) insightsChildren.push(leaf)
-    }
+    const leaf = takeNavLeaf(byPath, consumed, '/reports/end-of-day', 'Báo cáo cuối ngày')
+    if (leaf) insightsChildren.push(leaf)
   }
 
   if (insightsChildren.length) {
@@ -833,11 +822,13 @@ function groupSalesAccountantInsights(items, session = null) {
     })
   }
 
-  const reports = byPath.get('/reports')
+  const reports = byPath.get('/reports/end-of-day')
+    || byPath.get('/reports')
     || items.find((item) => item.module === 'reports' && item.children?.length)
   if (reports) {
     consumed.add(reports.path)
     for (const child of reports.children || []) {
+      if (child.path === '/reports' || child.path === '/reports/') continue
       const isEndOfDay = child.path === '/reports/end-of-day' || child.path?.startsWith('/reports/end-of-day')
       // Sale POS / Sale COD: ẩn Báo cáo cuối ngày trong Thống kê & Báo cáo (chỉ Manager/Kế toán).
       if (isEndOfDay && (isSaleCodOnlySession(session) || isSalePosOnlySession(session))) {
@@ -1410,8 +1401,8 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'reports') {
-    if (target === '/reports') {
-      return path === '/reports'
+    if (target === '/reports' || target === '/reports/end-of-day') {
+      return path === '/reports' || path === '/reports/end-of-day' || path.startsWith('/reports/end-of-day/')
     }
     return path === target || path.startsWith(`${target}/`)
   }

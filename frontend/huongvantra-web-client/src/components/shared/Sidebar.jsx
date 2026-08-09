@@ -13,6 +13,8 @@ import {
   isNavigationItemActive,
 } from '../../app/navigation.js'
 import { showError } from '../../app/toast'
+import { confirmLeaveIfCashSessionOpen } from '../../features/pos/utils/confirmLeaveIfCashSessionOpen.js'
+
 function Sidebar({
   items,
   isLoading = false,
@@ -181,6 +183,9 @@ function Sidebar({
       window.location.replace('/login')
       return
     }
+
+    const allowed = await confirmLeaveIfCashSessionOpen()
+    if (!allowed) return
 
     setIsLoggingOut(true)
 

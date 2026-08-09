@@ -708,6 +708,9 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<DateTime?>("ShiftEndsAtUtc")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<Guid?>("ShiftSlotId")
                         .HasColumnType("char(36)");
 
@@ -729,6 +732,8 @@ namespace OrderService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OpenedByUserId");
+
+                    b.HasIndex("ShiftEndsAtUtc");
 
                     b.HasIndex("Status");
 

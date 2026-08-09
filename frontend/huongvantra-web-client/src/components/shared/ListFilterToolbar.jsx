@@ -4,6 +4,10 @@
 export const listFilterControlClass =
   'min-h-[32px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-[#356647] focus:ring-1 focus:ring-[#356647]/20'
 
+/** Native select: chừa chỗ mũi tên (forms plugin SVG). Không dùng appearance-auto — sẽ double arrow. */
+export const listFilterSelectClass =
+  `${listFilterControlClass} min-w-[8rem] pr-8`
+
 export default function ListFilterToolbar({ children, meta = null, className = '' }) {
   return (
     <div

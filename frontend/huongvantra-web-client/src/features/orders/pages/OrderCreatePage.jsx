@@ -21,6 +21,7 @@ import {
 import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
 import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
+import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 
 import { loadAuthSession } from '../../auth/services/authSession.js'
 
@@ -459,9 +460,9 @@ function OrderCreatePage() {
 
 
 
-    if (needsShippingAddress && !form.shippingAddress.trim()) {
+    if (needsShippingAddress && !isUsableShippingAddress(form.shippingAddress)) {
 
-      showError('Kênh online cần địa chỉ giao hàng.')
+      showError('Kênh online/COD cần địa chỉ giao hàng hợp lệ (không dùng placeholder).')
 
       return
 

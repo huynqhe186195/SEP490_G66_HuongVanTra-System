@@ -198,7 +198,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Policy = PermissionNames.EditCustomerProfile)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         await _logic.DeleteAsync(id, AccessContext(), ct);
@@ -206,7 +206,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Policy = PermissionNames.EditCustomerProfile)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.RestoreAsync(id, AccessContext(), ct);

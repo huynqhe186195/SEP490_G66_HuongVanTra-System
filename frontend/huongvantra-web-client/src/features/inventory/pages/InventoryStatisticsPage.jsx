@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -6,6 +6,8 @@ import {
 } from 'recharts'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
+import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
@@ -18,8 +20,15 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
 function InventoryStatisticsPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const section = searchParams.get('section') || 'overview'
+
+  const goSection = useCallback((nextSection) => {
+    const next = new URLSearchParams(searchParams)
+    if (nextSection === 'overview') next.delete('section')
+    else next.set('section', nextSection)
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const [stats, setStats] = useState(null)
   const [skuStocks, setSkuStocks] = useState([])
@@ -262,6 +271,115 @@ function InventoryStatisticsPage() {
     return alerts.slice(start, end)
   }, [alerts, page, pageSize])
 
+  const criticalAlertCount = useMemo(
+    () => alerts.filter((a) => a.severity === 'critical').length,
+    [alerts],
+  )
+
+  const overviewSnapshot = useMemo(() => {
+    if (!stats) return []
+    return [
+      {
+        id: 'store',
+        label: 'Tồn quầy',
+        value: stats.totalStoreQuantity ?? 0,
+        note: 'Tổng lượng trên Kệ',
+      },
+      {
+        id: 'warehouse',
+        label: 'Tồn kho',
+        value: stats.totalWarehouseQuantity ?? 0,
+        note: 'Tổng lượng trong Kho',
+      },
+      {
+        id: 'low-stock',
+        label: 'SKU sắp hết',
+        value: stats.lowStockSkuCount ?? 0,
+        note: 'Dưới ngưỡng tồn quầy',
+        warn: (stats.lowStockSkuCount ?? 0) > 0,
+        onClick: () => goSection('alerts'),
+      },
+      {
+        id: 'pending-deduct',
+        label: 'Chờ trừ kho',
+        value: stats.pendingDeductQueueCount ?? 0,
+        note: 'Yêu cầu đóng gói đang chờ',
+        warn: (stats.pendingDeductQueueCount ?? 0) > 0,
+      },
+    ]
+  }, [stats, goSection])
+
+  const overviewActions = useMemo(() => {
+    const items = []
+    if (alerts.length > 0) {
+      items.push({
+        id: 'view-alerts',
+        title: 'Xem cảnh báo hàng hóa',
+        hint: `${criticalAlertCount} mức nghiêm trọng · ${alerts.length} tổng cảnh báo`,
+        icon: 'warning',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-700',
+        count: alerts.length,
+        onClick: () => goSection('alerts'),
+      })
+    }
+    if ((stats?.pendingDeductQueueCount ?? 0) > 0) {
+      items.push({
+        id: 'stock-deduct',
+        title: 'Xử lý chờ đóng gói / trừ kho',
+        hint: 'Mở hàng đợi Thủ kho xác nhận',
+        icon: 'inventory',
+        count: stats.pendingDeductQueueCount,
+        to: '/orders/stock-deduct',
+      })
+    }
+    items.push({
+      id: 'stock-list',
+      title: 'Xem tồn SKU',
+      hint: 'Danh sách tồn quầy / kho chi tiết',
+      icon: 'shelves',
+      to: '/inventory',
+      alwaysShow: true,
+    })
+    return items
+  }, [alerts.length, criticalAlertCount, stats, goSection])
+
+  const alertsSnapshot = useMemo(() => [
+    {
+      id: 'alerts-all',
+      label: 'Tất cả cảnh báo',
+      value: alerts.length,
+      note: 'SKU / lô cần chú ý',
+      active: true,
+    },
+    {
+      id: 'alerts-critical',
+      label: 'Nghiêm trọng',
+      value: criticalAlertCount,
+      note: 'Hết hàng / hết hạn',
+      warn: criticalAlertCount > 0,
+    },
+  ], [alerts.length, criticalAlertCount])
+
+  const alertsActions = useMemo(() => [
+    {
+      id: 'back-overview',
+      title: 'Về tổng quan thống kê kho',
+      hint: 'KPI tồn + biểu đồ phân bổ',
+      icon: 'dashboard',
+      alwaysShow: true,
+      onClick: () => goSection('overview'),
+    },
+    {
+      id: 'stock-deduct-from-alerts',
+      title: 'Chờ đóng gói / trừ kho',
+      hint: 'Xử lý hàng đợi liên quan tồn',
+      icon: 'inventory',
+      to: '/orders/stock-deduct',
+      alwaysShow: true,
+    },
+  ], [goSection])
+
   return (
     <PageShell className="flex-1">
       <PageHeader
@@ -328,6 +446,9 @@ function InventoryStatisticsPage() {
               ))}
             </div>
           ) : section === 'alerts' ? (
+            <div className="space-y-3">
+              <OpsSnapshotStrip items={alertsSnapshot} />
+              <OpsActionQueue items={alertsActions} />
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
               <div className="border-b border-gray-100 px-6 py-5">
                 <h3 className="text-lg font-bold text-gray-800">Trạng thái hàng hoá</h3>
@@ -407,9 +528,13 @@ function InventoryStatisticsPage() {
                 />
               )}
             </div>
+            </div>
           ) : stats ? (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <OpsSnapshotStrip items={overviewSnapshot} />
+              <OpsActionQueue items={overviewActions} />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <StatCard
                   title="Tổng số lượng SKU"
                   value={stats.totalSkus}
@@ -417,34 +542,16 @@ function InventoryStatisticsPage() {
                   color="blue"
                 />
                 <StatCard
-                  title="Tổng lượng Tồn Quầy"
-                  value={stats.totalStoreQuantity}
-                  icon="storefront"
-                  color="green"
-                />
-                <StatCard
-                  title="Tổng lượng Tồn Kho"
-                  value={stats.totalWarehouseQuantity}
-                  icon="warehouse"
-                  color="indigo"
-                />
-                <StatCard
-                  title="Số SKU sắp hết hàng"
-                  value={stats.lowStockSkuCount}
-                  icon="warning"
-                  color="orange"
-                />
-                <StatCard
-                  title="Lượt trừ kho đang chờ"
-                  value={stats.pendingDeductQueueCount}
-                  icon="pending_actions"
-                  color="yellow"
-                />
-                <StatCard
                   title="Tổng giá trị hàng hóa"
                   value={new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.totalWarehouseValue)}
                   icon="payments"
                   color="emerald"
+                />
+                <StatCard
+                  title="Cảnh báo đang mở"
+                  value={alerts.length}
+                  icon="notification_important"
+                  color="orange"
                 />
               </div>
 
