@@ -36,7 +36,6 @@ export default function BackorderConfirmModal({
   onDecline,
   onCustomerSelected,
 }) {
-  const canChooseFulfillment = availableQuantity > 0
   const [selectedPreference, setSelectedPreference] = useState(null)
   const [pickupDate, setPickupDate] = useState('')
   const [pickupNote, setPickupNote] = useState('')
@@ -47,28 +46,57 @@ export default function BackorderConfirmModal({
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false)
   const [customerSearchDone, setCustomerSearchDone] = useState(false)
 
-  const fulfillmentPreference = canChooseFulfillment
-    ? selectedPreference ?? 'PartialDelivery'
-    : 'CompleteDelivery'
+  const lineReadyQty = (line) =>
+    Number(line.finishedDeductedQuantity || 0) + Number(line.warehouseDeductedQuantity || 0)
+  const linesReadyTotal = lines.reduce((sum, line) => sum + lineReadyQty(line), 0)
+  const linesPendingTotal = lines.reduce((sum, line) => sum + Number(line.pendingBomQuantity || 0), 0)
+  // API đôi khi trả availableQuantity=0 dù lines vẫn có phần sẵn — ưu tiên tổng từ lines.
+  const effectiveAvailableQuantity = Math.max(Number(availableQuantity) || 0, linesReadyTotal)
+  const effectiveBackorderQuantity = Math.max(Number(backorderQuantity) || 0, linesPendingTotal)
+  const canChooseFulfillment = effectiveAvailableQuantity > 0
+
+  /** COD: ẩn chọn cách nhận, mặc định giao một lần. POS: giữ UI «Khách nhận hàng thế nào?» như trước. */
+  const showFulfillmentChoice = !skipDeposit && canChooseFulfillment
+  const fulfillmentPreference = skipDeposit
+    ? 'CompleteDelivery'
+    : canChooseFulfillment
+      ? selectedPreference ?? 'PartialDelivery'
+      : 'CompleteDelivery'
+
+  const availableLabel = skipDeposit ? 'Đang có' : 'Giao ngay'
 
   const minPickupDate = toDateInputValue(addDays(1))
-  const suggestedPickupDate = estimatedReadyFrom
+  const rawSuggestedPickupDate = estimatedReadyFrom
     ? toDateInputValue(new Date(estimatedReadyFrom))
     : toDateInputValue(addDays(3))
+  const suggestedPickupDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(rawSuggestedPickupDate) && rawSuggestedPickupDate >= minPickupDate
+      ? rawSuggestedPickupDate
+      : minPickupDate
   const effectivePickupDate = pickupDate || suggestedPickupDate
-  const isPickupDateValid = effectivePickupDate >= minPickupDate
+  const isPickupDateValid = /^\d{4}-\d{2}-\d{2}$/.test(effectivePickupDate)
+    && effectivePickupDate >= minPickupDate
 
   const effectiveContactName = (contactName || selectedCustomer?.fullName || '').trim()
-  const effectiveContactPhone = normalizePhone(contactPhone || selectedCustomer?.phone || '')
+  // Khớp input (max 10 số): validate trên chuỗi đã cắt, tránh SĐT hồ sơ >10 số làm disable nút
+  // trong khi ô input vẫn hiện đủ 10 số hợp lệ.
+  const effectiveContactPhone = normalizePhone(contactPhone || selectedCustomer?.phone || '').slice(0, 10)
   const isContactNameValid = effectiveContactName.length > 0 && NAME_PATTERN.test(effectiveContactName)
   const isContactPhoneValid = PHONE_PATTERN.test(effectiveContactPhone)
 
   const total = Number(orderTotal) || 0
   const minDeposit = Math.ceil(total * DEPOSIT_RATIO)
-  // Điền sẵn mức tối thiểu nhưng vẫn cho thu ngân xóa trắng để gõ số khác.
+
+  // Đồng bộ state với hồ sơ khách khi mở modal — tránh value hiển thị fallback nhưng state rỗng.
   useEffect(() => {
-    if (isOpen) setDepositInput(minDeposit > 0 ? String(minDeposit) : '')
-  }, [isOpen, minDeposit])
+    if (!isOpen) return
+    setContactPhone(normalizePhone(selectedCustomer?.phone || '').slice(0, 10))
+    setContactName((selectedCustomer?.fullName || '').trim())
+    setPickupDate('')
+    setPickupNote('')
+    setSelectedPreference(null)
+    setDepositInput(minDeposit > 0 ? String(minDeposit) : '')
+  }, [isOpen, selectedCustomer?.customerId, selectedCustomer?.phone, selectedCustomer?.fullName, minDeposit])
 
   useEffect(() => {
     if (!isOpen || selectedCustomer?.customerId) {
@@ -121,17 +149,22 @@ export default function BackorderConfirmModal({
     || (depositAmount != null && depositAmount >= minDeposit && depositAmount <= total)
 
   const canAccept = isPickupDateValid && isContactNameValid && isContactPhoneValid && isDepositValid
+  const acceptBlockReason = !canAccept
+    ? [
+        !isContactPhoneValid ? 'SĐT phải đúng 10 số, bắt đầu bằng 0' : null,
+        !isContactNameValid ? 'Họ tên chỉ gồm chữ cái và khoảng trắng' : null,
+        !isPickupDateValid ? 'Ngày hẹn phải từ ngày mai trở đi' : null,
+        !isDepositValid ? 'Cọc chưa đủ điều kiện' : null,
+      ].filter(Boolean).join(' · ')
+    : ''
 
   if (!isOpen) return null
 
   // Dòng giao được ngay: đã trừ đủ kho thành phẩm, không còn phần phải chờ.
   const readyLines = lines.filter(
-    (line) =>
-      Number(line.pendingBomQuantity || 0) <= 0
-      && Number(line.finishedDeductedQuantity || 0) + Number(line.warehouseDeductedQuantity || 0) > 0,
+    (line) => Number(line.pendingBomQuantity || 0) <= 0 && lineReadyQty(line) > 0,
   )
-  const lineQty = (line) =>
-    Number(line.finishedDeductedQuantity || 0) + Number(line.warehouseDeductedQuantity || 0)
+  const lineQty = lineReadyQty
 
   const inputCls = (valid) =>
     `mt-1 w-full rounded-xl border px-3 py-2 text-sm text-[#1b1c17] focus:outline-none disabled:opacity-50 ${
@@ -157,10 +190,10 @@ export default function BackorderConfirmModal({
           </div>
           <div className="flex shrink-0 gap-2">
             <span className="rounded-lg bg-[#356647]/10 px-3 py-1.5 text-xs font-bold text-[#356647]">
-              Giao ngay {availableQuantity}
+              {availableLabel} {effectiveAvailableQuantity}
             </span>
             <span className="rounded-lg bg-[#7e5700]/10 px-3 py-1.5 text-xs font-bold text-[#7e5700]">
-              Phải chờ {backorderQuantity}
+              Phải chờ {effectiveBackorderQuantity}
             </span>
           </div>
         </header>
@@ -175,7 +208,7 @@ export default function BackorderConfirmModal({
                   <tr>
                     <th className="px-3 py-2.5">Sản phẩm</th>
                     <th className="whitespace-nowrap px-2 py-2.5 text-right">Đặt</th>
-                    <th className="whitespace-nowrap px-2 py-2.5 text-right">Giao ngay</th>
+                    <th className="whitespace-nowrap px-2 py-2.5 text-right">{availableLabel}</th>
                     <th className="whitespace-nowrap px-3 py-2.5 text-right">Phải chờ</th>
                   </tr>
                 </thead>
@@ -216,7 +249,7 @@ export default function BackorderConfirmModal({
               </table>
             </div>
 
-            {canChooseFulfillment ? (
+            {showFulfillmentChoice ? (
               <div className="mt-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Khách nhận hàng thế nào?</p>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -225,7 +258,7 @@ export default function BackorderConfirmModal({
                       value: 'PartialDelivery',
                       title: 'Nhận trước phần hàng sẵn',
                       icon: 'local_shipping',
-                      detail: `Giao ngay ${availableQuantity} sản phẩm, ${backorderQuantity} sản phẩm còn lại giao sau.`,
+                      detail: `Giao ngay ${effectiveAvailableQuantity} sản phẩm, ${effectiveBackorderQuantity} sản phẩm còn lại giao sau.`,
                       names: readyLines,
                     },
                     {
@@ -297,13 +330,16 @@ export default function BackorderConfirmModal({
                     id="backorder-contact-phone"
                     type="tel"
                     inputMode="numeric"
-                    value={contactPhone || normalizePhone(selectedCustomer?.phone).slice(0, 10)}
+                    value={contactPhone}
                     onChange={(event) => setContactPhone(normalizePhone(event.target.value).slice(0, 10))}
                     maxLength={10}
                     disabled={isSubmitting}
                     placeholder="09xxxxxxxx"
                     className={inputCls(isContactPhoneValid)}
                   />
+                  {!isContactPhoneValid ? (
+                    <p className="mt-1 text-xs text-[#7e5700]">SĐT phải đúng 10 số, bắt đầu bằng 0.</p>
+                  ) : null}
                 </div>
                 <div>
                   <label htmlFor="backorder-contact-name" className="block text-xs font-semibold text-[#414942]">
@@ -312,12 +348,15 @@ export default function BackorderConfirmModal({
                   <input
                     id="backorder-contact-name"
                     type="text"
-                    value={contactName || selectedCustomer?.fullName || ''}
+                    value={contactName}
                     onChange={(event) => setContactName(event.target.value)}
                     disabled={isSubmitting}
                     placeholder="Nguyễn Văn A"
                     className={inputCls(isContactNameValid)}
                   />
+                  {!isContactNameValid ? (
+                    <p className="mt-1 text-xs text-[#7e5700]">Họ tên chỉ gồm chữ cái và khoảng trắng.</p>
+                  ) : null}
                 </div>
               </div>
               {!selectedCustomer?.customerId && (isSearchingCustomer || customerMatches.length > 0 || customerSearchDone) ? (
@@ -439,7 +478,7 @@ export default function BackorderConfirmModal({
         </div>
 
         {/* Footer */}
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[#f0eee6] bg-[#fbf9f1] px-5 py-3.5">
+        <footer className="flex shrink-0 flex-col gap-2 border-t border-[#f0eee6] bg-[#fbf9f1] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={onDecline}
@@ -448,23 +487,28 @@ export default function BackorderConfirmModal({
           >
             Khách không chờ
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              onAccept({
-                fulfillmentPreference,
-                pickupDate: effectivePickupDate,
-                pickupNote: pickupNote.trim() || null,
-                pickupContactName: effectiveContactName,
-                pickupContactPhone: effectiveContactPhone,
-                depositAmount: skipDeposit || total <= 0 ? null : depositAmount,
-              })
-            }
-            disabled={isSubmitting || !canAccept}
-            className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Đang xử lý...' : 'Khách đồng ý chờ'}
-          </button>
+          <div className="flex flex-col items-stretch gap-1 sm:items-end">
+            {acceptBlockReason ? (
+              <p className="text-xs font-semibold text-[#7e5700]">{acceptBlockReason}</p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                onAccept({
+                  fulfillmentPreference,
+                  pickupDate: effectivePickupDate,
+                  pickupNote: pickupNote.trim() || null,
+                  pickupContactName: effectiveContactName,
+                  pickupContactPhone: effectiveContactPhone,
+                  depositAmount: skipDeposit || total <= 0 ? null : depositAmount,
+                })
+              }
+              disabled={isSubmitting || !canAccept}
+              className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Đang xử lý...' : 'Khách đồng ý chờ'}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

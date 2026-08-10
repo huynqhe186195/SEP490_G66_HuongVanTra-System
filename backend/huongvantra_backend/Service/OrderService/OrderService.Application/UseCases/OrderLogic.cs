@@ -1652,8 +1652,10 @@ public class OrderLogic(
             if (!access.CanShipOrder)
                 throw new OrderForbiddenException();
         }
-        else
+        else if (order.InventorySyncStatus != InventorySyncStatus.Synced)
         {
+            // COD/online đã đồng bộ kho: Thủ kho đã xuất/SX xong — chuyển «đang giao» là
+            // bàn giao vận chuyển, không còn phụ thuộc ca quầy (Sale vẫn ship được ngoài giờ ca).
             await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
         }
 
