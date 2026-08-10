@@ -232,9 +232,9 @@ export default function PosCashSessionBar({
 
   return (
     <>
-      <div className="relative z-30 flex w-full min-w-0 flex-wrap items-stretch gap-1.5">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-xl border border-[#c1c9c0]/70 bg-white px-2 py-1 shadow-sm">
-          <div className="flex min-w-0 items-center gap-1.5 pr-1">
+      <div className="relative z-30 flex w-full min-w-0 flex-wrap items-center gap-1.5">
+        <div className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-[#c1c9c0]/70 bg-white px-2 py-1 shadow-sm">
+          <div className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-1.5 pr-1">
             <span className="material-symbols-outlined shrink-0 text-[16px] text-[#356647]">payments</span>
             <div className="min-w-0 leading-tight">
               <p className="text-[9px] font-bold uppercase tracking-wide text-[#717971]">Quỹ · theo ca</p>
@@ -244,11 +244,11 @@ export default function PosCashSessionBar({
               </p>
             </div>
           </div>
-          <span className="hidden h-6 w-px bg-[#e7e8e0] sm:block" aria-hidden />
+          <span className="hidden h-6 w-px shrink-0 bg-[#e7e8e0] sm:block" aria-hidden />
           {readyForSale ? (
-            <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               {canCloseForeign ? (
-                <p className="hidden max-w-[14rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
+                <p className="hidden max-w-[12rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
                   {foreignHint}
                 </p>
               ) : null}
@@ -273,8 +273,8 @@ export default function PosCashSessionBar({
               </button>
             </div>
           ) : requiresClose ? (
-            <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5">
-              <p className="hidden max-w-[14rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <p className="hidden max-w-[12rem] truncate text-[10px] text-amber-800 sm:block" title={foreignHint}>
                 {foreignHint}
               </p>
               <button
@@ -286,11 +286,11 @@ export default function PosCashSessionBar({
               </button>
             </div>
           ) : dayEndDone ? (
-            <p className="ml-auto text-[11px] text-slate-500">Không mở quỹ — ngày đã chốt kệ</p>
+            <p className="text-[11px] text-slate-500">Không mở quỹ — ngày đã chốt kệ</p>
           ) : isManager ? (
             <Link
               to="/shifts"
-              className="ml-auto rounded-full border border-[#356647]/40 bg-[#f0f7f0] px-2 py-0.5 text-[11px] font-bold text-[#356647] hover:bg-[#e5f0e6]"
+              className="rounded-full border border-[#356647]/40 bg-[#f0f7f0] px-2 py-0.5 text-[11px] font-bold text-[#356647] hover:bg-[#e5f0e6]"
             >
               Mở trên Lịch ca
             </Link>
@@ -298,16 +298,16 @@ export default function PosCashSessionBar({
             <button
               type="button"
               onClick={() => openModal('open')}
-              className="ml-auto rounded-full bg-[#356647] px-2 py-0.5 text-[11px] font-bold text-white hover:bg-[#2d553b]"
+              className="rounded-full bg-[#356647] px-2 py-0.5 text-[11px] font-bold text-white hover:bg-[#2d553b]"
             >
               Mở quỹ
             </button>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2 py-1 shadow-sm">
+        <div className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2 py-1 shadow-sm">
           <div className="flex items-center gap-1.5 pr-1">
-            <span className="material-symbols-outlined text-[16px] text-amber-800">inventory_2</span>
+            <span className="material-symbols-outlined shrink-0 text-[16px] text-amber-800">inventory_2</span>
             <div className="leading-tight">
               <p className="text-[9px] font-bold uppercase tracking-wide text-amber-800/70">Kệ · theo ngày</p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-semibold text-amber-950">
@@ -323,7 +323,7 @@ export default function PosCashSessionBar({
               </p>
             </div>
           </div>
-          <span className="hidden h-7 w-px bg-amber-200 sm:block" aria-hidden />
+          <span className="hidden h-7 w-px shrink-0 bg-amber-200 sm:block" aria-hidden />
           {dayEndDone ? (
             <p className="text-[11px] font-semibold text-emerald-800">Đã chốt ngày</p>
           ) : showDayEndAction ? (
