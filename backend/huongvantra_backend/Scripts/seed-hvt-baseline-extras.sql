@@ -131,6 +131,15 @@ SELECT 'aaaaaaaa-1001-4000-8000-000000000003', 'NCC-HVT-03', 'NCC-HVT-03',
        0, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-03');
 
+INSERT INTO Suppliers
+  (Id, SupplierCode, NormalizedSupplierCode, Name, Phone, Email, Address, Note,
+   IsDeleted, CreatedAt, UpdatedAt)
+SELECT 'aaaaaaaa-1001-4000-8000-000000000004', 'NCC-HVT-04', 'NCC-HVT-04',
+       'HTX Thủ công dụng cụ trà', '0912000004', 'dungcu@hvt.demo',
+       'Thái Nguyên', 'Xúc trà tre/gỗ/đồng — nguyên liệu dụng cụ',
+       0, @NOW, @NOW
+WHERE NOT EXISTS (SELECT 1 FROM Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-04');
+
 -- -----------------------------------------------------------------------------
 -- ORDER DB — 2 khuyến mãi mẫu
 -- -----------------------------------------------------------------------------
