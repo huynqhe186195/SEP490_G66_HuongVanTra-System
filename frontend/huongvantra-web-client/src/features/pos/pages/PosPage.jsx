@@ -2523,7 +2523,7 @@ function PosPage() {
     const selectCustomer = (customer) => {
         if (isCorporateCustomerType(customer?.customerType)) {
             showError(CORPORATE_AT_POS_MESSAGE);
-            return;
+            return false;
         }
         const keepVipAdjustments = isVipCustomerType(customer?.customerType);
         const removedVipAdjustments = !keepVipAdjustments && (
@@ -2568,6 +2568,7 @@ function PosPage() {
         if (removedVipAdjustments) {
             showInfo("Đã xóa quà tặng/chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP).");
         }
+        return true;
     };
 
     const clearCustomerSelection = () => {
@@ -3487,6 +3488,7 @@ function PosPage() {
           isSubmitting={isSubmitting}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
+          onCustomerSelected={selectCustomer}
         />
       ) : null}
 

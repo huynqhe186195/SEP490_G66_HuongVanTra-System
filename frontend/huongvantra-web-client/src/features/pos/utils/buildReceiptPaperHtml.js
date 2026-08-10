@@ -10,6 +10,22 @@ function formatQty(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
 }
 
+function formatDateTime(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(date)
+}
+
+function formatDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short' }).format(date)
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -60,6 +76,26 @@ export function buildReceiptPaperHtml(receipt) {
       </div>`
     : ''
 
+  const backorderRows = receipt.isBackorder
+    ? `
+      <div class="receipt-divider"></div>
+      <div class="receipt-meta receipt-highlight">ĐƠN HẸN KHÁCH GIAO SAU</div>
+      <div class="receipt-meta">Hình thức: ${receipt.fulfillmentPreference === 'CompleteDelivery'
+        ? 'Nhận một lần khi đủ hàng'
+        : 'Nhận trước phần hàng sẵn'}</div>
+      <div class="receipt-meta">Dự kiến: ${escapeHtml(receipt.estimatedReadyFromLabel || formatDateTime(receipt.estimatedReadyFrom))} - ${escapeHtml(receipt.estimatedReadyToLabel || formatDateTime(receipt.estimatedReadyTo))}</div>
+      ${receipt.pickupDate || receipt.pickupDateLabel
+        ? `<div class="receipt-meta">Hẹn lấy: ${escapeHtml(receipt.pickupDateLabel || formatDate(receipt.pickupDate))}</div>`
+        : ''}
+      ${receipt.pickupContactName
+        ? `<div class="receipt-meta">Người nhận: ${escapeHtml(receipt.pickupContactName)}${receipt.pickupContactPhone ? ` — ${escapeHtml(receipt.pickupContactPhone)}` : ''}</div>`
+        : ''}
+      ${receipt.pickupCode
+        ? `<div class="receipt-meta receipt-highlight">MÃ NHẬN HÀNG: ${escapeHtml(receipt.pickupCode)}</div>
+      <div class="receipt-meta">Vui lòng giữ hoá đơn và đọc mã này khi tới lấy hàng.</div>`
+        : ''}`
+    : ''
+
   return `<div class="receipt-paper">
       <div class="receipt-brand">HƯƠNG VÂN TRÀ</div>
       <div class="receipt-title">HÓA ĐƠN BÁN HÀNG</div>
@@ -94,6 +130,7 @@ export function buildReceiptPaperHtml(receipt) {
       </div>
       <div class="receipt-divider"></div>
       ${itemsHtml}
+      ${backorderRows}
       <div class="receipt-divider"></div>
       <div class="receipt-total-row">
         <span>Tạm tính</span>
