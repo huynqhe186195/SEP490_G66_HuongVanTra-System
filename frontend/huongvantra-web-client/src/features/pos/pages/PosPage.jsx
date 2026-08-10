@@ -33,7 +33,6 @@ import {
   createPosOrderOffline,
   createPosOrderOnline,
   createTakeawayCodOrder,
-  createTakeawayCashOrder,
   createTakeawayVietQrOrder,
   fetchApplicablePromotions,
   fetchPosCustomerContext,
@@ -101,7 +100,6 @@ const COUNTER_PAYMENT_METHODS = [
 const TAKEAWAY_PAYMENT_METHODS = [
     { id: "COD", label: "COD — thu khi giao", icon: "local_shipping" },
     { id: "TRANSFER", label: "Chuyển khoản / VietQR", icon: "account_balance" },
-    { id: "CASH", label: "Tiền mặt / ghi nợ", icon: "payments" },
 ];
 
 const CUSTOMER_SEARCH_TYPES = [
@@ -538,9 +536,23 @@ function PosPage() {
   const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
   const isTransferTakeaway = isTakeaway && isTransferPayment
 
-  // Khi offline: chỉ cho phép tiền mặt (CASH), ẩn TRANSFER
+  // Offline: quầy chỉ tiền mặt; Bán COD chỉ COD (ẩn CK / VietQR).
   const paymentMethods = (isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS)
-    .filter(m => isOnline || m.id === 'CASH')
+    .filter((m) => {
+      if (isOnline) return true
+      if (isTakeaway) return m.id === 'COD'
+      return m.id === 'CASH'
+    })
+
+  // Tab Bán COD không còn Tiền mặt/ghi nợ — ép session cũ về COD.
+  useEffect(() => {
+    if (!isTakeaway) return
+    if (paymentMethod === 'COD' || paymentMethod === 'TRANSFER') {
+      if (isOnline || paymentMethod === 'COD') return
+    }
+    updateActiveSession({ paymentMethod: 'COD', amountPaidInput: '' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ khi đổi mode / PT không hợp lệ
+  }, [isTakeaway, paymentMethod, isOnline])
 
     const patchWorkspace = (patch) => {
         setWorkspaceByMode((all) => ({
@@ -2035,47 +2047,13 @@ function PosPage() {
         }
 
         if (paymentMethod === 'CASH') {
-            if (!selectedCustomer?.customerId && (isDebtSale || isPartialPayment)) {
-                showError('Ghi nợ / thiếu tiền yêu cầu chọn khách hàng đã đăng ký.');
-                return;
-            }
-            const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
-            const backendDebtSettlementJson = debtApplyAmount > 0
-                ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: 'CASH' })
-                : null;
-            const cashPayload = {
-                ...payload,
-                payments: [{
-                    paymentMethod: 'CASH',
-                    amount: recordedPaymentAmount,
-                    debtSettlementJson: backendDebtSettlementJson,
-                }],
-            };
-            const result = await createTakeawayCashOrder(cashPayload, { idempotencyKey });
-            if (recordedPaymentAmount > 0) {
-                await recordCashSale();
-            }
-            if (isDebtSale) {
-                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Ghi nợ ${formatMoney(debtAmount)} đ.`);
-            } else if (isPartialPayment) {
-                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Thu ${formatMoney(recordedPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`);
-            } else {
-                showSuccess(`Đã tạo đơn giao ${result.orderCode}. Thanh toán tiền mặt thành công.`);
-            }
-            const receipt = buildReceiptData({
-                orderCode: result.orderCode,
-                method: 'CASH',
-                orderTotal: result.totalAmount,
-                amountPaid: recordedPaymentAmount,
-                customerPaid: amountPaid,
-            });
-            resetCheckoutState();
-            printReceiptFromData(receipt);
+            // Bán COD chỉ COD + CK; ghi nợ tiền mặt dùng tab Bán trực tiếp.
+            showError('Tab Bán COD chỉ hỗ trợ COD hoặc Chuyển khoản / VietQR. Ghi nợ tiền mặt hãy dùng tab Bán trực tiếp.');
             return;
         }
 
         if (amountPaid > 0 && amountPaid < total) {
-            showError("Số tiền dự kiến thu COD phải bằng hoặc lớn hơn thành tiền. Muốn thu thiếu / ghi nợ hãy chọn Tiền mặt.");
+            showError("Số tiền dự kiến thu COD phải bằng hoặc lớn hơn thành tiền đơn.");
             return;
         }
 
