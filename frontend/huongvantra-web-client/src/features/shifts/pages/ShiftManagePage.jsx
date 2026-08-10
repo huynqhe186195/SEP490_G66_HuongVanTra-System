@@ -17,6 +17,7 @@ import {
 import {
   approveShiftRegistration,
   assignShiftSlot,
+  bulkReviewShiftRegistrationsByUser,
   closeShiftRegistrationWindow,
   fetchAssignableShiftStaff,
   fetchShiftRegistrationWindow,
@@ -99,6 +100,8 @@ function ShiftManagePage() {
   /** Draft giờ khung ca: { [templateId]: { start, end } } */
   const [hoursDraft, setHoursDraft] = useState({})
   const [savingTemplateId, setSavingTemplateId] = useState('')
+  /** staffId đang bulk duyệt / từ chối */
+  const [bulkReviewingStaffId, setBulkReviewingStaffId] = useState('')
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const weekStart = weekDays[0]?.iso
@@ -247,6 +250,36 @@ function ShiftManagePage() {
     ]
   }, [slots, templates, areaFilter])
 
+  /** Nhóm đăng ký Pending theo nhân viên trong tuần đang xem. */
+  const pendingByStaff = useMemo(() => {
+    const map = new Map()
+    for (const slot of slots) {
+      const tpl = getTemplate(templates, slot.templateId)
+      if (areaFilter && tpl?.area !== areaFilter) continue
+      for (const a of slot.assignments || []) {
+        if (a.status !== 'Pending' || !a.staffId) continue
+        const key = a.staffId
+        if (!map.has(key)) {
+          map.set(key, {
+            staffId: a.staffId,
+            name: a.name || 'Nhân viên',
+            role: a.role || '',
+            count: 0,
+            registrationIds: [],
+          })
+        }
+        const row = map.get(key)
+        row.count += 1
+        if (a.id) row.registrationIds.push(a.id)
+        if (!row.name && a.name) row.name = a.name
+        if (!row.role && a.role) row.role = a.role
+      }
+    }
+    return [...map.values()].sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), 'vi'),
+    )
+  }, [slots, templates, areaFilter])
+
   const reviewAssignment = async (registrationId, action) => {
     try {
       if (action === 'Approved') await approveShiftRegistration(registrationId)
@@ -255,6 +288,48 @@ function ShiftManagePage() {
       await loadWeek(weekOffset, areaFilter)
     } catch (error) {
       showError(error.message || 'Không cập nhật được đăng ký.')
+    }
+  }
+
+  const bulkReviewByStaff = async (staff, action) => {
+    if (!staff?.staffId || !weekStart) return
+    const isApprove = action === 'Approve'
+    if (!isApprove) {
+      const ok = await confirmDialog({
+        title: 'Từ chối tất cả',
+        message: `Từ chối ${staff.count} đăng ký chờ duyệt của «${staff.name}» trong tuần này?`,
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
+    setBulkReviewingStaffId(staff.staffId)
+    try {
+      const result = await bulkReviewShiftRegistrationsByUser({
+        userId: staff.staffId,
+        weekStart,
+        area: areaFilter || undefined,
+        action,
+      })
+      await loadWeek(weekOffset, areaFilter)
+      if (result.failedCount > 0) {
+        const firstFail = result.failed[0]?.message || 'một số ca lỗi'
+        showError(
+          `${isApprove ? 'Duyệt' : 'Từ chối'}: thành công ${result.succeededCount}/${staff.count}. `
+          + `Lỗi: ${firstFail}${result.failedCount > 1 ? ` (+${result.failedCount - 1})` : ''}`,
+        )
+      } else if (result.succeededCount === 0) {
+        showError('Không còn đăng ký chờ duyệt cho nhân viên này.')
+      } else {
+        showSuccess(
+          isApprove
+            ? `Đã duyệt ${result.succeededCount} ca của «${staff.name}».`
+            : `Đã từ chối ${result.succeededCount} ca của «${staff.name}».`,
+        )
+      }
+    } catch (error) {
+      showError(error.message || 'Không xử lý được hàng loạt.')
+    } finally {
+      setBulkReviewingStaffId('')
     }
   }
 
@@ -533,6 +608,59 @@ function ShiftManagePage() {
           </div>
         ) : null}
       </div>
+
+      {canReview && !loading && pendingByStaff.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 px-4 py-3 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-amber-950">Chờ duyệt theo người</p>
+              <p className="text-xs text-amber-900/70">
+                Duyệt hoặc từ chối tất cả đăng ký Pending của từng nhân viên trong tuần đang xem.
+              </p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+              {pendingByStaff.length} người · {pendingByStaff.reduce((n, s) => n + s.count, 0)} ca
+            </span>
+          </div>
+          <ul className="space-y-2">
+            {pendingByStaff.map((staff) => {
+              const busy = bulkReviewingStaffId === staff.staffId
+              return (
+                <li
+                  key={staff.staffId}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-100 bg-white px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{staff.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {staff.role ? `${staff.role} · ` : ''}
+                      {staff.count} ca chờ duyệt
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || Boolean(bulkReviewingStaffId)}
+                      onClick={() => bulkReviewByStaff(staff, 'Approve')}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      {busy ? 'Đang xử lý…' : 'Duyệt tất cả'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || Boolean(bulkReviewingStaffId)}
+                      onClick={() => bulkReviewByStaff(staff, 'Reject')}
+                      className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                    >
+                      Từ chối tất cả
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm">

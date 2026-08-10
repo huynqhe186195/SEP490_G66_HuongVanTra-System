@@ -108,6 +108,32 @@ public class ShiftRepository(UserDbContext context) : IShiftRepository
         await context.ShiftRegistrations
             .FirstOrDefaultAsync(r => r.SlotId == slotId && r.UserId == userId);
 
+    public async Task<IReadOnlyList<ShiftRegistration>> GetPendingRegistrationsForUserInWeekAsync(
+        Guid userId,
+        DateOnly weekStart,
+        DateOnly weekEnd,
+        ShiftArea? area = null)
+    {
+        var query = context.ShiftRegistrations
+            .Include(r => r.Slot)
+                .ThenInclude(s => s.Template)
+            .Where(r =>
+                r.UserId == userId
+                && r.Status == ShiftRegistrationStatus.Pending
+                && !r.IsDeleted
+                && !r.Slot.IsDeleted
+                && r.Slot.WorkDate >= weekStart
+                && r.Slot.WorkDate <= weekEnd);
+
+        if (area is not null)
+            query = query.Where(r => r.Slot.Template.Area == area.Value);
+
+        return await query
+            .OrderBy(r => r.Slot.WorkDate)
+            .ThenBy(r => r.Slot.Template.StartTime)
+            .ToListAsync();
+    }
+
     public async Task<IReadOnlyList<ShiftRegistration>> GetApprovedForUserOnDateAsync(Guid userId, DateOnly workDate) =>
         await context.ShiftRegistrations
             .Include(r => r.Slot)
