@@ -1242,6 +1242,15 @@ export function richSampleProductRows() {
     { key: 'NL02', name: 'Hồng trà thô Hương Vân', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HONG-TRA-G', cost: 220, min: 10000 },
     { key: 'NL03', name: 'Hoa bưởi sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-BUOI-G', cost: 900, min: 2000 },
     { key: 'NL04', name: 'Hoa sen sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-SEN-G', cost: 1200, min: 2000 },
+    // Dụng cụ thô (mua về) — component BOM cho thành phẩm kệ cùng tên
+    { key: 'NL05', name: 'Xúc trà tre (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-TRE', cost: 20000, min: 50 },
+    { key: 'NL06', name: 'Xúc trà đồng cán gỗ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-DONG-GO', cost: 25000, min: 50 },
+    { key: 'NL07', name: 'Xúc trà gỗ nâu (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-GO-NAU', cost: 45000, min: 50 },
+    { key: 'NL08', name: 'Xúc trà vàng chuôi đen (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-VANG-DEN', cost: 120000, min: 30 },
+    { key: 'NL09', name: 'Xúc trà chuôi rồng (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-CHUOI-RONG', cost: 55000, min: 30 },
+    { key: 'NL10', name: 'Tống thủy tinh trong (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-THUY-TINH', cost: 250000, min: 20 },
+    { key: 'NL11', name: 'Tống nâu đỏ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-NAU-DO', cost: 60000, min: 20 },
+    { key: 'NL12', name: 'Tống quai gỗ to (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-QUAI-GO', cost: 180000, min: 20 },
     { key: 'BB01', name: 'Túi trà thực phẩm', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-TUI-TRA', cost: 1500, min: 500 },
     { key: 'BB02', name: 'Hộp giấy Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HOP-GIAY-HVT', cost: 5000, min: 300 },
     { key: 'BB03', name: 'Hũ sứ đựng trà', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HU-SU-HVT', cost: 45000, min: 100 },
@@ -1369,6 +1378,7 @@ export function richSampleProductRows() {
       key: 'HVT14', name: 'Túi Gấm Trà Cao Cấp', category: 'Set Quà Cao Cấp',
       description: 'Set trà trong túi gấm cao cấp.',
       variants: [['HVT-SET-TUIGAM', 'Túi', 1, 800000]],
+      // 2 túi trà bên trong + tem ngoài; túi gấm là bao bì bán (không có SKU riêng trong catalog)
       bom: [['NL-TRA-XANH-G', 250], ['BB-TUI-TRA', 2], ['BB-TEM-HVT', 1]],
       attributes: [['Bao gói', 'Túi gấm']],
     },
@@ -1424,60 +1434,61 @@ export function richSampleProductRows() {
       bom: [['NL-HOA-SEN-G', 50], ['BB-HOP-QUA-HVT', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Quy cách', 'Bó hoa trà']],
     },
+    // Dụng cụ kệ: 1 NL dụng cụ cùng loại + tem (mua NL về → gắn tem → bán TP)
     {
       key: 'HVT22', name: 'Tống Thủy Tinh Trong', category: 'Dụng Cụ Trà',
       description: 'Tống thủy tinh trong dùng chia trà.',
       variants: [['HVT-TONG-THUY-TINH', 'Cái', 1, 420000]],
-      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-TONG-THUY-TINH', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Chất liệu', 'Thủy tinh']],
     },
     {
       key: 'HVT23', name: 'Tống Nâu Đỏ', category: 'Dụng Cụ Trà',
       description: 'Tống trà màu nâu đỏ.',
       variants: [['HVT-TONG-NAU-DO', 'Cái', 1, 105000]],
-      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-TONG-NAU-DO', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Màu sắc', 'Nâu đỏ']],
     },
     {
       key: 'HVT24', name: 'Tống Quai Gỗ To', category: 'Dụng Cụ Trà',
       description: 'Tống trà quai gỗ cỡ lớn.',
       variants: [['HVT-TONG-QUAI-GO', 'Cái', 1, 300000]],
-      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-TONG-QUAI-GO', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Chất liệu', 'Thủy tinh / gỗ']],
     },
     {
       key: 'HVT25', name: 'Xúc Trà Tre', category: 'Dụng Cụ Trà',
       description: 'Xúc trà bằng tre tự nhiên.',
       variants: [['HVT-XUC-TRE', 'Cái', 1, 35000]],
-      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-XUC-TRE', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Chất liệu', 'Tre']],
     },
     {
       key: 'HVT26', name: 'Xúc Trà Đồng Cán Gỗ Lẻ', category: 'Dụng Cụ Trà',
       description: 'Xúc trà đồng cán gỗ bán lẻ.',
       variants: [['HVT-XUC-DONG-GO', 'Cái', 1, 45000]],
-      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-XUC-DONG-GO', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Chất liệu', 'Đồng / gỗ']],
     },
     {
       key: 'HVT27', name: 'Xúc Trà Gỗ Nâu', category: 'Dụng Cụ Trà',
       description: 'Xúc trà gỗ nâu thủ công.',
       variants: [['HVT-XUC-GO-NAU', 'Cái', 1, 80000]],
-      bom: [['BB-TUI-TRA', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-XUC-GO-NAU', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Chất liệu', 'Gỗ']],
     },
     {
       key: 'HVT28', name: 'Xúc Trà Vàng Chuôi Đen', category: 'Dụng Cụ Trà',
       description: 'Xúc trà màu vàng, chuôi đen.',
       variants: [['HVT-XUC-VANG-DEN', 'Cái', 1, 200000]],
-      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-XUC-VANG-DEN', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Màu sắc', 'Vàng / đen']],
     },
     {
       key: 'HVT29', name: 'Xúc Trà Chuôi Rồng', category: 'Dụng Cụ Trà',
       description: 'Xúc trà trang trí chuôi rồng.',
       variants: [['HVT-XUC-CHUOI-RONG', 'Cái', 1, 95000]],
-      bom: [['BB-HOP-GIAY-HVT', 1], ['BB-TEM-HVT', 1]],
+      bom: [['NL-XUC-CHUOI-RONG', 1], ['BB-TEM-HVT', 1]],
       attributes: [['Kiểu dáng', 'Chuôi rồng']],
     },
     {
@@ -1648,7 +1659,9 @@ export function resolveProductCreationSheetData(exportRows = [], options = {}) {
 }
 
 /**
- * Map sample/export categories onto live system category names so dropdown + import match.
+ * Align sheet categories with live system names.
+ * Keep the product's intended category when it matches a live category.
+ * Do NOT overwrite every row with categories[0] (alphabetically "Bao bì sản xuất").
  */
 export function applyReferenceCategoriesToSheetData(data, referenceData = {}) {
   const categories = (referenceData.categories ?? [])
@@ -1659,18 +1672,39 @@ export function applyReferenceCategoriesToSheetData(data, referenceData = {}) {
     .filter((item) => item.display)
   if (!categories.length) return data
 
-  const fallback = categories[0].display
-  const pick = (productType) => {
-    const matched = categories.find((item) => item.productType && item.productType === productType)
-    return matched?.display || fallback
-  }
+  const normalizeKey = (value) => String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+
+  const byKey = new Map()
+  categories.forEach((item) => {
+    const key = normalizeKey(item.display)
+    if (key && !byKey.has(key)) byKey.set(key, item.display)
+  })
+
+  const byProductType = new Map()
+  categories.forEach((item) => {
+    const type = String(item.productType || '').trim()
+    if (type && !byProductType.has(type)) byProductType.set(type, item.display)
+  })
 
   return {
     ...data,
-    products: (data.products ?? []).map((product) => ({
-      ...product,
-      category: pick(product.productType),
-    })),
+    products: (data.products ?? []).map((product) => {
+      const current = String(product.category ?? '').trim()
+      if (current) {
+        const matchedName = byKey.get(normalizeKey(current))
+        if (matchedName) return { ...product, category: matchedName }
+      }
+      const byType = byProductType.get(String(product.productType || '').trim())
+      if (byType) return { ...product, category: byType }
+      // Keep sample/export text — import resolver will validate / report missing category.
+      return product
+    }),
   }
 }
 
