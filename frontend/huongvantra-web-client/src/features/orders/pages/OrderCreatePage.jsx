@@ -22,12 +22,6 @@ const B2B_PAYMENT_OPTIONS = [
   { value: 'Transfer', label: 'Chuyển khoản' },
 ]
 
-function getContractDiscountCap(subtotal, contract) {
-  const percent = Number(contract?.discountPercent ?? 0)
-  if (!contract || !(percent > 0)) return 0
-  return Math.round(Math.max(0, subtotal) * percent / 100)
-}
-
 function OrderCreatePage() {
   const navigate = useNavigate()
   const session = loadAuthSession()
@@ -42,7 +36,6 @@ function OrderCreatePage() {
     customerSnapshotName: '',
     shippingAddress: '',
     note: '',
-    discountAmount: 0,
     paidAmount: 0,
     paymentMethod: 'COD',
     items: [],
@@ -91,42 +84,63 @@ function OrderCreatePage() {
   const contract = contractLoaded ? contractState.contract : null
   const contractError = contractLoaded ? contractState.error : null
 
+  // Khi hợp đồng thay đổi: reset selection về trống
   useEffect(() => {
-    if (!contract?.lineItems?.length) {
-      setForm((prev) => ({ ...prev, items: [] }))
-      return
-    }
-    setForm((prev) => ({
-      ...prev,
-      items: contract.lineItems
-        .filter((li) => li.skuId)
-        .map((li) => ({
-          skuId: li.skuId,
-          skuSnapshotName: li.productName || li.skuCode || '',
-          skuSnapshotCode: li.skuCode || '',
-          quantity: li.quantity || 1,
-          unitPrice: li.unitPrice || 0,
-          inventoryUnit: '',
-          priceUnit: '',
-        })),
-    }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setForm((prev) => ({ ...prev, items: [] }))
+    setSelectedSkuIds(new Set())
+    setLineQty({})
   }, [contract?.id])
 
+  // selectedSkuIds: tập các skuId đã được tick chọn
+  const [selectedSkuIds, setSelectedSkuIds] = useState(new Set())
+  // lineQty: { [skuId]: quantity string } cho phần input số lượng
+  const [lineQty, setLineQty] = useState({})
+
+  // Sync form.items từ selectedSkuIds + lineQty mỗi khi thay đổi
+  useEffect(() => {
+    if (!contract?.lineItems?.length) return
+    const items = contract.lineItems
+      .filter((li) => li.skuId && selectedSkuIds.has(li.skuId))
+      .map((li) => ({
+        skuId: li.skuId,
+        skuSnapshotName: li.productName || li.skuCode || '',
+        skuSnapshotCode: li.skuCode || '',
+        quantity: lineQty[li.skuId] ?? 1,
+        unitPrice: li.unitPrice || 0,
+        inventoryUnit: '',
+        priceUnit: '',
+      }))
+    setForm((prev) => ({ ...prev, items }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSkuIds, lineQty, contract?.id])
+
+  function toggleSkuSelection(skuId) {
+    setSelectedSkuIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(skuId)) next.delete(skuId)
+      else next.add(skuId)
+      return next
+    })
+  }
+
+  function updateLineQty(skuId, value) {
+    const contractItem = contract?.lineItems?.find((li) => li.skuId === skuId)
+    const max = contractItem?.quantity ?? Infinity
+    const clamped = Math.min(Math.max(1, Number(value) || 1), max)
+    setLineQty((prev) => ({ ...prev, [skuId]: clamped }))
+  }
+
   const subtotal = useMemo(() => calcOrderLineSubtotal(form.items), [form.items])
-  const contractDiscountCap = getContractDiscountCap(subtotal, contract)
-  const discountAmount = Math.min(Math.max(0, Number(form.discountAmount) || 0), contractDiscountCap)
+  // Chiết khấu tự động theo % đã thỏa thuận trong hợp đồng — không nhập tay
+  const discountAmount = useMemo(() => {
+    const percent = Number(contract?.discountPercent ?? 0)
+    if (!contract || !(percent > 0)) return 0
+    return Math.round(Math.max(0, subtotal) * percent / 100)
+  }, [subtotal, contract])
   const finalAmount = Math.max(0, subtotal - discountAmount)
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
-  function updateLine(index, patch) {
-    setForm((prev) => ({
-      ...prev,
-      items: prev.items.map((line, i) => (i === index ? { ...line, ...patch } : line)),
-    }))
   }
 
   function updateCustomer({ customerId, customerSnapshotName, selectedCustomer, shippingAddress }) {
@@ -168,7 +182,7 @@ function OrderCreatePage() {
       return
     }
     if (!form.items.length) {
-      showError('Hợp đồng chưa có dòng hàng hóa.')
+      showError('Vui lòng chọn ít nhất một sản phẩm từ danh mục hợp đồng.')
       return
     }
 
@@ -189,11 +203,8 @@ function OrderCreatePage() {
     }
 
     if (!items.length) {
-
-      showError('Vui lòng thêm ít nhất một SKU.')
-
+      showError('Vui lòng chọn ít nhất một sản phẩm.')
       return
-
     }
 
 
@@ -291,15 +302,9 @@ function OrderCreatePage() {
           shippingAddress={form.shippingAddress}
           requireShippingAddress={false}
           customerTypeFilter="CORPORATE"
+          hideModeSwitcher
           onChange={updateCustomer}
         />
-
-        {form.customerId && !isCorporateCustomer ? (
-          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <span className="material-symbols-outlined text-[18px]">info</span>
-            <p>Khách này không phải khách doanh nghiệp. Trang này chỉ dành cho đơn hàng B2B theo hợp đồng.</p>
-          </div>
-        ) : null}
 
         {contractState.loading ? (
           <div className="flex items-center gap-2 rounded-2xl border border-[#c1c9c0]/40 bg-[#fafaf7] px-4 py-3 text-sm text-[#717971]">
@@ -344,10 +349,10 @@ function OrderCreatePage() {
             </div>
             <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
               <div>
-                <dt className="text-xs font-semibold text-[#717971]">Chiết khấu tối đa</dt>
+                <dt className="text-xs font-semibold text-[#717971]">Chiết khấu hợp đồng</dt>
                 <dd className="font-semibold text-[#1b1c17]">
                   {Number(contract.discountPercent ?? 0) > 0
-                    ? `${Number(contract.discountPercent)}% (≈ ${formatVnd(contractDiscountCap)})`
+                    ? `${Number(contract.discountPercent)}%`
                     : 'Không có'}
                 </dd>
               </div>
@@ -377,55 +382,82 @@ function OrderCreatePage() {
 
         {contract ? (
           <section className="rounded-2xl border border-[#c1c9c0]/40 bg-white p-5 shadow-sm">
-            <div className="mb-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#717971]">Danh mục hàng hóa</p>
-              <p className="mt-0.5 text-xs text-[#8a9186]">Theo hợp đồng — chỉ điều chỉnh số lượng</p>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#717971]">Danh mục hàng hóa theo hợp đồng</p>
+                <p className="mt-0.5 text-xs text-[#8a9186]">Tick chọn sản phẩm cần giao lần này — giá theo hợp đồng, không chỉnh được</p>
+              </div>
+              {contract.lineItems?.length > 0 ? (
+                <span className="text-xs text-[#8a9186]">{selectedSkuIds.size}/{contract.lineItems.length} đã chọn</span>
+              ) : null}
             </div>
 
-            {form.items.length === 0 ? (
+            {!contract.lineItems?.length ? (
               <p className="rounded-xl bg-[#f0eee6] px-4 py-3 text-sm text-[#8a9186]">
                 Hợp đồng chưa có dòng hàng hóa. Hãy bổ sung trong trang hợp đồng trước.
               </p>
             ) : (
               <div className="overflow-hidden rounded-xl border border-[#c1c9c0]/40">
                 <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
-                  <table className="w-full min-w-[600px] border-collapse text-sm">
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
                     <thead className="sticky top-0 z-10 bg-[#f0eee6]">
                       <tr>
-                        <th className="w-8 px-3 py-2.5 text-center text-xs font-semibold text-[#717971]">#</th>
+                        <th className="w-10 px-3 py-2.5 text-center text-xs font-semibold text-[#717971]">Chọn</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold text-[#717971]">Tên hàng / Mã SKU</th>
-                        <th className="w-28 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Số lượng</th>
-                        <th className="w-36 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Đơn giá HĐ</th>
+                        <th className="w-32 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Đơn giá HĐ</th>
+                        <th className="w-28 px-3 py-2.5 text-center text-xs font-semibold text-[#717971]">Số lượng lần này</th>
                         <th className="w-36 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Thành tiền</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#c1c9c0]/30 bg-white">
-                      {form.items.map((line, index) => (
-                        <tr key={index} className="hover:bg-[#fafaf7]">
-                          <td className="px-3 py-2.5 text-center text-xs text-[#717971]">{index + 1}</td>
-                          <td className="px-3 py-2.5">
-                            <p className="text-sm font-medium text-[#1b1c17]">{line.skuSnapshotName || '—'}</p>
-                            {line.skuSnapshotCode ? (
-                              <p className="text-[11px] text-[#8a9186]">{line.skuSnapshotCode}</p>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <input
-                              className="w-full rounded-lg border-none bg-[#f0eee6] px-2.5 py-1.5 text-right text-sm focus:ring-2 focus:ring-[#356647]/20"
-                              inputMode="numeric"
-                              min="1"
-                              value={line.quantity}
-                              onChange={(e) => updateLine(index, { quantity: e.target.value })}
-                            />
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-sm text-[#1b1c17]">
-                            {formatVnd(line.unitPrice)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-sm font-semibold text-[#356647] whitespace-nowrap">
-                            {formatVnd(Number(line.quantity || 0) * Number(line.unitPrice || 0))}
-                          </td>
-                        </tr>
-                      ))}
+                      {contract.lineItems.map((li) => {
+                        const checked = selectedSkuIds.has(li.skuId)
+                        const qty = lineQty[li.skuId] ?? 1
+                        const lineAmt = checked ? Number(qty || 0) * Number(li.unitPrice || 0) : 0
+                        return (
+                          <tr
+                            key={li.skuId}
+                            className={`cursor-pointer transition-colors ${checked ? 'bg-[#538463]/5 hover:bg-[#538463]/10' : 'hover:bg-[#fafaf7]'}`}
+                            onClick={() => toggleSkuSelection(li.skuId)}
+                          >
+                            <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleSkuSelection(li.skuId)}
+                                className="h-4 w-4 cursor-pointer accent-[#538463]"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <p className="text-sm font-medium text-[#1b1c17]">{li.productName || '—'}</p>
+                              {li.skuCode ? <p className="text-[11px] text-[#8a9186]">{li.skuCode}</p> : null}
+                            </td>
+                            <td className="px-3 py-3 text-right text-sm text-[#1b1c17]">
+                              {formatVnd(li.unitPrice)}
+                            </td>
+                            <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={li.quantity}
+                                  disabled={!checked}
+                                  value={lineQty[li.skuId] ?? 1}
+                                  onChange={(e) => updateLineQty(li.skuId, e.target.value)}
+                                  className="w-16 rounded-lg border border-[#c1c9c0]/60 bg-white px-2 py-1.5 text-center text-sm focus:border-[#538463] focus:outline-none focus:ring-1 focus:ring-[#538463]/30 disabled:bg-[#f0eee6] disabled:text-[#aaa] disabled:cursor-not-allowed"
+                                />
+                                <span className="text-xs text-[#1b1c17] whitespace-nowrap font-medium">/ {li.quantity}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right text-sm font-semibold whitespace-nowrap">
+                              {checked
+                                ? <span className="text-[#356647]">{formatVnd(lineAmt)}</span>
+                                : <span className="text-[#c1c9c0]">—</span>
+                              }
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -451,19 +483,13 @@ function OrderCreatePage() {
                 </select>
               </label>
 
-              {contractDiscountCap > 0 ? (
-                <label className="space-y-1">
+              {discountAmount > 0 ? (
+                <div className="space-y-1">
                   <span className="text-xs font-semibold text-[#717971]">Chiết khấu theo hợp đồng</span>
-                  <input
-                    className="w-full rounded-xl border border-[#c1c9c0]/40 px-3 py-2.5 text-sm focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    inputMode="decimal"
-                    value={form.discountAmount}
-                    onChange={(e) => updateField('discountAmount', e.target.value)}
-                  />
-                  <span className="block text-xs text-[#8a9186]">
-                    Tối đa {formatVnd(contractDiscountCap)} ({Number(contract.discountPercent ?? 0)}% theo hợp đồng)
-                  </span>
-                </label>
+                  <p className="rounded-xl border border-[#c1c9c0]/40 bg-[#f0eee6] px-3 py-2.5 text-sm text-[#1b1c17]">
+                    -{formatVnd(discountAmount)} ({Number(contract.discountPercent ?? 0)}%)
+                  </p>
+                </div>
               ) : null}
 
               {form.paymentMethod !== 'COD' ? (
