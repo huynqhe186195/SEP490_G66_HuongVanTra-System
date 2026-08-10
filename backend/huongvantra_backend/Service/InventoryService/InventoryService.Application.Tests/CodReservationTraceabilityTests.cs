@@ -51,7 +51,7 @@ public sealed class CodReservationTraceabilityTests
             Func<CancellationToken, Task<T>> action, CancellationToken ct = default) => action(ct);
     }
 
-    private static InventoryLogic BuildLogic(InventoryDbContext db) =>
+    private static InventoryLogic BuildLogic(InventoryDbContext db, bool simulateWarehouse = true) =>
         new(
             new InMemorySkuStockRepository(db),
             new StockDeductQueueRepository(db),
@@ -75,7 +75,42 @@ public sealed class CodReservationTraceabilityTests
             Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
             Microsoft.Extensions.Options.Options.Create(
-                new InventoryOptions { SimulateWarehouse = true }));
+                new InventoryOptions { SimulateWarehouse = simulateWarehouse }));
+
+    private static void SeedWarehouseBatch(
+        InventoryDbContext db,
+        Guid skuId,
+        string skuCode,
+        int quantity,
+        string location = "Warehouse")
+    {
+        var batchId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        db.WarehouseBatches.Add(new WarehouseBatch
+        {
+            Id = batchId,
+            LotCode = $"LOT-{skuCode}-{location}",
+            BatchCode = $"LOT-{skuCode}-{location}",
+            Location = location,
+            Status = "active",
+            CreatedAt = now,
+            UpdatedAt = now,
+            Items =
+            {
+                new WarehouseBatchItem
+                {
+                    Id = Guid.NewGuid(),
+                    WarehouseBatchId = batchId,
+                    SkuId = skuId,
+                    SkuCode = skuCode,
+                    QuantityOnHand = quantity,
+                    InitialQuantity = quantity,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                },
+            },
+        });
+    }
 
     private static async Task SeedStockAsync(
         InventoryDbContext db, Guid skuId, int onHand, string code = "SKU-1")
@@ -443,5 +478,110 @@ public sealed class CodReservationTraceabilityTests
         var item = Assert.Single(queue.Items);
         Assert.Equal(StockReservationStatus.Deducted, item.ReservationStatus);
         Assert.NotNull(item.DeductedAt);
+    }
+
+    [Fact]
+    public async Task CodReservation_SimulateWarehouseFalse_UsesMinAggregateAndBatch_ForWarehouseCover()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        db.SkuStocks.Add(new SkuStock
+        {
+            SkuId = skuId,
+            SkuCode = "HVT-SET-DOANVIEN",
+            QuantityOnHand = 2,
+            WarehouseQuantityOnHand = 10,
+            ReservedQuantity = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        SeedWarehouseBatch(db, skuId, "HVT-SET-DOANVIEN", quantity: 2, location: "Shelf");
+        SeedWarehouseBatch(db, skuId, "HVT-SET-DOANVIEN", quantity: 10, location: "Warehouse");
+        await db.SaveChangesAsync();
+
+        var logic = BuildLogic(db, simulateWarehouse: false);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 3));
+
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        Assert.Equal(QueueStatus.Waiting, queue.QueueStatus);
+        Assert.Equal("pending_warehouse_transfer", queue.OrderStockStatus);
+        Assert.True(queue.IsReserved);
+
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(2, item.FinishedDeductedQuantity);
+        Assert.Equal(1, item.WarehouseTransferQuantity);
+        Assert.Equal(2, item.ReservedQuantity);
+
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(2, stock.ReservedQuantity);
+    }
+
+    [Fact]
+    public async Task CodConfirm_InsufficientQueueWithoutTransferMeta_HealsFromWarehouseFinishedGoods()
+    {
+        // Queue Insufficient cũ (không có WarehouseTransferQuantity) nhưng Kho thành phẩm vẫn đủ bù.
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        var queueId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        db.SkuStocks.Add(new SkuStock
+        {
+            SkuId = skuId,
+            SkuCode = "HVT-SET-DOANVIEN",
+            QuantityOnHand = 2,
+            WarehouseQuantityOnHand = 5,
+            ReservedQuantity = 0,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.StockDeductQueues.Add(new StockDeductQueue
+        {
+            Id = queueId,
+            OrderId = orderId,
+            OrderCode = "COD-HEAL-1",
+            QueueStatus = QueueStatus.Insufficient,
+            OrderStockStatus = "waiting_stock",
+            IsReserved = false,
+            IsDeducted = false,
+            CreatedAt = now,
+            Items =
+            {
+                new StockDeductQueueItem
+                {
+                    Id = Guid.NewGuid(),
+                    QueueId = queueId,
+                    SkuId = skuId,
+                    SkuSnapshotCode = "HVT-SET-DOANVIEN",
+                    SkuSnapshotName = "Hộp Trà Đoàn Viên Cao Cấp",
+                    Quantity = 3,
+                    WarehouseTransferQuantity = 0,
+                    FinishedDeductedQuantity = null,
+                    ReservationStatus = StockReservationStatus.None,
+                    ReservedQuantity = 0,
+                },
+            },
+        });
+        await db.SaveChangesAsync();
+
+        var logic = BuildLogic(db, simulateWarehouse: true);
+        await logic.ConfirmQueueAsync(queueId, Guid.NewGuid(), null);
+
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.Id == queueId);
+        Assert.Equal(QueueStatus.Confirmed, queue.QueueStatus);
+        Assert.True(queue.IsDeducted);
+
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(2, item.FinishedDeductedQuantity);
+        Assert.Equal(1, item.WarehouseTransferQuantity);
+        Assert.Equal(StockReservationStatus.Deducted, item.ReservationStatus);
+
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(0, stock.ReservedQuantity);
+        Assert.Equal(0, stock.QuantityOnHand);
+        Assert.Equal(4, stock.WarehouseQuantityOnHand);
     }
 }

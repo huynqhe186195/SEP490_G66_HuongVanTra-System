@@ -704,6 +704,165 @@ public class InventoryLogic(
     private static int ResolveShelfOnlyQuantity(StockDeductQueueItem item) =>
         Math.Max(0, item.Quantity - ResolveTransferQuantity(item));
 
+    /// <summary>
+    /// Tồn Kệ khả bán — khớp PreparePos: (QOH - Reserved + ownReserved) và khi !SimulateWarehouse
+    /// còn Min với tổng batch Shelf.
+    /// </summary>
+    private async Task<int> ResolveShelfAvailableAsync(
+        SkuStock? stock,
+        Guid skuId,
+        int ownReservedToInclude,
+        CancellationToken ct)
+    {
+        var available = Math.Max(
+            0,
+            (stock?.QuantityOnHand ?? 0) - (stock?.ReservedQuantity ?? 0) + Math.Max(0, ownReservedToInclude));
+        if (!_inventoryOptions.SimulateWarehouse)
+        {
+            var shelfBatchQty = Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(skuId, LocationShelf, ct));
+            available = Math.Min(available, shelfBatchQty);
+        }
+
+        return available;
+    }
+
+    /// <summary>
+    /// Tồn Kho thành phẩm khả dụng — khớp PreparePos: Min(aggregate, batch Warehouse) khi !SimulateWarehouse.
+    /// </summary>
+    private async Task<int> ResolveWarehouseFinishedAvailableAsync(
+        SkuStock? stock,
+        Guid skuId,
+        CancellationToken ct)
+    {
+        var warehouseQty = Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0);
+        if (!_inventoryOptions.SimulateWarehouse)
+        {
+            var warehouseBatchQty = Math.Max(
+                0,
+                await _batchRepo.SumQuantityOnHandAsync(skuId, LocationWarehouse, ct));
+            warehouseQty = Math.Min(warehouseQty, warehouseBatchQty);
+        }
+
+        return warehouseQty;
+    }
+
+    private readonly record struct CodShelfWarehouseSplit(int FromShelf, int FromWarehouse, int StillShort);
+
+    private async Task<CodShelfWarehouseSplit> ResolveCodShelfWarehouseSplitAsync(
+        SkuStock? stock,
+        Guid skuId,
+        int requiredQuantity,
+        int ownReservedToInclude,
+        CancellationToken ct)
+    {
+        var shelfAvailable = await ResolveShelfAvailableAsync(stock, skuId, ownReservedToInclude, ct);
+        var fromShelf = Math.Min(requiredQuantity, shelfAvailable);
+        var remaining = requiredQuantity - fromShelf;
+        var warehouseQty = await ResolveWarehouseFinishedAvailableAsync(stock, skuId, ct);
+        var fromWarehouse = Math.Min(remaining, warehouseQty);
+        return new CodShelfWarehouseSplit(fromShelf, fromWarehouse, remaining - fromWarehouse);
+    }
+
+    /// <summary>
+    /// Heal queue COD/non-BOM: nếu thiếu metadata điều chuyển nhưng Kho thành phẩm còn đủ bù phần thiếu Kệ,
+    /// gán lại WarehouseTransferQuantity / FinishedDeductedQuantity và chỉnh Reserved phần Kệ.
+    /// </summary>
+    private async Task HealCodShelfWarehouseAllocationAsync(
+        StockDeductQueue queue,
+        Dictionary<Guid, SkuStock> stockBySkuId,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (IsBomReconciliationQueue(queue))
+            return;
+
+        var allCovered = true;
+        var anyTransfer = false;
+        var shelfReserveBySku = new Dictionary<Guid, int>();
+
+        foreach (var item in queue.Items.OrderBy(i => i.SkuId))
+        {
+            if (item.SkuId == Guid.Empty || item.Quantity <= 0)
+            {
+                allCovered = false;
+                continue;
+            }
+
+            if (item.PendingBomQuantity.GetValueOrDefault() > 0)
+            {
+                allCovered = false;
+                continue;
+            }
+
+            if (!stockBySkuId.TryGetValue(item.SkuId, out var stock))
+            {
+                stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, ct)
+                    ?? await GetOrCreateSkuStockAsync(item.SkuId, item.SkuSnapshotCode, ct);
+                stockBySkuId[item.SkuId] = stock;
+            }
+
+            var ownReserved = queue.IsReserved ? Math.Max(0, item.ReservedQuantity) : 0;
+            var existingTransfer = item.WarehouseTransferQuantity.GetValueOrDefault();
+            var existingShelfPlan = item.FinishedDeductedQuantity;
+            var hasCompletePlan = existingTransfer > 0
+                && existingShelfPlan.HasValue
+                && existingShelfPlan.Value + existingTransfer == item.Quantity;
+
+            CodShelfWarehouseSplit split;
+            if (hasCompletePlan)
+            {
+                split = new CodShelfWarehouseSplit(existingShelfPlan!.Value, existingTransfer, 0);
+            }
+            else
+            {
+                split = await ResolveCodShelfWarehouseSplitAsync(
+                    stock, item.SkuId, item.Quantity, ownReserved, ct);
+                if (split.StillShort > 0)
+                {
+                    allCovered = false;
+                    continue;
+                }
+
+                item.FinishedDeductedQuantity = split.FromShelf;
+                item.WarehouseTransferQuantity = split.FromWarehouse;
+
+                var reserveDelta = split.FromShelf - ownReserved;
+                if (reserveDelta != 0)
+                {
+                    stock.ReservedQuantity = Math.Max(0, stock.ReservedQuantity + reserveDelta);
+                    stock.UpdatedAt = now;
+                }
+
+                if (split.FromShelf > 0 || queue.IsReserved)
+                {
+                    queue.IsReserved = queue.IsReserved || split.FromShelf > 0;
+                }
+            }
+
+            shelfReserveBySku[item.SkuId] = shelfReserveBySku.GetValueOrDefault(item.SkuId) + split.FromShelf;
+            if (split.FromWarehouse > 0)
+                anyTransfer = true;
+            if (split.StillShort > 0)
+                allCovered = false;
+        }
+
+        if (shelfReserveBySku.Count > 0 && (queue.IsReserved || shelfReserveBySku.Values.Any(v => v > 0)))
+        {
+            if (shelfReserveBySku.Values.Any(v => v > 0))
+                queue.IsReserved = true;
+            StampItemsReservedPartial(queue, shelfReserveBySku, now);
+        }
+
+        if (anyTransfer)
+            queue.OrderStockStatus = "pending_warehouse_transfer";
+
+        if (allCovered && queue.QueueStatus == QueueStatus.Insufficient)
+        {
+            queue.QueueStatus = QueueStatus.Waiting;
+            queue.LastShortageReason = null;
+        }
+    }
+
     public async Task<StockDeductConfirmResponse> ConfirmQueueAsync(
         Guid queueId,
         Guid confirmedBy,
@@ -728,12 +887,29 @@ public class InventoryLogic(
             if (isBomQueue && materialGroups.Count == 0)
                 throw new InventoryValidationException("Queue không có snapshot nguyên liệu để đối soát.");
 
+            // POS-06 / COD: heal metadata điều chuyển Kho→Kệ trước khi check shortage
+            // (queue Insufficient cũ có thể thiếu WarehouseTransferQuantity dù Kho còn thành phẩm).
+            if (!isBomQueue)
+            {
+                foreach (var item in queue.Items)
+                {
+                    var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
+                        ?? await GetOrCreateSkuStockAsync(item.SkuId, item.SkuSnapshotCode, innerCt);
+                    stockBySkuId[item.SkuId] = stock;
+                }
+
+                await HealCodShelfWarehouseAllocationAsync(queue, stockBySkuId, now, innerCt);
+            }
+
             // POS-06: kiểm tra đủ hàng ở cả ba nguồn TRƯỚC khi tạo bất kỳ chứng từ nào (all-or-nothing).
             foreach (var item in queue.Items)
             {
-                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
-                    ?? await GetOrCreateSkuStockAsync(item.SkuId, item.SkuSnapshotCode, innerCt);
-                stockBySkuId[item.SkuId] = stock;
+                if (!stockBySkuId.TryGetValue(item.SkuId, out var stock))
+                {
+                    stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
+                        ?? await GetOrCreateSkuStockAsync(item.SkuId, item.SkuSnapshotCode, innerCt);
+                    stockBySkuId[item.SkuId] = stock;
+                }
 
                 // Phần đã nằm sẵn trên Kệ (queue legacy chờ tồn quầy).
                 var shelfOnlyQuantity = ResolveShelfOnlyQuantity(item);
@@ -746,6 +922,14 @@ public class InventoryLogic(
                         ? Math.Max(0, stock.ReservedQuantity - item.ReservedQuantity)
                         : stock.ReservedQuantity;
                     var availableForQueue = Math.Max(0, stock.QuantityOnHand - otherReserved);
+                    if (!_inventoryOptions.SimulateWarehouse)
+                    {
+                        var shelfBatchQty = Math.Max(
+                            0,
+                            await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationShelf, innerCt));
+                        availableForQueue = Math.Min(availableForQueue, shelfBatchQty);
+                    }
+
                     if (availableForQueue < shelfOnlyQuantity)
                     {
                         shortages.Add(new StockShortage(
@@ -758,9 +942,8 @@ public class InventoryLogic(
                 var transferQuantity = item.WarehouseTransferQuantity.GetValueOrDefault();
                 if (transferQuantity > 0)
                 {
-                    var warehouseAvailable = _inventoryOptions.SimulateWarehouse
-                        ? Math.Max(0, stock.WarehouseQuantityOnHand)
-                        : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationWarehouse, innerCt));
+                    var warehouseAvailable = await ResolveWarehouseFinishedAvailableAsync(
+                        stock, item.SkuId, innerCt);
                     if (warehouseAvailable < transferQuantity)
                     {
                         shortages.Add(new StockShortage(
@@ -1924,29 +2107,20 @@ public class InventoryLogic(
             foreach (var (skuId, required) in requiredBySku.OrderBy(kv => kv.Key))
             {
                 var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(skuId, innerCt);
-                var shelfAvailable = Math.Max(0, (stock?.QuantityOnHand ?? 0) - (stock?.ReservedQuantity ?? 0));
-                var fromShelf = Math.Min(required.Quantity, shelfAvailable);
-                var remaining = required.Quantity - fromShelf;
+                var split = await ResolveCodShelfWarehouseSplitAsync(
+                    stock, skuId, required.Quantity, ownReservedToInclude: 0, innerCt);
 
-                var warehouseQty = Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0);
-                if (!_inventoryOptions.SimulateWarehouse)
-                {
-                    warehouseQty = Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(skuId, LocationWarehouse, innerCt));
-                }
-                var fromWarehouse = Math.Min(remaining, warehouseQty);
-                var stillShort = remaining - fromWarehouse;
-
-                if (stock == null || stillShort > 0)
+                if (stock == null || split.StillShort > 0)
                 {
                     shortages.Add(new StockShortage(
                         skuId, required.Name, required.Quantity,
-                        fromShelf + fromWarehouse, stillShort));
+                        split.FromShelf + split.FromWarehouse, split.StillShort));
                 }
                 else
                 {
                     stockBySkuId[skuId] = stock;
-                    shelfReserveBySku[skuId] = fromShelf;
-                    warehouseTransferBySku[skuId] = fromWarehouse;
+                    shelfReserveBySku[skuId] = split.FromShelf;
+                    warehouseTransferBySku[skuId] = split.FromWarehouse;
                 }
             }
 
@@ -1954,6 +2128,7 @@ public class InventoryLogic(
             {
                 // Không đủ tồn cả Kệ lẫn Kho → queue Insufficient.
                 queue.QueueStatus = QueueStatus.Insufficient;
+                queue.OrderStockStatus = "waiting_stock";
                 queue.LastShortageReason = "Không đủ tồn (Kệ + Kho thành phẩm) để giữ chỗ COD: " + BuildShortageReason(shortages);
                 queue.LastAttemptAt = now;
                 await _queueRepo.SaveChangesAsync(innerCt);
@@ -1973,15 +2148,16 @@ public class InventoryLogic(
 
             queue.IsReserved = true;
             queue.LastShortageReason = null;
+            queue.QueueStatus = QueueStatus.Waiting;
+            queue.OrderStockStatus = warehouseTransferBySku.Values.Any(v => v > 0)
+                ? "pending_warehouse_transfer"
+                : "pending_deduct";
 
-            // Lưu phần chờ điều chuyển vào queue items để Thủ kho biết phải xử lý.
+            // Lưu phần Kệ / chờ điều chuyển vào queue items để Thủ kho biết phải xử lý.
             foreach (var item in queue.Items)
             {
-                if (warehouseTransferBySku.TryGetValue(item.SkuId, out var transferQty) && transferQty > 0)
-                {
-                    item.WarehouseTransferQuantity = transferQty;
-                    item.FinishedDeductedQuantity = shelfReserveBySku.GetValueOrDefault(item.SkuId);
-                }
+                item.FinishedDeductedQuantity = shelfReserveBySku.GetValueOrDefault(item.SkuId);
+                item.WarehouseTransferQuantity = warehouseTransferBySku.GetValueOrDefault(item.SkuId);
             }
 
             // POS-04 (truy vết giữ chỗ): đóng dấu chỉ phần Kệ (phần Kho không vào Reserved).
@@ -2154,39 +2330,51 @@ public class InventoryLogic(
 
             var now = DateTime.UtcNow;
 
-            // Giữ chỗ hiện tại của chính queue (0 nếu chưa từng giữ / giữ thất bại trước đó).
-            var currentBySku = new Dictionary<Guid, int>();
+            // Giữ chỗ Kệ hiện tại của chính queue (ReservedQuantity — không dùng Quantity vì có thể có phần Kho).
+            var currentShelfBySku = new Dictionary<Guid, int>();
             if (queue.IsReserved)
             {
                 foreach (var item in queue.Items)
                 {
-                    if (item.SkuId == Guid.Empty || item.Quantity <= 0) continue;
-                    currentBySku[item.SkuId] = currentBySku.GetValueOrDefault(item.SkuId) + item.Quantity;
+                    if (item.SkuId == Guid.Empty || item.ReservedQuantity <= 0) continue;
+                    currentShelfBySku[item.SkuId] =
+                        currentShelfBySku.GetValueOrDefault(item.SkuId) + item.ReservedQuantity;
                 }
             }
 
-            // Khoá toàn bộ SKU liên quan (cũ + mới) theo thứ tự ổn định, kiểm tra đủ Available
-            // cho MỌI phần tăng trước khi thay đổi bất kỳ dòng nào (all-or-nothing).
-            var involvedSkuIds = requiredBySku.Keys.Union(currentBySku.Keys).OrderBy(id => id).ToList();
+            // Khoá toàn bộ SKU liên quan (cũ + mới) theo thứ tự ổn định; kiểm tra Kệ + Kho FG
+            // all-or-nothing giống ReserveQueueStockAsync.
+            var involvedSkuIds = requiredBySku.Keys.Union(currentShelfBySku.Keys).OrderBy(id => id).ToList();
             var stockBySkuId = new Dictionary<Guid, SkuStock>();
+            var shelfReserveBySku = new Dictionary<Guid, int>();
+            var warehouseTransferBySku = new Dictionary<Guid, int>();
             var shortages = new List<StockShortage>();
             foreach (var skuId in involvedSkuIds)
             {
                 var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(skuId, innerCt);
                 var newQty = requiredBySku.TryGetValue(skuId, out var required) ? required.Quantity : 0;
-                var currentQty = currentBySku.GetValueOrDefault(skuId);
-                var delta = newQty - currentQty;
+                var currentShelfQty = currentShelfBySku.GetValueOrDefault(skuId);
 
-                if (delta > 0)
+                if (newQty > 0)
                 {
-                    // Phần giữ chỗ hiện tại của chính queue tính là khả dụng → chỉ cần đủ cho delta.
-                    var available = Math.Max(0, (stock?.QuantityOnHand ?? 0) - (stock?.ReservedQuantity ?? 0));
-                    if (stock == null || available < delta)
+                    var split = await ResolveCodShelfWarehouseSplitAsync(
+                        stock, skuId, newQty, ownReservedToInclude: currentShelfQty, innerCt);
+                    if (stock == null || split.StillShort > 0)
                     {
                         var name = requiredBySku.TryGetValue(skuId, out var r) ? r.Name : skuId.ToString();
-                        shortages.Add(new StockShortage(skuId, name, delta, available, delta - available));
+                        shortages.Add(new StockShortage(
+                            skuId, name, newQty,
+                            split.FromShelf + split.FromWarehouse, split.StillShort));
                         continue;
                     }
+
+                    shelfReserveBySku[skuId] = split.FromShelf;
+                    warehouseTransferBySku[skuId] = split.FromWarehouse;
+                }
+                else
+                {
+                    shelfReserveBySku[skuId] = 0;
+                    warehouseTransferBySku[skuId] = 0;
                 }
 
                 if (stock != null)
@@ -2197,16 +2385,15 @@ public class InventoryLogic(
             {
                 // Không thay đổi gì: giữ nguyên items + giữ chỗ cũ để đơn cũ vẫn hợp lệ.
                 throw new InsufficientStockException(
-                    "Không đủ tồn khả bán để thay giữ chỗ COD: " + BuildShortageReason(shortages),
+                    "Không đủ tồn (Kệ + Kho thành phẩm) để thay giữ chỗ COD: " + BuildShortageReason(shortages),
                     shortages);
             }
 
-            // Tất cả đủ → reconcile ReservedQuantity theo delta từng SKU (âm thì nhả, không bao giờ < 0).
+            // Reconcile ReservedQuantity theo delta phần Kệ (âm thì nhả, không bao giờ < 0).
             foreach (var skuId in involvedSkuIds)
             {
                 if (!stockBySkuId.TryGetValue(skuId, out var stock)) continue;
-                var newQty = requiredBySku.TryGetValue(skuId, out var required) ? required.Quantity : 0;
-                var delta = newQty - currentBySku.GetValueOrDefault(skuId);
+                var delta = shelfReserveBySku.GetValueOrDefault(skuId) - currentShelfBySku.GetValueOrDefault(skuId);
                 if (delta == 0) continue;
                 stock.ReservedQuantity = Math.Max(0, stock.ReservedQuantity + delta);
                 stock.UpdatedAt = now;
@@ -2244,6 +2431,9 @@ public class InventoryLogic(
                     };
                     queue.Items.Add(target);
                 }
+
+                target.FinishedDeductedQuantity = shelfReserveBySku.GetValueOrDefault(skuId);
+                target.WarehouseTransferQuantity = warehouseTransferBySku.GetValueOrDefault(skuId);
                 keptItems.Add(target);
             }
 
@@ -2258,12 +2448,14 @@ public class InventoryLogic(
             queue.IsReserved = true;
             // Giữ chỗ trước đó thất bại (Insufficient) nhưng lần thay này đủ → quay lại Waiting.
             queue.QueueStatus = QueueStatus.Waiting;
+            queue.OrderStockStatus = warehouseTransferBySku.Values.Any(v => v > 0)
+                ? "pending_warehouse_transfer"
+                : "pending_deduct";
             queue.LastShortageReason = null;
             queue.LastAttemptAt = now;
 
-            // POS-04 (truy vết giữ chỗ): dòng tái dùng đã bị ghi đè SkuId/Quantity → đóng dấu lại
-            // toàn bộ theo danh sách mới để tổng Active theo SKU khớp ReservedQuantity vừa reconcile.
-            StampItemsReserved(queue, now);
+            // POS-04 (truy vết giữ chỗ): đóng dấu lại theo phần Kệ mới.
+            StampItemsReservedPartial(queue, shelfReserveBySku, now);
 
             // Inbox + mutation nguyên tử: ghi OperationId trong cùng transaction với thay đổi tồn.
             await _processedEvents.AddAsync(
@@ -2273,7 +2465,7 @@ public class InventoryLogic(
             return new ReplaceCodReservationResponse(
                 queue.Id, queue.OrderId, queue.OrderCode,
                 Replaced: true, AlreadyProcessed: false,
-                "Đã thay giữ chỗ tồn Kệ Hàng theo danh sách SKU mới.");
+                "Đã thay giữ chỗ tồn (Kệ + phần chờ điều chuyển Kho) theo danh sách SKU mới.");
         }, ct);
     }
 
@@ -2908,19 +3100,38 @@ public class InventoryLogic(
             var otherReserved = stock == null
                 ? 0
                 : queue.IsReserved
-                    ? Math.Max(0, stock.ReservedQuantity - item.Quantity)
+                    ? Math.Max(0, stock.ReservedQuantity - item.ReservedQuantity)
                     : stock.ReservedQuantity;
             var shelfAvailable = Math.Max(0, (stock?.QuantityOnHand ?? 0) - otherReserved);
+            if (!_inventoryOptions.SimulateWarehouse)
+            {
+                var shelfBatchQty = Math.Max(
+                    0,
+                    await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationShelf, ct));
+                shelfAvailable = Math.Min(shelfAvailable, shelfBatchQty);
+            }
+
             var shortage = Math.Max(0, shelfOnlyQuantity - shelfAvailable);
             var available = shelfAvailable;
 
             if (transferQuantity > 0)
             {
-                var warehouseAvailable = _inventoryOptions.SimulateWarehouse
-                    ? Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0)
-                    : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationWarehouse, ct));
+                var warehouseAvailable = await ResolveWarehouseFinishedAvailableAsync(
+                    stock, item.SkuId, ct);
                 shortage += Math.Max(0, transferQuantity - warehouseAvailable);
                 available = shelfAvailable + warehouseAvailable;
+            }
+            else if (shelfOnlyQuantity < item.Quantity)
+            {
+                // Chưa có metadata transfer — preview tạm tính khả năng bù từ Kho như Confirm heal.
+                var warehouseAvailable = await ResolveWarehouseFinishedAvailableAsync(
+                    stock, item.SkuId, ct);
+                var needFromWarehouse = item.Quantity - shelfAvailable;
+                if (needFromWarehouse > 0)
+                {
+                    shortage = Math.Max(0, needFromWarehouse - warehouseAvailable);
+                    available = shelfAvailable + warehouseAvailable;
+                }
             }
 
             var status = shortage > 0 ? "insufficient" : "ok";

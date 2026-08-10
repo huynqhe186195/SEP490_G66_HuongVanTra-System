@@ -232,7 +232,7 @@ export default function PosCashSessionBar({
 
   return (
     <>
-      <div className="relative z-30 flex w-full min-w-0 flex-wrap items-center gap-1.5">
+      <div className="relative z-30 flex w-auto max-w-full min-w-0 flex-wrap items-center justify-end gap-1.5">
         <div className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-[#c1c9c0]/70 bg-white px-2 py-1 shadow-sm">
           <div className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-1.5 pr-1">
             <span className="material-symbols-outlined shrink-0 text-[16px] text-[#356647]">payments</span>
