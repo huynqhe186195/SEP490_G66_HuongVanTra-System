@@ -191,11 +191,54 @@ export default function InventoryReturnsPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">Đang tải...</td>
+                  <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải phiếu trả...
+                    </span>
+                  </td>
                 </tr>
               ) : data.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">Chưa có phiếu trả hàng nhập.</td>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <p className="font-semibold text-slate-800">
+                      {searchInput.trim() ? 'Không tìm thấy phiếu khớp từ khóa' : 'Chưa có phiếu trả hàng nhập'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {searchInput.trim()
+                        ? 'Thử mã phiếu, phiếu gốc hoặc tên sản phẩm khác.'
+                        : 'Tạo phiếu khi cần trả hàng lỗi từ Kho về nhà cung cấp. Tồn Kho trừ ngay khi tạo.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {searchInput.trim() ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSearchChange('')}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">search_off</span>
+                          Xóa tìm kiếm
+                        </button>
+                      ) : null}
+                      {canCreate ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/inventory/returns/create')}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">add</span>
+                          Tạo phiếu trả
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/inventory/import')}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        Xem phiếu nhập
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ) : (
                 data.items.map((request) => (

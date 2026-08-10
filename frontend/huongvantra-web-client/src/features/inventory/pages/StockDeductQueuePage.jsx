@@ -271,15 +271,58 @@ function StockDeductQueuePage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Đang tải...
+                  <td className="px-8 py-10 text-center text-slate-500" colSpan={7}>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải yêu cầu đóng gói...
+                    </span>
                   </td>
                 </tr>
               ) : null}
               {!isLoading && queues.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Không có yêu cầu đóng gói trong mục này.
+                  <td className="px-8 py-12 text-center" colSpan={7}>
+                    <p className="font-semibold text-slate-800">
+                      {searchValue.trim() || activeTab !== 'waiting'
+                        ? 'Không có yêu cầu trong mục này'
+                        : 'Chưa có yêu cầu chờ đóng gói'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {searchValue.trim() || activeTab !== 'waiting'
+                        ? 'Thử đổi tab hoặc xóa mã đơn đang tìm.'
+                        : 'Khi POS bán vượt tồn Kệ, yêu cầu đóng gói / trừ Kho sẽ xuất hiện tại đây để Thủ kho xác nhận.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {searchValue.trim() || activeTab !== 'waiting' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchValue('')
+                            selectTab('waiting')
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">filter_alt_off</span>
+                          Về mục chờ đóng gói
+                        </button>
+                      ) : null}
+                      {canOpenOrders ? (
+                        <Link
+                          to="/orders"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                          Xem đơn hàng
+                        </Link>
+                      ) : null}
+                      <Link
+                        to="/inventory"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">warehouse</span>
+                        Kiểm tra tồn Kho
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ) : null}

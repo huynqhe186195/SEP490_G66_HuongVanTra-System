@@ -16,7 +16,7 @@ public class CustomerTiersController : ControllerBase
     public CustomerTiersController(CustomerTierLogic logic) => _logic = logic;
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    [Authorize(Policy = PermissionNames.ViewMembershipTierAccess)]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool includeInactive = false,
         CancellationToken ct = default)
@@ -26,7 +26,7 @@ public class CustomerTiersController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ManageMembershipTierAccess)]
     public async Task<IActionResult> Create([FromBody] CreateCustomerTierRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, ct);
@@ -34,7 +34,7 @@ public class CustomerTiersController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ManageMembershipTierAccess)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCustomerTierRequest request, CancellationToken ct = default)
     {
         var result = await _logic.UpdateAsync(id, request, ct);
@@ -43,7 +43,7 @@ public class CustomerTiersController : ControllerBase
     }
 
     [HttpPost("{id:int}/deactivate")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ManageMembershipTierAccess)]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct = default)
     {
         var result = await _logic.DeactivateAsync(id, ct);
@@ -52,7 +52,7 @@ public class CustomerTiersController : ControllerBase
     }
 
     [HttpPost("{id:int}/reactivate")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ManageMembershipTierAccess)]
     public async Task<IActionResult> Reactivate(int id, CancellationToken ct = default)
     {
         var result = await _logic.ReactivateAsync(id, ct);

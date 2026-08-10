@@ -9,7 +9,12 @@ import SyncStatusBadge from '../features/pos/components/SyncStatusBadge.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
 import { isWarehouseUserRole, checkAuthSessionActive, syncSessionFromServer } from '../features/auth/services/authApi.js'
-import { clearAuthSession, loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
+import {
+  clearAuthSession,
+  isAuthLoggingOut,
+  loadAuthSession,
+  saveAuthSession,
+} from '../features/auth/services/authSession.js'
 import { showError } from '../app/toast.js'
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js'
 import { syncOfflineCache } from '../lib/offlineCache.js'
@@ -81,9 +86,9 @@ function AdminLayout() {
 
     let cancelled = false
     const kickIfSuperseded = async () => {
-      if (cancelled || document.visibilityState === 'hidden') return
+      if (cancelled || document.visibilityState === 'hidden' || isAuthLoggingOut()) return
       const active = await checkAuthSessionActive()
-      if (cancelled || active) return
+      if (cancelled || active || isAuthLoggingOut()) return
       showError('Tài khoản đã đăng nhập ở thiết bị khác. Bạn đã bị đăng xuất.')
       clearAuthSession()
       window.location.href = '/login'
