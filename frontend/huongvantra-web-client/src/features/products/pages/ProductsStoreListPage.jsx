@@ -669,11 +669,12 @@ export default function ProductsStoreListPage() {
                                     selectSkuForProduct(group.productId, e.target.value)
                                   }}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="mt-1 w-20 cursor-pointer rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]/20"
+                                  className="mt-1 block w-full max-w-[16rem] cursor-pointer truncate rounded border border-slate-200 bg-slate-50 py-0.5 pl-2 pr-9 text-xs text-slate-700 outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]/20"
+                                  title={selectedSku.packagingType || selectedSku.variantName || selectedSku.skuCode || ''}
                                 >
                                   {group.skus.map((sku) => (
                                     <option key={sku.id} value={String(sku.id)}>
-                                      {sku.packagingType || sku.skuCode}
+                                      {sku.packagingType || sku.variantName || sku.skuCode}
                                     </option>
                                   ))}
                                 </select>

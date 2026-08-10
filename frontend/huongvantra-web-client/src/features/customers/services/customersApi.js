@@ -1,4 +1,6 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { hasPermission, canViewCustomer } from '../../auth/utils/permissions.js'
 import { DEFAULT_MEMBERSHIP_TIER, getMembershipTierLabel, isMemberTierCustomer } from '../utils/customerDisplay.js'
 import { PLACEHOLDER_SHIPPING_ADDRESS } from '../utils/shippingAddress.js'
 
@@ -503,16 +505,39 @@ export async function fetchCustomerActivities(customerId) {
 }
 
 export async function fetchMembershipTiers() {
-  const data = await apiRequestAuth('/api/customer-tiers', { method: 'GET' })
-  return Array.isArray(data)
-    ? data.map((item) => ({
-        id: item.id ?? item.Id,
-        tierCode: item.tierName ?? item.TierName ?? '',
-        minTotalSpend: Number(item.minSpendingThreshold ?? item.MinSpendingThreshold ?? 0),
-        discountPercent: Number(item.discountPercent ?? item.DiscountPercent ?? 0),
-        isActive: item.isActive ?? item.IsActive ?? true,
-      }))
-    : []
+  const session = loadAuthSession()
+  const canReadTiers =
+    canViewCustomer(session)
+    || hasPermission(session, 'MANAGE_ROLE')
+    || hasPermission(session, 'MANAGE_BUSINESS_POLICY')
+    || hasPermission(session, 'CREATE_ORDER')
+    || hasPermission(session, 'CREATE_POS_ORDER')
+    || hasPermission(session, 'CREATE_COD_ORDER')
+    || hasPermission(session, 'CREATE_CUSTOMER')
+    || hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
+
+  if (!canReadTiers) {
+    return []
+  }
+
+  try {
+    const data = await apiRequestAuth('/api/customer-tiers', { method: 'GET' })
+    return Array.isArray(data)
+      ? data.map((item) => ({
+          id: item.id ?? item.Id,
+          tierCode: item.tierName ?? item.TierName ?? '',
+          minTotalSpend: Number(item.minSpendingThreshold ?? item.MinSpendingThreshold ?? 0),
+          discountPercent: Number(item.discountPercent ?? item.DiscountPercent ?? 0),
+          isActive: item.isActive ?? item.IsActive ?? true,
+        }))
+      : []
+  } catch (error) {
+    // JWT cũ / thiếu claim: UI vẫn chạy với badge mặc định.
+    if (Number(error?.status || error?.statusCode) === 403) {
+      return []
+    }
+    throw error
+  }
 }
 
 export async function fetchCustomerAddresses(customerId) {

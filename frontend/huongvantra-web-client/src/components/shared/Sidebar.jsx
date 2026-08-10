@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../features/auth/services/authApi.js'
 import {
+  beginAuthLogout,
   clearAuthSession,
   formatDisplayName,
   loadAuthSession,
@@ -12,7 +13,7 @@ import {
   isNavigationChildActive,
   isNavigationItemActive,
 } from '../../app/navigation.js'
-import { showError } from '../../app/toast'
+import { clearToasts, showError } from '../../app/toast'
 import { confirmLeaveIfCashSessionOpen } from '../../features/pos/utils/confirmLeaveIfCashSessionOpen.js'
 
 function Sidebar({
@@ -188,15 +189,21 @@ function Sidebar({
     if (!allowed) return
 
     setIsLoggingOut(true)
+    // Chặn mọi toast (apiClient + catch trang + route guard) rồi gọi logout server.
+    beginAuthLogout()
+    clearToasts()
+
+    const accessToken = authSession.accessToken
+    const refreshToken = authSession.refreshToken
+    // Xóa local trước để request mới không còn Bearer; logout API dùng token đã giữ.
+    clearAuthSession()
 
     try {
-      await logoutApi(authSession.accessToken, authSession.refreshToken)
+      await logoutApi(accessToken, refreshToken)
     } catch {
-      // Always clear the local session and return to login.
+      // Always return to login.
     } finally {
-      clearAuthSession()
       setIsLoggingOut(false)
-      // Hard redirect: tránh race request in-flight → toast "phiên hết hạn" + kẹt màn hình cũ.
       window.location.replace('/login')
     }
   }

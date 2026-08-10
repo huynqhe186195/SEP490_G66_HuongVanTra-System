@@ -322,15 +322,49 @@ function ReturnInspectionsPage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Đang tải...
+                  <td className="px-8 py-10 text-center text-slate-500" colSpan={7}>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải mục kiểm tra...
+                    </span>
                   </td>
                 </tr>
               ) : null}
               {!isLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Không có mục kiểm tra hàng trả trong mục này.
+                  <td className="px-8 py-12 text-center" colSpan={7}>
+                    <p className="font-semibold text-slate-800">
+                      {searchValue.trim() || activeTab !== 'pending'
+                        ? 'Không có mục kiểm tra trong bộ lọc này'
+                        : 'Chưa có hàng trả chờ kiểm tra'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {searchValue.trim() || activeTab !== 'pending'
+                        ? 'Thử đổi tab hoặc xóa từ khóa.'
+                        : 'Khi có hàng trả từ khách, kiểm tra rồi chọn: nhập lại / kiểm dịch / tiêu hủy. Hàng trả không tự tăng tồn bán.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {searchValue.trim() || activeTab !== 'pending' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchValue('')
+                            selectTab('pending')
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">filter_alt_off</span>
+                          Về mục chờ kiểm tra
+                        </button>
+                      ) : null}
+                      <Link
+                        to="/inventory/returns"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">undo</span>
+                        Xem trang trả hàng
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ) : null}

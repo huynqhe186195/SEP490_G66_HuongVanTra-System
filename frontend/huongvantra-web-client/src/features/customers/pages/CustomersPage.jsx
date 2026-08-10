@@ -22,7 +22,11 @@ import {
   importCustomersFromExcel,
   restoreCustomer,
 } from '../services/customersApi.js'
-import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
+import {
+  TIER_READONLY_HINT,
+  formatMembershipTiersBadge,
+  formatNonMembershipTierNotice,
+} from '../utils/membershipTierUtils.js'
 import {
   formatDebtVnd,
   formatVnd,
@@ -479,43 +483,77 @@ function CustomersPage() {
     return customers.slice(start, start + pageSize)
   }, [customers, page, pageSize])
 
-  const corporateStats = useMemo(() => {
-    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
-    const totalSpend = customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
-    const totalDebt = customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)
-    const withDebt = customers.filter((item) => Number(item.currentDebt) > 0).length
-    return [
-      { label: 'Tổng KH doanh nghiệp', value: String(customers.length), note: 'từ hệ thống', noteClass: 'text-[#4a6242]' },
-      { label: 'Đang hoạt động', value: String(activeCount), note: `${customers.length - activeCount} ngừng hoạt động`, noteClass: 'text-[#717971]' },
-      { label: 'Tổng công nợ', value: formatDebtVnd(totalDebt).replace(' VND', ''), note: `${withDebt} KH đang nợ`, noteClass: 'text-[#7e5700]', highlight: true },
-      { label: 'Tổng chi tiêu', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#356647]' },
-    ]
-  }, [customers])
+  const insightGridClass = 'grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4'
 
-  const generalStats = useMemo(() => {
-    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+  function buildTabInsightStats({ countLabel, countIcon, countNote, customers: rows }) {
+    const activeCount = rows.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    const inactiveCount = Math.max(0, rows.length - activeCount)
+    const withDebt = rows.filter((item) => Number(item.currentDebt) > 0).length
+    const totalDebt = rows.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)
+    const totalSpend = rows.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
     return [
       {
-        label: 'Khách phổ thông',
-        value: String(customers.length),
-        note: statistics ? `${statistics.newCustomersThisMonth} mới tháng này (toàn hệ thống)` : `${activeCount} đang hoạt động`,
+        label: countLabel,
+        value: String(rows.length),
+        note: countNote || `${activeCount} đang hoạt động`,
         noteIcon: 'trending_up',
-        icon: 'group',
+        icon: countIcon,
         toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
         glow: 'bg-[#356647]/10',
       },
       {
         label: 'Tổng công nợ',
-        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
-        note: `${customers.filter((item) => Number(item.currentDebt) > 0).length} khách còn nợ · bấm để quản lý`,
+        value: formatDebtVnd(totalDebt).replace(' VND', ''),
+        note: `${withDebt} khách còn nợ · bấm để quản lý`,
         noteIcon: 'account_balance_wallet',
         icon: 'payments',
         toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
         glow: 'bg-[#7e5700]/10',
         href: buildCustomerPath('debts'),
       },
+      {
+        label: 'Đang hoạt động',
+        value: String(activeCount),
+        note: `${inactiveCount} ngừng hoạt động`,
+        noteIcon: 'verified',
+        icon: 'verified',
+        toneClass: 'text-[#356647] bg-[#baefc8]/30',
+        glow: 'bg-[#356647]/10',
+      },
+      {
+        label: 'Tổng chi tiêu',
+        value: formatVnd(totalSpend).replace(' VND', ''),
+        note: 'VND',
+        noteIcon: 'payments',
+        icon: 'payments',
+        toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
+        glow: 'bg-[#356647]/10',
+      },
     ]
-  }, [customers, statistics])
+  }
+
+  const corporateStats = useMemo(
+    () =>
+      buildTabInsightStats({
+        countLabel: 'Khách doanh nghiệp',
+        countIcon: 'apartment',
+        customers,
+      }),
+    [customers],
+  )
+
+  const generalStats = useMemo(
+    () =>
+      buildTabInsightStats({
+        countLabel: 'Khách phổ thông',
+        countIcon: 'group',
+        countNote: statistics
+          ? `${statistics.newCustomersThisMonth} mới tháng này (toàn hệ thống)`
+          : undefined,
+        customers,
+      }),
+    [customers, statistics],
+  )
 
   const debtsStats = useMemo(() => {
     const totalDebt = customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)
@@ -542,37 +580,93 @@ function CustomersPage() {
     ]
   }, [customers])
 
-  const vipStats = useMemo(() => {
-    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
-    return [
-      {
-        label: 'Khách VIP',
-        value: String(customers.length),
-        note: `${activeCount} đang hoạt động`,
-        noteIcon: 'trending_up',
-        icon: 'stars',
-        toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
-        glow: 'bg-[#356647]/10',
-      },
-      {
-        label: 'Tổng công nợ',
-        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
-        note: 'đơn chưa thu đủ',
-        icon: 'account_balance_wallet',
-        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
-        glow: 'bg-[#7e5700]/10',
-      },
-      {
-        label: 'Đang hoạt động',
-        value: String(activeCount),
-        note: 'Không dùng hạng B/S/G',
-        icon: 'verified',
-        toneClass: 'text-[#356647] bg-[#baefc8]/30',
-        glow: 'bg-[#356647]/10',
-      },
-    ]
-  }, [customers])
+  const vipStats = useMemo(
+    () =>
+      buildTabInsightStats({
+        countLabel: 'Khách VIP',
+        countIcon: 'stars',
+        customers,
+      }),
+    [customers],
+  )
 
+  const nonMembershipNotice = useMemo(
+    () => formatNonMembershipTierNotice(membershipTiers),
+    [membershipTiers],
+  )
+
+  function renderInsightStatCards(stats, gridClassName = insightGridClass) {
+    return (
+      <section className={gridClassName}>
+        {stats.map((stat) => {
+          const content = (
+            <>
+              <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-[10px] uppercase tracking-widest text-[#414942] sm:text-xs">{stat.label}</p>
+                  <h3 className="text-2xl font-bold text-[#1b1c17] sm:text-3xl">{stat.value}</h3>
+                  <p className="mt-2 line-clamp-3 text-xs font-bold text-[#356647] sm:text-sm">
+                    {stat.noteIcon ? (
+                      <span className="material-symbols-outlined align-middle text-[16px] sm:text-[18px]">{stat.noteIcon}</span>
+                    ) : null}{' '}
+                    {stat.note}
+                  </p>
+                </div>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 ${stat.toneClass}`}>
+                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    {stat.icon}
+                  </span>
+                </div>
+              </div>
+            </>
+          )
+          const cardClass =
+            'group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)] sm:p-5'
+          return stat.href ? (
+            <Link key={stat.label} to={stat.href} className={cardClass}>
+              {content}
+            </Link>
+          ) : (
+            <article key={stat.label} className={cardClass}>
+              {content}
+            </article>
+          )
+        })}
+      </section>
+    )
+  }
+
+  function renderCustomerListHeader({ title, badge, badgeClassName, hint, createTo, createLabel, createClassName, showCreate }) {
+    return (
+      <div className="flex flex-col gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+          <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl lg:text-2xl">{title}</h4>
+          {badge ? (
+            <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] leading-snug sm:px-3 sm:text-xs ${badgeClassName}`}>
+              {badge}
+            </span>
+          ) : null}
+          {hint ? (
+            <span className="hidden max-w-md text-xs text-[#717971] xl:inline" title={hint}>
+              {hint}
+            </span>
+          ) : null}
+        </div>
+        {showCreate && createTo ? (
+          <div className="flex w-full sm:w-auto">
+            <Link
+              to={createTo}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm text-white hover:opacity-90 sm:w-auto ${createClassName}`}
+            >
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              {createLabel}
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
   return (
     <PageShell className="min-w-0 [font-family:'Manrope',sans-serif]">
       <PageHeader
@@ -839,43 +933,18 @@ function CustomersPage() {
           </section>
         ) : activeTab === 'corporate' && CUSTOMER_CORPORATE_ENABLED ? (
           <>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-4">
-              {corporateStats.map((stat) => (
-                <article key={stat.label} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-[#f0eee6] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5">
-                  <span className="text-[10px] uppercase tracking-wider text-[#717971] sm:text-xs">{stat.label}</span>
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span className={`text-xl font-bold sm:text-2xl ${stat.highlight ? 'text-[#7e5700]' : 'text-[#356647]'}`}>{stat.value}</span>
-                    {stat.isIconNote ? (
-                      <span className={`inline-flex items-center gap-1 text-xs font-bold ${stat.noteClass}`}>
-                        <span className="material-symbols-outlined text-[16px]">{stat.note}</span>
-                      </span>
-                    ) : (
-                      <span className={`text-xs font-bold ${stat.noteClass}`}>{stat.note}</span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </section>
+            {renderInsightStatCards(corporateStats)}
 
-            <section className="rounded-2xl border border-[#f0eee6] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex flex-col gap-3 border-b border-[#f0eee6] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <h3 className="text-lg font-semibold text-[#1b1c17] sm:text-xl">Danh sách khách doanh nghiệp</h3>
-                <div className="flex items-center gap-3">
-                  {canManageCorporate ? (
-                    <Link
-                      to="/customers/create?type=corporate"
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#7e5700] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
-                    >
-                      <span className="material-symbols-outlined text-sm">add</span>
-                      Thêm doanh nghiệp
-                    </Link>
-                  ) : null}
-                  <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-xs text-[#717971] hover:bg-[#f6f4ec]">
-                    <span className="material-symbols-outlined text-sm">download</span>
-                    Xuất Excel
-                  </button>
-                </div>
-              </div>
+            <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+              {renderCustomerListHeader({
+                title: 'Khách doanh nghiệp',
+                badge: nonMembershipNotice,
+                badgeClassName: 'bg-[#7e5700]/15 text-[#7e5700]',
+                createTo: '/customers/create?type=corporate',
+                createLabel: 'Thêm doanh nghiệp',
+                createClassName: 'bg-[#7e5700]',
+                showCreate: canManageCorporate,
+              })}
 
               <CustomersMobileCards
                 variant="corporate"
@@ -1110,131 +1179,19 @@ function CustomersPage() {
           </>
         ) : activeTab === 'general' ? (
           <>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {generalStats.map((stat) => {
-                const content = (
-                  <>
-                  <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="mb-1 text-[10px] uppercase tracking-widest text-[#414942] sm:text-xs">{stat.label}</p>
-                      <h3 className="text-2xl font-bold text-[#1b1c17] sm:text-3xl">{stat.value}</h3>
-                      <p className="mt-2 line-clamp-3 text-xs font-bold text-[#356647] sm:text-sm">
-                        {stat.noteIcon ? <span className="material-symbols-outlined align-middle text-[16px] sm:text-[18px]">{stat.noteIcon}</span> : null}{' '}
-                        {stat.note}
-                      </p>
-                    </div>
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 ${stat.toneClass}`}>
-                      <span className="material-symbols-outlined text-[24px] sm:text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                        {stat.icon}
-                      </span>
-                    </div>
-                  </div>
-                  </>
-                )
-                return stat.href ? (
-                  <Link
-                    key={stat.label}
-                    to={stat.href}
-                    className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)] sm:p-5"
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                <article key={stat.label} className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5 transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
-                  {content}
-                </article>
-                )
-              })}
-            </section>
-
-            {statistics ? (
-              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
-                  <div className="mb-4 flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-[#1b1c17]">Top chi tiêu cao</h4>
-                    <span className="text-xs text-[#717971]">Toàn hệ thống · {statistics.totalCustomers} khách</span>
-                  </div>
-                  {statistics.topSpenders?.length ? (
-                    <ul className="space-y-2">
-                      {statistics.topSpenders.map((item, index) => (
-                        <li key={item.customerId} className="flex items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#356647]/15 text-xs font-bold text-[#356647]">
-                              {index + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.fullName}</p>
-                              <p className="text-[11px] text-[#717971]">{item.customerCode || '—'}</p>
-                            </div>
-                          </div>
-                          <span className="shrink-0 text-sm font-bold text-[#356647]">{formatVnd(item.totalSpend)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-[#717971]">Chưa có dữ liệu chi tiêu.</p>
-                  )}
-                </article>
-
-                <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
-                  <div className="mb-4 flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-[#1b1c17]">Khách nợ nhiều nhất</h4>
-                    <span className="text-xs text-[#717971]">{statistics.newCustomersThisMonth} khách mới tháng này</span>
-                  </div>
-                  {statistics.topDebtors?.length ? (
-                    <ul className="space-y-2">
-                      {statistics.topDebtors.map((item, index) => (
-                        <li key={item.customerId}>
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2 text-left hover:bg-[#fff8e8]"
-                            onClick={() => setDebtCustomer(item)}
-                          >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#7e5700]/15 text-xs font-bold text-[#7e5700]">
-                              {index + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.fullName}</p>
-                              <p className="text-[11px] text-[#717971]">{item.phone || '—'}</p>
-                            </div>
-                          </div>
-                          <span className={`shrink-0 text-sm font-bold ${getDebtClass(item.currentDebt)}`}>
-                            {formatDebtVnd(item.currentDebt)}
-                          </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-[#717971]">Không có khách đang nợ.</p>
-                  )}
-                </article>
-              </section>
-            ) : null}
+            {renderInsightStatCards(generalStats)}
 
             <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex flex-col gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:gap-4">
-                  <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl lg:text-2xl">Khách phổ thông</h4>
-                  <span className="w-fit rounded-full bg-[#627b59]/20 px-2.5 py-1 text-[10px] text-[#4a6242] sm:px-3 sm:text-xs">
-                    Hạng Member / Silver / Gold / Diamond
-                  </span>
-                  <span className="hidden max-w-md text-xs text-[#717971] xl:inline" title={TIER_READONLY_HINT}>
-                    Hạng do hệ thống quản lý
-                  </span>
-                </div>
-
-                {canCreateCustomers ? (
-                  <div className="flex w-full sm:w-auto">
-                    <Link to="/customers/create?type=general" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2.5 text-sm text-white hover:opacity-90 sm:w-auto">
-                      <span className="material-symbols-outlined text-[20px]">add</span>
-                      Thêm khách hàng
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
+              {renderCustomerListHeader({
+                title: 'Khách phổ thông',
+                badge: formatMembershipTiersBadge(membershipTiers),
+                badgeClassName: 'bg-[#627b59]/20 text-[#4a6242]',
+                hint: TIER_READONLY_HINT,
+                createTo: '/customers/create?type=general',
+                createLabel: 'Thêm khách hàng',
+                createClassName: 'bg-[#4a6242]',
+                showCreate: canCreateCustomers,
+              })}
 
               <CustomersMobileCards
                 variant="general"
@@ -1341,6 +1298,72 @@ function CustomersPage() {
               </div>
             </section>
 
+            {statistics ? (
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <h4 className="font-bold text-[#1b1c17]">Top chi tiêu cao</h4>
+                    <span className="text-xs text-[#717971]">Toàn hệ thống · {statistics.totalCustomers} khách</span>
+                  </div>
+                  {statistics.topSpenders?.length ? (
+                    <ul className="space-y-2">
+                      {statistics.topSpenders.map((item, index) => (
+                        <li key={item.customerId} className="flex items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#356647]/15 text-xs font-bold text-[#356647]">
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.fullName}</p>
+                              <p className="text-[11px] text-[#717971]">{item.customerCode || '—'}</p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold text-[#356647]">{formatVnd(item.totalSpend)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-[#717971]">Chưa có dữ liệu chi tiêu.</p>
+                  )}
+                </article>
+
+                <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <h4 className="font-bold text-[#1b1c17]">Khách nợ nhiều nhất</h4>
+                    <span className="text-xs text-[#717971]">{statistics.newCustomersThisMonth} khách mới tháng này</span>
+                  </div>
+                  {statistics.topDebtors?.length ? (
+                    <ul className="space-y-2">
+                      {statistics.topDebtors.map((item, index) => (
+                        <li key={item.customerId}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2 text-left hover:bg-[#fff8e8]"
+                            onClick={() => setDebtCustomer(item)}
+                          >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#7e5700]/15 text-xs font-bold text-[#7e5700]">
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.fullName}</p>
+                              <p className="text-[11px] text-[#717971]">{item.phone || '—'}</p>
+                            </div>
+                          </div>
+                          <span className={`shrink-0 text-sm font-bold ${getDebtClass(item.currentDebt)}`}>
+                            {formatDebtVnd(item.currentDebt)}
+                          </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-[#717971]">Không có khách đang nợ.</p>
+                  )}
+                </article>
+              </section>
+            ) : null}
+
             {/* <section className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-12">
               <article className="flex min-h-[300px] flex-col rounded-xl border border-[#eae8e0] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] lg:col-span-8">
                 <div className="mb-6 flex items-center justify-between">
@@ -1389,47 +1412,18 @@ function CustomersPage() {
           </>
         ) : (
           <>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-              {vipStats.map((stat) => (
-                <article key={stat.label} className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5 transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
-                  <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="mb-1 text-[10px] uppercase tracking-widest text-[#414942] sm:text-xs">{stat.label}</p>
-                      <h3 className="text-2xl font-bold text-[#1b1c17] sm:text-3xl">{stat.value}</h3>
-                      <p className="mt-2 line-clamp-2 text-xs font-bold text-[#356647] sm:text-sm">
-                        {stat.noteIcon ? <span className="material-symbols-outlined align-middle text-[16px] sm:text-[18px]">{stat.noteIcon}</span> : null}{' '}
-                        {stat.note}
-                      </p>
-                    </div>
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 ${stat.toneClass}`}>
-                      <span className="material-symbols-outlined text-[24px] sm:text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                        {stat.icon}
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </section>
+            {renderInsightStatCards(vipStats)}
 
             <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex flex-col gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-                  <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl lg:text-2xl">Khách VIP</h4>
-                  <span className="w-fit rounded-full bg-[#7e5700]/15 px-2.5 py-1 text-[10px] leading-snug text-[#7e5700] sm:px-3 sm:text-xs">
-                    Không hạng B/S/G · không chiết khấu hạng
-                  </span>
-                </div>
-
-                {canCreateCustomers ? (
-                  <div className="flex w-full sm:w-auto">
-                    <Link to="/customers/create?type=vip" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#7e5700] px-4 py-2.5 text-sm text-white hover:opacity-90 sm:w-auto">
-                      <span className="material-symbols-outlined text-[20px]">add</span>
-                      Thêm khách VIP
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
+              {renderCustomerListHeader({
+                title: 'Khách VIP',
+                badge: nonMembershipNotice,
+                badgeClassName: 'bg-[#7e5700]/15 text-[#7e5700]',
+                createTo: '/customers/create?type=vip',
+                createLabel: 'Thêm khách VIP',
+                createClassName: 'bg-[#7e5700]',
+                showCreate: canCreateCustomers,
+              })}
 
               <CustomersMobileCards
                 variant="vip"
