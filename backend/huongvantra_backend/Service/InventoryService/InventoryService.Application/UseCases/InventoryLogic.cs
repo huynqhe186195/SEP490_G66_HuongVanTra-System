@@ -741,8 +741,9 @@ public class InventoryLogic(
                 {
                     // POS-04: phần giữ chỗ của chính queue này được tính là khả dụng khi trừ tồn;
                     // chỉ phần giữ chỗ của các đơn khác mới chặn. Legacy (Reserved=0) không đổi hành vi.
+                    // Bug fix: dùng item.ReservedQuantity thay vì item.Quantity khi queue có bù từ Kho.
                     var otherReserved = queue.IsReserved
-                        ? Math.Max(0, stock.ReservedQuantity - item.Quantity)
+                        ? Math.Max(0, stock.ReservedQuantity - item.ReservedQuantity)
                         : stock.ReservedQuantity;
                     var availableForQueue = Math.Max(0, stock.QuantityOnHand - otherReserved);
                     if (availableForQueue < shelfOnlyQuantity)
@@ -1913,49 +1914,78 @@ public class InventoryLogic(
                     : (item.SkuSnapshotName, item.Quantity);
             }
 
-            // Khoá theo thứ tự SkuId ổn định rồi kiểm tra đủ Available cho toàn bộ dòng.
+            // POS-04 mở rộng: kiểm tra đủ hàng từ cả Kệ (giữ chỗ) và Kho (không giữ chỗ, chờ điều chuyển).
+            // Giống logic POS thanh toán trực tiếp: Kệ thiếu → bù từ Kho thành phẩm → thiếu cả hai mới fail.
             var shortages = new List<StockShortage>();
             var stockBySkuId = new Dictionary<Guid, SkuStock>();
+            var shelfReserveBySku = new Dictionary<Guid, int>(); // phần giữ chỗ tại Kệ
+            var warehouseTransferBySku = new Dictionary<Guid, int>(); // phần chờ điều chuyển từ Kho
+
             foreach (var (skuId, required) in requiredBySku.OrderBy(kv => kv.Key))
             {
                 var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(skuId, innerCt);
-                var available = Math.Max(0, (stock?.QuantityOnHand ?? 0) - (stock?.ReservedQuantity ?? 0));
-                if (stock == null || available < required.Quantity)
+                var shelfAvailable = Math.Max(0, (stock?.QuantityOnHand ?? 0) - (stock?.ReservedQuantity ?? 0));
+                var fromShelf = Math.Min(required.Quantity, shelfAvailable);
+                var remaining = required.Quantity - fromShelf;
+
+                var warehouseQty = Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0);
+                if (!_inventoryOptions.SimulateWarehouse)
+                {
+                    warehouseQty = Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(skuId, LocationWarehouse, innerCt));
+                }
+                var fromWarehouse = Math.Min(remaining, warehouseQty);
+                var stillShort = remaining - fromWarehouse;
+
+                if (stock == null || stillShort > 0)
                 {
                     shortages.Add(new StockShortage(
-                        skuId, required.Name, required.Quantity, available,
-                        required.Quantity - available));
+                        skuId, required.Name, required.Quantity,
+                        fromShelf + fromWarehouse, stillShort));
                 }
                 else
                 {
                     stockBySkuId[skuId] = stock;
+                    shelfReserveBySku[skuId] = fromShelf;
+                    warehouseTransferBySku[skuId] = fromWarehouse;
                 }
             }
 
             if (shortages.Count > 0)
             {
-                // Không partial reserve: từ chối toàn bộ, ghi lý do để xử lý thủ công.
+                // Không đủ tồn cả Kệ lẫn Kho → queue Insufficient.
                 queue.QueueStatus = QueueStatus.Insufficient;
-                queue.LastShortageReason = "Không đủ tồn khả bán để giữ chỗ COD: " + BuildShortageReason(shortages);
+                queue.LastShortageReason = "Không đủ tồn (Kệ + Kho thành phẩm) để giữ chỗ COD: " + BuildShortageReason(shortages);
                 queue.LastAttemptAt = now;
                 await _queueRepo.SaveChangesAsync(innerCt);
                 return false;
             }
 
-            // Tất cả dòng hợp lệ → tăng Reserved; Available >= qty nên Reserved không vượt OnHand.
-            foreach (var (skuId, required) in requiredBySku.OrderBy(kv => kv.Key))
+            // Tăng Reserved chỉ cho phần Kệ; phần Kho không giữ chỗ (chờ Thủ kho điều chuyển khi giao).
+            foreach (var (skuId, shelfQty) in shelfReserveBySku.OrderBy(kv => kv.Key))
             {
-                var stock = stockBySkuId[skuId];
-                stock.ReservedQuantity += required.Quantity;
-                stock.UpdatedAt = now;
+                if (shelfQty > 0)
+                {
+                    var stock = stockBySkuId[skuId];
+                    stock.ReservedQuantity += shelfQty;
+                    stock.UpdatedAt = now;
+                }
             }
 
             queue.IsReserved = true;
             queue.LastShortageReason = null;
 
-            // POS-04 (truy vết giữ chỗ): đóng dấu trạng thái ở cấp dòng SKU. Tổng ReservedQuantity
-            // của các dòng Active theo SKU khớp đúng phần vừa cộng vào SkuStock.ReservedQuantity.
-            StampItemsReserved(queue, now);
+            // Lưu phần chờ điều chuyển vào queue items để Thủ kho biết phải xử lý.
+            foreach (var item in queue.Items)
+            {
+                if (warehouseTransferBySku.TryGetValue(item.SkuId, out var transferQty) && transferQty > 0)
+                {
+                    item.WarehouseTransferQuantity = transferQty;
+                    item.FinishedDeductedQuantity = shelfReserveBySku.GetValueOrDefault(item.SkuId);
+                }
+            }
+
+            // POS-04 (truy vết giữ chỗ): đóng dấu chỉ phần Kệ (phần Kho không vào Reserved).
+            StampItemsReservedPartial(queue, shelfReserveBySku, now);
 
             await _queueRepo.SaveChangesAsync(innerCt);
             return true;
@@ -1972,12 +2002,12 @@ public class InventoryLogic(
         if (!queue.IsReserved) return;
 
         var now = DateTime.UtcNow;
-        // Gộp dòng trùng SKU rồi khoá theo thứ tự ổn định — nhả đúng một lần cho mỗi SKU.
+        // Gộp dòng trùng SKU rồi khoá theo thứ tự ổn định — nhả chỉ phần đã giữ chỗ (ReservedQuantity).
         var releaseBySku = new Dictionary<Guid, int>();
         foreach (var item in queue.Items)
         {
-            if (item.SkuId == Guid.Empty || item.Quantity <= 0) continue;
-            releaseBySku[item.SkuId] = releaseBySku.GetValueOrDefault(item.SkuId) + item.Quantity;
+            if (item.SkuId == Guid.Empty || item.ReservedQuantity <= 0) continue;
+            releaseBySku[item.SkuId] = releaseBySku.GetValueOrDefault(item.SkuId) + item.ReservedQuantity;
         }
 
         foreach (var (skuId, quantity) in releaseBySku.OrderBy(kv => kv.Key))
@@ -2008,6 +2038,29 @@ public class InventoryLogic(
             item.ReservedAt = now;
             item.ReleasedAt = null;
             item.DeductedAt = null;
+        }
+    }
+
+    /// <summary>
+    /// POS-04 mở rộng (COD bù từ Kho): đánh dấu chỉ phần Kệ là giữ chỗ, phần Kho chờ điều chuyển.
+    /// </summary>
+    private static void StampItemsReservedPartial(
+        StockDeductQueue queue,
+        Dictionary<Guid, int> shelfReserveBySku,
+        DateTime now)
+    {
+        foreach (var item in queue.Items)
+        {
+            if (item.SkuId == Guid.Empty || item.Quantity <= 0) continue;
+            var shelfQty = shelfReserveBySku.GetValueOrDefault(item.SkuId);
+            if (shelfQty > 0)
+            {
+                item.ReservationStatus = StockReservationStatus.Active;
+                item.ReservedQuantity = shelfQty;
+                item.ReservedAt = now;
+                item.ReleasedAt = null;
+                item.DeductedAt = null;
+            }
         }
     }
 
@@ -6556,13 +6609,11 @@ public class InventoryLogic(
                 throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC là bắt buộc.");
             if (!item.ManufacturedAt.HasValue)
                 throw new InventoryValidationException($"Dòng {index + 1}: Ngày sản xuất là bắt buộc.");
-            if (!item.ExpiresAt.HasValue)
-                throw new InventoryValidationException($"Dòng {index + 1}: Hạn dùng là bắt buộc.");
             var lineIdentity = BuildSupplierReceiptLineIdentity(item.SkuId, lotCode)!;
             if (!lineIdentities.Add(lineIdentity))
                 throw new InventoryValidationException(
                     $"Dòng {index + 1}: Trùng SKU và Mã lô NCC trong cùng phiếu. Gộp thành một dòng duy nhất.");
-            if (item.ExpiresAt.Value.Date <= item.ManufacturedAt.Value.Date)
+            if (item.ExpiresAt.HasValue && item.ExpiresAt.Value.Date <= item.ManufacturedAt.Value.Date)
                 throw new InventoryValidationException($"Dòng {index + 1}: Hạn dùng phải sau ngày sản xuất.");
             if (item.ExpiresAt.HasValue && item.ExpiresAt.Value.Date < receipt.ReceivedDate.Date)
                 throw new InventoryValidationException($"Dòng {index + 1}: Hạn sử dụng không được trước ngày nhận hàng.");

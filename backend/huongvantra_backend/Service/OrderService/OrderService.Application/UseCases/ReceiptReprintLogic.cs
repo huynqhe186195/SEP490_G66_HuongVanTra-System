@@ -146,7 +146,15 @@ public class ReceiptReprintLogic(
             Math.Max(0, order.FinalAmount - amountPaid),
             true,
             log.ReprintNumber,
-            log.PrintedAt);
+            log.PrintedAt,
+            order.BackorderAcceptedAt.HasValue,
+            order.FulfillmentPreference?.ToString(),
+            order.EstimatedReadyFrom,
+            order.EstimatedReadyTo,
+            order.PickupDate,
+            order.PickupContactName,
+            order.PickupContactPhone,
+            order.PickupCode);
     }
 
     private static string GetPaymentMethodLabel(PaymentMethod method) => method switch
