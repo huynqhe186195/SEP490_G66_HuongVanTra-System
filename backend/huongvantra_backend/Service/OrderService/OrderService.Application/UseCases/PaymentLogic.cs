@@ -45,6 +45,9 @@ public class PaymentLogic(
             throw new OrderValidationException("Đơn COD này đã được xác nhận thu tiền rồi.");
         if (order.OrderStatus is OrderStatus.Draft or OrderStatus.CancellationRequested)
             throw new OrderValidationException("Trạng thái đơn hiện tại không cho phép thu COD.");
+        if (order.OrderStatus != OrderStatus.Shipping)
+            throw new OrderValidationException(
+                "Chỉ thu COD khi đơn đang giao. Hãy bấm «Chuyển sang đang giao» trước khi xác nhận đã giao và thu tiền.");
 
         var collected = req.CollectedAmount > 0 ? req.CollectedAmount : order.FinalAmount;
         if (collected < order.FinalAmount)

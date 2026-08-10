@@ -602,7 +602,8 @@ public class OrderLogic(
 
         var (backorderMinLeadDays, backorderMaxLeadDays) = ResolveBackorderLeadTime(order);
         InventoryStockHandlingResponse? stockPreview = null;
-        if (order.OrderChannel == OrderChannel.POS && (order.OrderDetails?.Count ?? 0) > 0)
+        if ((order.OrderChannel is OrderChannel.POS or OrderChannel.COD)
+            && (order.OrderDetails?.Count ?? 0) > 0)
         {
             order.FulfillmentPreference = req.FulfillmentPreference;
             stockPreview = await PreparePosStockHandlingAsync(
@@ -629,7 +630,10 @@ public class OrderLogic(
                 order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
                 ApplyPickupContact(order, req);
 
-                if (req.DepositAmount.HasValue && req.DepositAmount.Value > 0)
+                // COD backorder: không bắt cọc. POS vẫn yêu cầu cọc ≥50% khi cashier truyền DepositAmount.
+                if (order.OrderChannel == OrderChannel.POS
+                    && req.DepositAmount.HasValue
+                    && req.DepositAmount.Value > 0)
                 {
                     var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
                     if (req.DepositAmount.Value < minimumDeposit)
@@ -642,6 +646,8 @@ public class OrderLogic(
                 }
 
                 if (isPosCompletedOnCreate)
+                    order.OrderStatus = OrderStatus.WaitingMaterials;
+                else if (order.OrderChannel == OrderChannel.COD)
                     order.OrderStatus = OrderStatus.WaitingMaterials;
             }
             else
@@ -698,6 +704,26 @@ public class OrderLogic(
                 throw new BackorderConfirmationRequiredException(stockHandling);
             // POS-06: mỗi mode ứng với một kịch bản chờ khác nhau ở phía Thủ kho.
             order.OrderStatus = ResolvePosStockHandlingStatus(stockHandling, order.OrderStatus);
+            ApplyFulfillmentSnapshot(
+                order,
+                stockHandling,
+                order.FulfillmentPreference ?? FulfillmentPreference.PartialDelivery);
+            order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
+                ? InventorySyncStatus.PendingReconciliation
+                : InventorySyncStatus.Synced;
+        }
+        else if (ShouldHandleCodStockSynchronously(order))
+        {
+            stockHandling = await PreparePosStockHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: false,
+                order.BackorderMinLeadDaysSnapshot ?? backorderMinLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? backorderMaxLeadDays,
+                ct);
+            if (stockHandling.BackorderRequired)
+                throw new BackorderConfirmationRequiredException(stockHandling);
+            order.OrderStatus = ResolveCodStockHandlingStatus(stockHandling, order.OrderStatus);
             ApplyFulfillmentSnapshot(
                 order,
                 stockHandling,
@@ -776,7 +802,7 @@ public class OrderLogic(
 
         // G4: enqueue integration events vào Outbox TRƯỚC SaveChanges để OutboxMessage
         // commit atomically cùng Order/OrderDetail/Payment/Activity trong một transaction.
-        if (!ShouldSuppressLegacyOrderPlacedEvent(order))
+        if (!ShouldSuppressLegacyOrderPlacedEvent(order, stockHandling))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
@@ -1626,8 +1652,10 @@ public class OrderLogic(
             if (!access.CanShipOrder)
                 throw new OrderForbiddenException();
         }
-        else
+        else if (order.InventorySyncStatus != InventorySyncStatus.Synced)
         {
+            // COD/online đã đồng bộ kho: Thủ kho đã xuất/SX xong — chuyển «đang giao» là
+            // bàn giao vận chuyển, không còn phụ thuộc ca quầy (Sale vẫn ship được ngoài giờ ca).
             await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
         }
 
@@ -2047,7 +2075,7 @@ public class OrderLogic(
         }
 
         // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
-        if (!ShouldSuppressLegacyOrderPlacedEvent(order))
+        if (!ShouldSuppressLegacyOrderPlacedEvent(order, stockHandling))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.OrderChannel.ToString(), order.FinalAmount,
@@ -2605,6 +2633,13 @@ public class OrderLogic(
         && (order.OrderDetails?.Count ?? 0) > 0;
 
     /// <summary>
+    /// COD sell-first: đồng bộ prepare lúc tạo đơn (reserve-only), map Waiting* giống POS.
+    /// </summary>
+    private static bool ShouldHandleCodStockSynchronously(Order order) =>
+        order.OrderChannel == OrderChannel.COD
+        && (order.OrderDetails?.Count ?? 0) > 0;
+
+    /// <summary>
     /// POS-06: ánh xạ mode do InventoryService trả về sang trạng thái đơn.
     /// KB1 hoàn thành ngay; KB2/KB3 chờ Thủ kho sinh chứng từ; KB4 chờ khách quay lại lấy.
     /// </summary>
@@ -2617,6 +2652,20 @@ public class OrderLogic(
             "PartialOrFullPendingBomReconciliation" => OrderStatus.WaitingProduction,
             "BackorderAccepted" => OrderStatus.WaitingMaterials,
             _ => stockHandling.HasPendingStockReconciliation ? currentStatus : OrderStatus.Completed
+        };
+
+    /// <summary>
+    /// COD: Immediate giữ PendingPayment (chưa thu); các mode chờ Thủ kho/nguyên liệu như POS.
+    /// </summary>
+    private static OrderStatus ResolveCodStockHandlingStatus(
+        InventoryStockHandlingResponse stockHandling,
+        OrderStatus currentStatus) =>
+        stockHandling.StockHandlingMode switch
+        {
+            "WarehouseTransferPending" => OrderStatus.WaitingTransfer,
+            "PartialOrFullPendingBomReconciliation" => OrderStatus.WaitingProduction,
+            "BackorderAccepted" => OrderStatus.WaitingMaterials,
+            _ => currentStatus
         };
 
     private static void EnsureIdempotentOrderCanBeReturned(Order order)
@@ -2632,8 +2681,12 @@ public class OrderLogic(
         }
     }
 
-    private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
-        order.OrderChannel == OrderChannel.POS;
+    /// <summary>
+    /// POS luôn suppress; COD suppress khi đã sync prepare (tránh OrderPlaced tạo queue/reserve lần 2).
+    /// </summary>
+    private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order, InventoryStockHandlingResponse? stockHandling) =>
+        order.OrderChannel == OrderChannel.POS
+        || (order.OrderChannel == OrderChannel.COD && stockHandling is not null);
 
     private async Task<InventoryStockHandlingResponse> PreparePosStockHandlingAsync(
         Order order,
@@ -2662,7 +2715,8 @@ public class OrderLogic(
                     backorderMaxLeadDays,
                     order.FulfillmentPreference?.ToString(),
                     order.PickupDate,
-                    order.PickupNote),
+                    order.PickupNote,
+                    ReserveOnly: order.OrderChannel == OrderChannel.COD),
                 ct);
         }
         catch (InventoryStockHandlingException ex)

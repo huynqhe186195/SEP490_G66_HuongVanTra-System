@@ -1631,7 +1631,6 @@ function InventoryImportCreatePage() {
                               <input
                                 type="text"
                                 inputMode="numeric"
-                                pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
                                 value={formatQuantityInput(line.documentQuantity)}
                                 onChange={(event) => {
@@ -1646,7 +1645,6 @@ function InventoryImportCreatePage() {
                               <input
                                 type="text"
                                 inputMode="numeric"
-                                pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
                                 value={formatQuantityInput(line.actualQuantity)}
                                 onChange={(event) => {

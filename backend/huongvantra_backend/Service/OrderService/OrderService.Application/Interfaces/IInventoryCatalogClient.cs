@@ -68,7 +68,9 @@ public record InventoryStockHandlingRequest(
     int BackorderMaxLeadDays = 5,
     string? FulfillmentPreference = null,
     DateTime? PickupDate = null,
-    string? PickupNote = null);
+    string? PickupNote = null,
+    /// <summary>COD: chuẩn bị tồn giống POS nhưng chỉ reserve, không trừ Kệ ngay.</summary>
+    bool ReserveOnly = false);
 
 public record InventoryStockHandlingLineResponse(
     Guid SkuId,
