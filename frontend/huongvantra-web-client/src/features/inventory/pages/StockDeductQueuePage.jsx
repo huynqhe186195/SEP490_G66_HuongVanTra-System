@@ -33,7 +33,7 @@ const TABS = [
 
 function getStockDeductTabLabel(tab) {
   if (tab?.value === 'waiting') return 'Chờ đóng gói'
-  if (tab?.value === 'insufficient') return 'Chờ nguyên liệu'
+  if (tab?.value === 'insufficient') return 'Chờ hàng'
   return tab?.label ?? ''
 }
 
@@ -150,7 +150,7 @@ function StockDeductQueuePage() {
       },
       {
         id: 'insufficient',
-        label: 'Chờ nguyên liệu',
+        label: 'Chờ hàng',
         value: insufficientCount,
         warn: insufficientCount > 0,
         active: activeTab === 'insufficient',
@@ -188,8 +188,8 @@ function StockDeductQueuePage() {
       },
       {
         id: 'insufficient-material',
-        title: 'Chờ nguyên liệu',
-        hint: 'Thiếu tồn Kho, chưa thể đóng gói',
+        title: 'Chờ hàng',
+        hint: 'Thiếu tồn Kệ/Kho thành phẩm, chưa thể trừ/điều chuyển',
         icon: 'warning',
         iconBg: 'bg-amber-50',
         iconColor: 'text-amber-700',
