@@ -1,4 +1,9 @@
-import { clearAuthSession, loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
+import {
+  clearAuthSession,
+  isAuthLoggingOut,
+  loadAuthSession,
+  saveAuthSession,
+} from '../features/auth/services/authSession.js'
 import { showError } from '../app/toast.js'
 
 export const DEFAULT_API_BASE_URL = 'http://localhost:5000'
@@ -102,6 +107,11 @@ async function refreshSession(session) {
 
 function handleAuthFailure(message, status) {
   try {
+    // Đang logout có chủ đích: request in-flight (chuông TB, poll session, …) có thể 401/403 — không toast.
+    if (isAuthLoggingOut() || window.location.pathname.startsWith('/login')) {
+      return
+    }
+
     if (status === 401) {
       showError(message || 'Phiên đăng nhập đã hết hạn.')
       clearAuthSession()

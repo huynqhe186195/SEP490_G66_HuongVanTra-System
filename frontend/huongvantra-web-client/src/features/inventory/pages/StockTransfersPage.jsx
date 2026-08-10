@@ -781,15 +781,79 @@ function StockTransfersPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
-                <tr><td colSpan={8} className="px-6 py-8 text-slate-500">Đang tải...</td></tr>
+                <tr>
+                  <td colSpan={8} className="px-6 py-10 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải phiếu điều chuyển...
+                    </span>
+                  </td>
+                </tr>
               ) : loadError ? (
-                <tr><td colSpan={8} className="px-6 py-8 text-rose-600">{loadError}</td></tr>
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <p className="font-semibold text-rose-700">Không tải được danh sách</p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      Hệ thống tạm thời chưa phản hồi. Vui lòng thử lại sau ít phút.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => loadTransfers()}
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">refresh</span>
+                      Thử lại
+                    </button>
+                  </td>
+                </tr>
               ) : data.items.length === 0 ? (
-                <tr><td colSpan={8} className="px-6 py-8 text-slate-500">
-                  {sourceRequestId
-                    ? 'Chưa có phiếu điều chuyển nào từ yêu cầu này.'
-                    : 'Chưa có phiếu điều chuyển phù hợp.'}
-                </td></tr>
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center">
+                    <p className="font-semibold text-slate-800">
+                      {sourceRequestId
+                        ? 'Chưa có phiếu điều chuyển từ yêu cầu này'
+                        : search.trim() || status || transferType
+                          ? 'Không tìm thấy phiếu khớp bộ lọc'
+                          : 'Chưa có phiếu điều chuyển'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {sourceRequestId
+                        ? 'Tạo phiếu từ yêu cầu để chuyển hàng Kho → Kệ.'
+                        : 'Tạo phiếu từ yêu cầu bổ sung hoặc tạo trực tiếp khi đã biết SKU cần chuyển.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {canOperate ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => navigate(sourceRequestId
+                              ? `/inventory/stock-transfers/create?sourceRequestId=${sourceRequestId}`
+                              : '/inventory/stock-transfers/create')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
+                            Từ yêu cầu
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/inventory/stock-transfers/create?mode=direct')}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#2a5238]"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">add</span>
+                            Tạo trực tiếp
+                          </button>
+                        </>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/inventory/stock-requests')}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        Xem yêu cầu bổ sung
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : data.items.map((transfer) => (
                 <tr key={transfer.id} className="hover:bg-slate-50/80">
                   <td className="px-6 py-4">

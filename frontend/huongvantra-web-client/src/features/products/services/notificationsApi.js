@@ -21,13 +21,19 @@ export async function fetchNotifications(params = {}) {
   if (params.unreadOnly) search.set('unreadOnly', 'true')
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
-  const data = await apiRequestAuth(`/api/v1/notifications?${search.toString()}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/notifications?${search.toString()}`, {
+    method: 'GET',
+    silentAuthErrors: true,
+  })
   const paged = toPagedResult(data)
   return { ...paged, items: paged.items.map(mapNotification).filter(Boolean) }
 }
 
 export async function fetchNotificationSummary() {
-  const data = await apiRequestAuth('/api/v1/notifications/summary', { method: 'GET' })
+  const data = await apiRequestAuth('/api/v1/notifications/summary', {
+    method: 'GET',
+    silentAuthErrors: true,
+  })
   return Number(data?.unreadCount ?? data?.UnreadCount ?? 0)
 }
 

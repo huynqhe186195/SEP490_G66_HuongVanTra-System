@@ -1,5 +1,16 @@
 const AUTH_SESSION_KEY = 'hv-auth-session'
 
+/** Chặn toast 401/403 từ request in-flight khi đang đăng xuất. */
+let authLogoutInProgress = false
+
+export function beginAuthLogout() {
+  authLogoutInProgress = true
+}
+
+export function isAuthLoggingOut() {
+  return authLogoutInProgress
+}
+
 export function formatDisplayName(value) {
   if (!value || typeof value !== 'string') {
     return ''
@@ -16,6 +27,7 @@ export function formatDisplayName(value) {
 export const AUTH_SESSION_CHANGED_EVENT = 'hv-auth-session-changed'
 
 export function saveAuthSession(session) {
+  authLogoutInProgress = false
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))
   window.dispatchEvent(new CustomEvent(AUTH_SESSION_CHANGED_EVENT))
 }
@@ -36,6 +48,7 @@ export function loadAuthSession() {
 }
 
 export function clearAuthSession() {
+  authLogoutInProgress = true
   localStorage.removeItem(AUTH_SESSION_KEY)
   window.dispatchEvent(new CustomEvent(AUTH_SESSION_CHANGED_EVENT))
 }

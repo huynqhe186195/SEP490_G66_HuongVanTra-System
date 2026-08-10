@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CLEAR_TOASTS_EVENT } from './toast.js'
 
 function Toast({ id, message, type, onClose }) {
   return (
@@ -20,22 +21,30 @@ export default function ToastProvider({ children }) {
       const toast = { id, message: e.detail?.message ?? '', type: e.detail?.type ?? 'info' }
       setToasts((s) => [...s, toast])
       // auto remove
-      setTimeout(() => setToasts((s) => s.filter(t => t.id !== id)), 4500)
+      setTimeout(() => setToasts((s) => s.filter((t) => t.id !== id)), 4500)
+    }
+
+    function clearListener() {
+      setToasts([])
     }
 
     window.addEventListener('app-toast', listener)
-    return () => window.removeEventListener('app-toast', listener)
+    window.addEventListener(CLEAR_TOASTS_EVENT, clearListener)
+    return () => {
+      window.removeEventListener('app-toast', listener)
+      window.removeEventListener(CLEAR_TOASTS_EVENT, clearListener)
+    }
   }, [])
 
   function handleClose(id) {
-    setToasts((s) => s.filter(t => t.id !== id))
+    setToasts((s) => s.filter((t) => t.id !== id))
   }
 
   return (
     <>
       {children}
       <div style={{ position: 'fixed', right: 16, top: 16, zIndex: 9999 }}>
-        {toasts.map(t => (
+        {toasts.map((t) => (
           <Toast key={t.id} id={t.id} message={t.message} type={t.type} onClose={handleClose} />
         ))}
       </div>
