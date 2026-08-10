@@ -48,7 +48,9 @@ public class ContractRepository(DocumentDbContext db) : IContractRepository
     }
 
     public Task<Contract?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        db.Contracts.FirstOrDefaultAsync(c => c.Id == id, ct);
+        db.Contracts
+            .Include(c => c.LineItems)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
 
     public Task<Contract?> GetActiveByCustomerAsync(Guid customerId, DateOnly today, CancellationToken ct = default) =>
         db.Contracts

@@ -36,6 +36,8 @@ builder.Services.AddDbContext<DocumentDbContext>(options =>
 
 builder.Services.AddScoped<IContractRepository, ContractRepository>();
 builder.Services.AddScoped<ContractLogic>();
+builder.Services.AddScoped<IContractDocxParser, ContractDocxParser>();
+builder.Services.AddScoped<IContractPdfParser, ContractPdfParser>();
 builder.Services.AddHostedService<DocumentService.WebAPI.Services.ContractExpiryHostedService>();
 
 builder.Services.Configure<SellerProfileOptions>(builder.Configuration.GetSection("SellerProfile"));

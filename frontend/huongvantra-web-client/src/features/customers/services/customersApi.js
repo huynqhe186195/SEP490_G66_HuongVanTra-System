@@ -303,6 +303,19 @@ export async function fetchCustomerByPhone(phone, options = {}) {
   return mapCustomerDetail(data)
 }
 
+export async function searchCustomersForCheckout(params = {}) {
+  const query = new URLSearchParams()
+  if (params.search) query.set('search', params.search)
+  if (params.customerType) query.set('customerType', params.customerType)
+  if (params.exactPhone) query.set('exactPhone', 'true')
+  query.set('page', String(params.page || 1))
+  query.set('pageSize', String(params.pageSize || 20))
+
+  const data = await apiRequestAuth(`/api/customers/checkout-search?${query.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return paged.items.map(mapCustomer).filter(Boolean)
+}
+
 export function createCustomerForOrder(payload) {
   return apiRequestAuth('/api/customers/pos-quick', {
     method: 'POST',

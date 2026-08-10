@@ -6,7 +6,7 @@ import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canApproveContracts } from '../../auth/utils/permissions.js'
-import { fetchCustomers } from '../../customers/services/customersApi.js'
+import { searchCustomersForCheckout } from '../../customers/services/customersApi.js'
 import { fetchContractSkus, fetchSkus } from '../../products/services/productSkusApi.js'
 import { getProductTypeLabel, getProductTypeTone } from '../../products/utils/productTypes.js'
 import {
@@ -179,8 +179,12 @@ function ContractFormPage() {
     if (!customerSearch.trim() || isEdit) return
     const timer = setTimeout(async () => {
       try {
-        const result = await fetchCustomers({ keyword: customerSearch, customerType: 'CORPORATE' })
-        setCustomerOptions(Array.isArray(result) ? result.slice(0, 10) : [])
+        const result = await searchCustomersForCheckout({
+          search: customerSearch.trim(),
+          customerType: 'CORPORATE',
+          pageSize: 10
+        })
+        setCustomerOptions(Array.isArray(result) ? result : [])
         setShowCustomerDropdown(true)
       } catch {
         setCustomerOptions([])
@@ -204,11 +208,13 @@ function ContractFormPage() {
       try {
         let result
         try {
-          result = await fetchContractSkus({ search: text, isActive: true, pageSize: 8 })
+          result = await fetchContractSkus({ search: text, isActive: true, pageSize: 15 })
         } catch {
-          result = await fetchSkus({ search: text, isActive: true, pageSize: 8 })
+          result = await fetchSkus({ search: text, isActive: true, pageSize: 15 })
         }
-        setSkuOptions(prev => ({ ...prev, [rowIdx]: result.items ?? [] }))
+        // Lọc bỏ bao bì (BAO_BI) khỏi kết quả
+        const filtered = (result.items ?? []).filter(sku => sku.productType !== 'BAO_BI')
+        setSkuOptions(prev => ({ ...prev, [rowIdx]: filtered }))
       } catch (err) {
         console.error('SKU search error:', err)
         setSkuOptions(prev => ({ ...prev, [rowIdx]: [] }))
@@ -220,12 +226,12 @@ function ContractFormPage() {
 
   function selectSkuForRow(rowIdx, sku) {
     updateLine(rowIdx, {
-      skuId: sku.skuId,
+      skuId: sku.id ?? sku.skuId ?? '',
       skuCode: sku.skuCode ?? '',
       productName: sku.productName ?? '',
       unit: sku.unitName ?? '',
       productType: sku.productType ?? '',
-      unitPrice: sku.retailPrice != null ? String(sku.retailPrice) : '',
+      unitPrice: sku.retailPrice != null && sku.retailPrice > 0 ? String(sku.retailPrice) : '',
     })
     setSkuSearch(prev => ({ ...prev, [rowIdx]: '' }))
     setShowSkuDropdown(prev => ({ ...prev, [rowIdx]: false }))
@@ -621,8 +627,8 @@ function ContractFormPage() {
               </button>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-[#c1c9c0]/40">
-              <div className="max-h-[520px] overflow-y-auto overflow-x-auto">
+            <div className="overflow-visible rounded-xl border border-[#c1c9c0]/40">
+              <div className="overflow-visible">
                 <table className="w-full min-w-[700px] border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-[#f0eee6]">
                     <tr>
@@ -631,7 +637,7 @@ function ContractFormPage() {
                       <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Số lượng</th>
                       <th className="w-32 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Đơn giá (đ)</th>
                       <th className="w-32 px-3 py-2.5 text-right text-xs font-semibold text-[#717971]">Thành tiền</th>
-                      <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-[#717971]">Ghi chú</th>
+                      <th className="w-48 px-3 py-2.5 text-left text-xs font-semibold text-[#717971]">Ghi chú</th>
                       <th className="w-8 px-2 py-2.5"></th>
                     </tr>
                   </thead>
@@ -641,66 +647,64 @@ function ContractFormPage() {
                       return (
                         <tr key={idx} className="hover:bg-[#fafaf7]">
                           <td className="px-3 py-2 text-center text-xs text-[#717971]">{idx + 1}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2 min-w-[240px] max-w-[300px]">
                             <div className="relative">
                               <input
                                 type="text"
-                                className="w-full min-w-[220px] rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-sm text-[#1b1c17] outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                                value={line.skuId ? `${line.productName} (${line.skuCode})` : (skuSearch[idx] ?? '')}
+                                className="w-full rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-sm text-[#1b1c17] outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                                value={line.skuId ? line.productName : (skuSearch[idx] ?? '')}
                                 placeholder="Tìm tên hàng hoặc mã SKU..."
                                 onChange={(e) => {
                                   if (line.skuId) updateLine(idx, { skuId: '', skuCode: '', productName: '', unit: '', productType: '' })
                                   searchSkuForRow(idx, e.target.value)
                                 }}
                               />
-                              {line.skuId && (
-                                <div className="mt-1 flex flex-wrap items-center gap-1">
-                                  <TypeBadge productType={line.productType} />
-                                  {line.unit && <span className="text-[11px] text-[#8a9186]">{line.unit}</span>}
-                                </div>
-                              )}
                               {showSkuDropdown[idx] && (
-                                <div className="absolute z-20 mt-1 w-72 overflow-hidden rounded-xl border border-[#c1c9c0]/60 bg-white shadow-lg">
+                                <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-lg border border-[#c1c9c0] bg-white shadow-xl max-h-52 overflow-y-auto">
                                   {skuLoading[idx] ? (
-                                    <p className="px-3 py-2 text-sm text-[#8a9186]">Đang tìm...</p>
+                                    <div className="px-3 py-2 text-sm text-[#717971]">Đang tìm...</div>
                                   ) : (skuOptions[idx] ?? []).length === 0 ? (
-                                    <p className="px-3 py-2 text-sm text-[#8a9186]">Không tìm thấy sản phẩm phù hợp.</p>
-                                  ) : (skuOptions[idx] ?? []).map((sku) => (
-                                    <button key={sku.skuId} type="button"
-                                      onClick={() => selectSkuForRow(idx, sku)}
-                                      className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[#f0eee6]">
-                                      <div>
-                                        <span className="font-medium">{sku.productName}</span>
-                                        <span className="ml-2 text-xs text-[#717971]">{sku.skuCode}</span>
-                                        {sku.unitName && <span className="ml-1 text-xs text-[#717971]">· {sku.unitName}</span>}
-                                      </div>
-                                      <TypeBadge productType={sku.productType} />
-                                    </button>
-                                  ))}
+                                    <div className="px-3 py-2 text-sm text-[#717971]">Không tìm thấy</div>
+                                  ) : (
+                                    (skuOptions[idx] ?? []).map((sku) => (
+                                      <button
+                                        key={sku.id ?? sku.skuId}
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          selectSkuForRow(idx, sku)
+                                        }}
+                                        className="block w-full px-3 py-2 text-left text-sm hover:bg-[#f0eee6] transition-colors border-b border-[#e5e7eb] last:border-0"
+                                      >
+                                        {sku.productName}
+                                      </button>
+                                    ))
+                                  )}
                                 </div>
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2 w-24">
                             <input type="number" min="0.001" step="any"
                               className="w-full rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-right text-sm outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
                               value={line.quantity}
                               onChange={(e) => updateLine(idx, { quantity: e.target.value })}
                               placeholder="0" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="number" min="0" step="any"
-                              className="w-full rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-right text-sm outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                              value={line.unitPrice}
-                              onChange={(e) => updateLine(idx, { unitPrice: e.target.value })}
+                          <td className="px-3 py-2 w-32">
+                            <input type="text"
+                              className="w-full rounded-lg border border-[#c1c9c0] bg-[#f8f9fa] px-2.5 py-2 text-right text-sm cursor-not-allowed"
+                              value={line.unitPrice ? Number(line.unitPrice).toLocaleString('vi-VN') : ''}
+                              readOnly
                               placeholder="0" />
                           </td>
-                          <td className="px-3 py-2 text-right text-sm font-semibold text-[#356647] whitespace-nowrap">
+                          <td className="px-3 py-2 text-right text-sm font-semibold text-[#356647] whitespace-nowrap w-32">
                             {amount > 0 ? `${amount.toLocaleString('vi-VN')} đ` : '—'}
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="text"
-                              className="w-full rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-sm outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                          <td className="px-3 py-2 min-w-[200px]">
+                            <textarea
+                              rows={2}
+                              className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-2 text-sm outline-none transition focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
                               value={line.note}
                               onChange={(e) => updateLine(idx, { note: e.target.value })}
                               placeholder="Ghi chú..." maxLength={200} />

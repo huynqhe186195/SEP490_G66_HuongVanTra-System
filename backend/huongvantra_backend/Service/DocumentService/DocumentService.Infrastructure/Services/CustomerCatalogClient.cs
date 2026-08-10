@@ -41,6 +41,45 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
         }
     }
 
+    public async Task<List<CustomerCatalogProfile>> SearchCustomersAsync(string query, CancellationToken ct = default)
+    {
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(query);
+            var response = await httpClient.GetFromJsonAsync<PagedCustomerResponse>(
+                $"api/customers?search={encodedQuery}&pageSize=20",
+                cancellationToken: ct);
+
+            if (response?.Items is null || response.Items.Count == 0)
+                return [];
+
+            return response.Items.Select(r => new CustomerCatalogProfile(
+                r.Id,
+                r.FullName ?? string.Empty,
+                r.CustomerCode ?? string.Empty,
+                r.CustomerGroup ?? string.Empty,
+                r.TaxCode,
+                r.RegisteredAddress,
+                r.LegalRepresentativeName,
+                r.LegalRepresentativePosition,
+                r.LegalRepresentativeIdNumber,
+                r.LegalRepresentativeIdIssuePlace,
+                r.LegalRepresentativeIdIssueDate?.ToString("dd/MM/yyyy"),
+                r.BankAccountNumber,
+                r.BankName,
+                r.PhoneNumber)).ToList();
+        }
+        catch (Exception ex) when (
+            ex is HttpRequestException or NotSupportedException ||
+            ex is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Unable to search customers with query '{Query}'", query);
+            return [];
+        }
+    }
+
+    private sealed record PagedCustomerResponse(List<CustomerCatalogResponse> Items);
+
     private sealed record CustomerCatalogResponse(
         Guid Id,
         string? FullName,

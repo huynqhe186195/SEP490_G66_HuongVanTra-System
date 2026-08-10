@@ -3,6 +3,7 @@ namespace DocumentService.Application.Interfaces;
 public interface ICustomerCatalogClient
 {
     Task<CustomerCatalogProfile?> GetCustomerAsync(Guid customerId, CancellationToken ct = default);
+    Task<List<CustomerCatalogProfile>> SearchCustomersAsync(string query, CancellationToken ct = default);
 }
 
 public sealed record CustomerCatalogProfile(

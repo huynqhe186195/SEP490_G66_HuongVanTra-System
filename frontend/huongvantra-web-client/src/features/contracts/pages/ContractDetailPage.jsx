@@ -387,7 +387,7 @@ function ContractDetailPage() {
             <InfoRow label="Hạn mức công nợ" value={formatVnd(contract.creditLimit)} />
             <InfoRow
               label="Kỳ hạn thanh toán"
-              value={contract.paymentTermDays != null ? `NET ${contract.paymentTermDays}` : null}
+              value={contract.paymentTermDays != null ? `NET ${contract.paymentTermDays} (Trong vòng ${contract.paymentTermDays} ngày)` : null}
             />
           </div>
 

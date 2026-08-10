@@ -29,4 +29,24 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
             return [];
         }
     }
+
+    public async Task<List<ProductCatalogItem>> SearchSkusAsync(string query, CancellationToken ct = default)
+    {
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(query);
+            var response = await httpClient.GetFromJsonAsync<List<ProductCatalogItem>>(
+                $"api/v1/skus?search={encodedQuery}&pageSize=20",
+                cancellationToken: ct);
+
+            return response ?? [];
+        }
+        catch (Exception ex) when (
+            ex is HttpRequestException or NotSupportedException ||
+            ex is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Unable to search SKUs with query '{Query}'", query);
+            return [];
+        }
+    }
 }

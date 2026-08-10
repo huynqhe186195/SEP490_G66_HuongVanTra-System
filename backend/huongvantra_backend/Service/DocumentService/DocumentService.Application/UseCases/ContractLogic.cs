@@ -18,17 +18,23 @@ public class ContractLogic
     private readonly IContractRepository _contractRepo;
     private readonly ICustomerCatalogClient _customerClient;
     private readonly IProductCatalogClient _productClient;
+    private readonly IContractDocxParser _docxParser;
+    private readonly IContractPdfParser _pdfParser;
     private readonly SellerProfileOptions _seller;
 
     public ContractLogic(
         IContractRepository contractRepo,
         ICustomerCatalogClient customerClient,
         IProductCatalogClient productClient,
+        IContractDocxParser docxParser,
+        IContractPdfParser pdfParser,
         SellerProfileOptions seller)
     {
         _contractRepo = contractRepo;
         _customerClient = customerClient;
         _productClient = productClient;
+        _docxParser = docxParser;
+        _pdfParser = pdfParser;
         _seller = seller;
     }
 
@@ -359,8 +365,6 @@ public class ContractLogic
         var contract = await _contractRepo.GetByIdAsync(id, ct)
             ?? throw new ContractNotFoundException(id);
 
-        EnsureCanView(contract, access);
-
         var customer = await _customerClient.GetCustomerAsync(contract.CustomerId, ct)
             ?? throw new ContractValidationException("Không tìm thấy thông tin khách hàng.");
 
@@ -442,4 +446,208 @@ public class ContractLogic
         c.LineItems.OrderBy(l => l.LineNumber).Select(l => new ContractLineItemResponse(
             l.Id, l.LineNumber, l.SkuId, l.SkuCode, l.ProductName,
             l.Unit, l.Quantity, l.UnitPrice, l.LineAmount, l.Note)).ToList());
+
+    public async Task<ContractImportResult> ImportFromDocxAsync(
+        Stream fileStream,
+        string fileName,
+        DocumentAccessContext access,
+        CancellationToken ct = default)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        var parsed = ext == ".pdf"
+            ? await _pdfParser.ParseAsync(fileStream, fileName, ct)
+            : await _docxParser.ParseAsync(fileStream, fileName, ct);
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        var customerMatch = await MatchCustomerAsync(parsed.BuyerCompanyName, parsed.BuyerTaxCode, ct);
+        if (customerMatch.Confidence == MatchConfidence.NotFound)
+        {
+            errors.Add($"Không tìm thấy khách hàng '{parsed.BuyerCompanyName}' trong hệ thống.");
+            return new ContractImportResult(
+                Success: false,
+                ContractId: null,
+                ContractCode: parsed.ContractCode,
+                errors,
+                warnings,
+                customerMatch,
+                LineItemMatches: []);
+        }
+
+        var lineItemMatches = new List<LineItemMatchResult>();
+        foreach (var item in parsed.LineItems)
+        {
+            var match = await MatchSkuAsync(item.ProductName, ct);
+            lineItemMatches.Add(new LineItemMatchResult(
+                item.LineNumber,
+                item.ProductName,
+                item.Unit,
+                item.Quantity,
+                item.UnitPrice,
+                match.SkuId,
+                match.MatchedName,
+                match.Confidence));
+
+            if (match.Confidence == MatchConfidence.NotFound)
+            {
+                warnings.Add($"Dòng {item.LineNumber}: không tìm thấy SKU cho '{item.ProductName}'");
+            }
+        }
+
+        if (warnings.Count > 0 && warnings.Count == parsed.LineItems.Count)
+        {
+            errors.Add("Không tìm thấy SKU nào trong hệ thống.");
+            return new ContractImportResult(false, null, parsed.ContractCode, errors, warnings, customerMatch, lineItemMatches);
+        }
+
+        var matchedItems = lineItemMatches.Where(m => m.SkuId.HasValue && m.Confidence != MatchConfidence.NotFound).ToList();
+        if (matchedItems.Count == 0)
+        {
+            errors.Add("Không có SKU nào được match thành công.");
+            return new ContractImportResult(false, null, parsed.ContractCode, errors, warnings, customerMatch, lineItemMatches);
+        }
+
+        var customer = await _customerClient.GetCustomerAsync(customerMatch.CustomerId!.Value, ct);
+        if (customer is null || !customer.IsDoanhNghiep)
+        {
+            errors.Add("Khách hàng không hợp lệ hoặc không phải doanh nghiệp.");
+            return new ContractImportResult(false, null, parsed.ContractCode, errors, warnings, customerMatch, lineItemMatches);
+        }
+
+        var lineItemRequests = matchedItems.Select(m =>
+        {
+            var parsedItem = parsed.LineItems.First(p => p.LineNumber == m.LineNumber);
+            return new ContractLineItemRequest(m.SkuId!.Value, parsedItem.Quantity, parsedItem.UnitPrice, parsedItem.Note);
+        }).ToList();
+
+        var createRequest = new CreateContractRequest(
+            customerMatch.CustomerId!.Value,
+            parsed.ContractCode ?? $"IMPORT-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            Domain.Enums.ContractType.CungCap,
+            parsed.EffectiveDate,
+            parsed.EffectiveDate?.AddYears(1),
+            DiscountPercent: null,
+            CreditLimit: null,
+            PaymentTermDays: null,
+            $"Import từ file: {fileName}",
+            parsed.SignedAtLocation,
+            parsed.PaymentMethod,
+            parsed.DeliveryTerms,
+            parsed.ShippingResponsibility,
+            lineItemRequests);
+
+        var contract = await CreateAsync(createRequest, access, ct);
+
+        return new ContractImportResult(
+            Success: true,
+            contract.Id,
+            contract.ContractCode,
+            errors,
+            warnings,
+            customerMatch,
+            lineItemMatches);
+    }
+
+    private async Task<CustomerMatchResult> MatchCustomerAsync(string parsedName, string? parsedTaxCode, CancellationToken ct)
+    {
+        var candidates = await _customerClient.SearchCustomersAsync(parsedName, ct);
+        if (candidates.Count == 0)
+            return new CustomerMatchResult(null, parsedName, null, MatchConfidence.NotFound);
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.FullName.Equals(parsedName, StringComparison.OrdinalIgnoreCase))
+                return new CustomerMatchResult(candidate.Id, parsedName, candidate.FullName, MatchConfidence.Exact);
+
+            if (!string.IsNullOrWhiteSpace(parsedTaxCode) &&
+                !string.IsNullOrWhiteSpace(candidate.TaxCode) &&
+                candidate.TaxCode.Equals(parsedTaxCode, StringComparison.OrdinalIgnoreCase))
+                return new CustomerMatchResult(candidate.Id, parsedName, candidate.FullName, MatchConfidence.Exact);
+        }
+
+        var bestMatch = candidates
+            .Select(c => new { Customer = c, Similarity = CalculateSimilarity(parsedName, c.FullName) })
+            .OrderByDescending(x => x.Similarity)
+            .First();
+
+        var confidence = bestMatch.Similarity switch
+        {
+            >= 0.9 => MatchConfidence.High,
+            >= 0.8 => MatchConfidence.Medium,
+            >= 0.6 => MatchConfidence.Low,
+            _ => MatchConfidence.NotFound
+        };
+
+        return confidence == MatchConfidence.NotFound
+            ? new CustomerMatchResult(null, parsedName, null, MatchConfidence.NotFound)
+            : new CustomerMatchResult(bestMatch.Customer.Id, parsedName, bestMatch.Customer.FullName, confidence);
+    }
+
+    private async Task<(Guid? SkuId, string? MatchedName, MatchConfidence Confidence)> MatchSkuAsync(string parsedName, CancellationToken ct)
+    {
+        var candidates = await _productClient.SearchSkusAsync(parsedName, ct);
+        if (candidates.Count == 0)
+            return (null, null, MatchConfidence.NotFound);
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.ProductName.Equals(parsedName, StringComparison.OrdinalIgnoreCase))
+                return (candidate.SkuId, candidate.ProductName, MatchConfidence.Exact);
+        }
+
+        var bestMatch = candidates
+            .Select(c => new { Sku = c, Similarity = CalculateSimilarity(parsedName, c.ProductName) })
+            .OrderByDescending(x => x.Similarity)
+            .First();
+
+        var confidence = bestMatch.Similarity switch
+        {
+            >= 0.9 => MatchConfidence.High,
+            >= 0.8 => MatchConfidence.Medium,
+            >= 0.6 => MatchConfidence.Low,
+            _ => MatchConfidence.NotFound
+        };
+
+        return confidence == MatchConfidence.NotFound
+            ? (null, null, MatchConfidence.NotFound)
+            : (bestMatch.Sku.SkuId, bestMatch.Sku.ProductName, confidence);
+    }
+
+    private static double CalculateSimilarity(string source, string target)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target))
+            return 0.0;
+
+        var s = source.Trim().ToLowerInvariant();
+        var t = target.Trim().ToLowerInvariant();
+        if (s == t) return 1.0;
+
+        var distance = LevenshteinDistance(s, t);
+        var maxLength = Math.Max(s.Length, t.Length);
+        return maxLength == 0 ? 1.0 : 1.0 - (double)distance / maxLength;
+    }
+
+    private static int LevenshteinDistance(string s, string t)
+    {
+        var n = s.Length;
+        var m = t.Length;
+        var d = new int[n + 1, m + 1];
+
+        if (n == 0) return m;
+        if (m == 0) return n;
+
+        for (var i = 0; i <= n; i++) d[i, 0] = i;
+        for (var j = 0; j <= m; j++) d[0, j] = j;
+
+        for (var i = 1; i <= n; i++)
+        {
+            for (var j = 1; j <= m; j++)
+            {
+                var cost = t[j - 1] == s[i - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+            }
+        }
+
+        return d[n, m];
+    }
 }

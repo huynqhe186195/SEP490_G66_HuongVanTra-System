@@ -9,6 +9,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateContracts } from '../../auth/utils/permissions.js'
 import { fetchContracts, deleteContract } from '../services/contractsApi.js'
+import ContractImportModal from '../components/ContractImportModal.jsx'
 
 const STATUS_TABS = [
   { key: '', label: 'Tất cả' },
@@ -71,6 +72,7 @@ function ContractsPage() {
   }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -128,13 +130,22 @@ function ContractsPage() {
         titleInfo="Quản lý hợp đồng với khách doanh nghiệp"
         rightContent={
           canCreate && (
-            <Link
-              to="/contracts/new"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-white hover:bg-[#333]"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              Tạo hợp đồng
-            </Link>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#d4d2ca] bg-white px-4 py-2 text-sm font-medium text-[#1a1a1a] hover:bg-[#f8f7f4]"
+              >
+                <span className="material-symbols-outlined text-base">upload_file</span>
+                Import hợp đồng
+              </button>
+              <Link
+                to="/contracts/new"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-white hover:bg-[#333]"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                Tạo hợp đồng
+              </Link>
+            </div>
           )
         }
       />
@@ -283,6 +294,15 @@ function ContractsPage() {
           onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
         />
       )}
+
+      <ContractImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          setShowImportModal(false)
+          load()
+        }}
+      />
     </PageShell>
   )
 }

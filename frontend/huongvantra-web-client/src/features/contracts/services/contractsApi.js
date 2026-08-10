@@ -120,3 +120,15 @@ export async function exportContractPdf(id) {
   const blob = await apiRequestAuth(`/api/contracts/${id}/export-pdf`, { responseType: 'blob' })
   downloadBlob(blob, `HopDong_${id}.pdf`)
 }
+
+export async function importContractFromDocx(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const data = await apiRequestAuth('/api/contracts/import', {
+    method: 'POST',
+    body: formData,
+    headers: {},
+  })
+  return data
+}

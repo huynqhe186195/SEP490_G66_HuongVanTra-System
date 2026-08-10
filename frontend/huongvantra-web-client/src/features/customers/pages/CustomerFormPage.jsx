@@ -94,10 +94,11 @@ function CustomerFormPage() {
       : ['general', 'vip', 'corporate'].includes(requestedType)
         ? requestedType
         : 'general'
+  const prefillName = !isEditMode ? (searchParams.get('name') ?? '') : ''
   const [form, setForm] = useState({
     type: initialType,
     customerCode: '',
-    name: '',
+    name: prefillName,
     phone: '',
     email: '',
     address: '',

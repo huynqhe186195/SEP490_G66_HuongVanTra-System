@@ -111,5 +111,23 @@ public class ContractsController : ControllerBase
         var result = await _logic.ReviewAsync(id, request, AccessContext(), ct);
         return Ok(result);
     }
+
+    [HttpPost("import")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
+    [RequestSizeLimit(10_000_000)]
+    public async Task<IActionResult> ImportFromDocx([FromForm] IFormFile? file, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Vui lòng chọn file Word hoặc PDF cần import." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext != ".docx" && ext != ".pdf")
+            return BadRequest(new { error = "Chỉ hỗ trợ file Word (.docx) hoặc PDF (.pdf)." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _logic.ImportFromDocxAsync(stream, file.FileName, AccessContext(), ct);
+
+        return Ok(result);
+    }
 }
 
