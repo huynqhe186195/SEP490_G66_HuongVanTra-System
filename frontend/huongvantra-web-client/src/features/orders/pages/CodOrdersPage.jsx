@@ -43,7 +43,7 @@ function CodOrdersPage() {
   const canOpenReturns = canAccessModule(session, 'pos') || canAccessModule(session, 'orders')
   const tabFromUrl = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState(
-    LIST_TABS.some((t) => t.key === tabFromUrl) ? tabFromUrl : 'pending',
+    LIST_TABS.some((t) => t.key === tabFromUrl) ? tabFromUrl : 'all',
   )
   const [searchValue, setSearchValue] = useState('')
   const [orders, setOrders] = useState([])
@@ -206,7 +206,8 @@ function CodOrdersPage() {
     setActiveTab(key)
     setPage(1)
     const next = new URLSearchParams(searchParams)
-    if (key === 'pending') next.delete('tab')
+    // Tab mặc định «Tất cả» — không gắn ?tab= trên URL
+    if (key === 'all') next.delete('tab')
     else next.set('tab', key)
     setSearchParams(next, { replace: true })
   }

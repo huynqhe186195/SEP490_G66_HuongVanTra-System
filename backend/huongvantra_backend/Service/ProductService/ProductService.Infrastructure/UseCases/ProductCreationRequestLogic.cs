@@ -474,6 +474,14 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 if (barcode is not null && !requestBarcodes.Add(barcode))
                     errors.Add($"{row}: Barcode '{barcode}' bị trùng trong cùng yêu cầu.");
 
+                var units = variant.Units ?? [];
+                foreach (var (unit, unitIndex) in units.Select((value, index) => (value, index)))
+                {
+                    var unitBarcode = NormalizeText(unit.Barcode);
+                    if (unitBarcode is not null && !requestBarcodes.Add(unitBarcode))
+                        errors.Add($"{row}, đơn vị {unitIndex + 1}: Barcode '{unitBarcode}' bị trùng trong cùng yêu cầu.");
+                }
+
                 var bomLines = variant.BomLines ?? [];
                 if (bomLines.Count > 0
                     && !BomCapabilityRules.CanOwnBom(productType, variant.CanHaveBom ?? false, variant.IsActive))

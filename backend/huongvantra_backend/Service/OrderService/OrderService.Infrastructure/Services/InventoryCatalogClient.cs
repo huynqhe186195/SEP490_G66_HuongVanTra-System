@@ -111,6 +111,86 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         }
     }
 
+    public async Task CancelStockQueuesForOrderAsync(
+        Guid orderId,
+        string? reason,
+        string? previousOrderStatus,
+        CancellationToken ct = default)
+    {
+        var body = new
+        {
+            orderId,
+            reason,
+            previousOrderStatus,
+        };
+        var response = await httpClient.PostAsJsonAsync(
+            "api/v1/inventory/cancel-stock-queues-for-order",
+            body,
+            ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(ct);
+            var message = ExtractErrorMessage(error)
+                ?? "Không hủy được lệnh chờ trừ kho liên kết với đơn.";
+            logger.LogWarning(
+                "Inventory cancel-stock-queues-for-order failed {Status}: {Error}",
+                response.StatusCode,
+                error);
+            throw new InventoryStockHandlingException(message);
+        }
+    }
+
+    public async Task FreezeStockQueuesForOrderCancellationAsync(
+        Guid orderId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await httpClient.PostAsJsonAsync(
+                "api/v1/inventory/freeze-stock-queues-for-order-cancellation",
+                new { orderId, reason },
+                ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning(
+                    "Inventory freeze-stock-queues failed {Status}: {Error}",
+                    response.StatusCode,
+                    error);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Không đóng băng được lệnh chờ trừ kho cho đơn {OrderId}.", orderId);
+        }
+    }
+
+    public async Task UnfreezeStockQueuesForOrderCancellationAsync(
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await httpClient.PostAsJsonAsync(
+                "api/v1/inventory/unfreeze-stock-queues-for-order-cancellation",
+                new { orderId },
+                ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning(
+                    "Inventory unfreeze-stock-queues failed {Status}: {Error}",
+                    response.StatusCode,
+                    error);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Không gỡ đóng băng lệnh chờ trừ kho cho đơn {OrderId}.", orderId);
+        }
+    }
+
     private static string? ExtractErrorMessage(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

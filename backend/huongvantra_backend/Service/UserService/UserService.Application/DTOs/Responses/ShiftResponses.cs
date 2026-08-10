@@ -69,3 +69,16 @@ public record OnDutyShiftResponse(
     string Start,
     string End,
     string Label);
+
+/// <summary>Một mục thành công trong bulk duyệt / đăng ký.</summary>
+public record ShiftBulkItemSuccess(Guid RegistrationId, Guid SlotId);
+
+/// <summary>Một mục thất bại trong bulk duyệt / đăng ký.</summary>
+public record ShiftBulkItemFailure(Guid? RegistrationId, Guid? SlotId, string Message);
+
+/// <summary>Kết quả partial cho bulk review / bulk register.</summary>
+public record ShiftBulkOperationResponse(
+    int SucceededCount,
+    int FailedCount,
+    IReadOnlyList<ShiftBulkItemSuccess> Succeeded,
+    IReadOnlyList<ShiftBulkItemFailure> Failed);

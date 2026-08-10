@@ -27,6 +27,27 @@ public interface IInventoryCatalogClient
     Task<HashSet<Guid>> GetOrderIdsWithActiveReservationAsync(
         IReadOnlyCollection<Guid> orderIds,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Hủy lệnh chờ trừ kho theo OrderId (đồng bộ khi hủy đơn). Fail-hard khi Inventory từ chối;
+    /// caller có thể catch để fail-soft sau khi đơn đã Cancelled + outbox.
+    /// </summary>
+    Task CancelStockQueuesForOrderAsync(
+        Guid orderId,
+        string? reason,
+        string? previousOrderStatus,
+        CancellationToken ct = default);
+
+    /// <summary>Đóng băng queue khi đơn CancellationRequested — chặn Thủ kho Confirm.</summary>
+    Task FreezeStockQueuesForOrderCancellationAsync(
+        Guid orderId,
+        string? reason,
+        CancellationToken ct = default);
+
+    /// <summary>Gỡ đóng băng khi Manager từ chối yêu cầu hủy.</summary>
+    Task UnfreezeStockQueuesForOrderCancellationAsync(
+        Guid orderId,
+        CancellationToken ct = default);
 }
 
 public record InventoryStockHandlingItemRequest(

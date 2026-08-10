@@ -14,3 +14,16 @@ public record UpsertShiftRegistrationWindowRequest(
 
 /// <summary>Manager chỉnh giờ khung ca (Start/End dạng HH:mm, cùng ngày).</summary>
 public record UpdateShiftTemplateHoursRequest(string Start, string End);
+
+/// <summary>
+/// Duyệt / từ chối tất cả đăng ký Pending của một nhân viên trong tuần.
+/// Action: Approve | Reject. Area tùy chọn (Shelf / Warehouse).
+/// </summary>
+public record BulkReviewShiftByUserRequest(
+    Guid UserId,
+    string WeekStart,
+    string Action,
+    string? Area = null);
+
+/// <summary>Sale đăng ký nhiều ô ca cùng lúc (tối đa 20).</summary>
+public record BulkRegisterShiftSlotsRequest(IReadOnlyList<Guid> SlotIds);

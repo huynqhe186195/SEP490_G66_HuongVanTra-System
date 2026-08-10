@@ -155,6 +155,54 @@ export async function rejectShiftRegistration(registrationId) {
   await apiRequestAuth(`/api/shifts/registrations/${registrationId}/reject`, { method: 'POST' })
 }
 
+function normalizeBulkResult(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { succeededCount: 0, failedCount: 0, succeeded: [], failed: [] }
+  }
+  const succeeded = (raw.succeeded ?? raw.Succeeded ?? []).map((item) => ({
+    registrationId: String(item.registrationId ?? item.RegistrationId ?? ''),
+    slotId: String(item.slotId ?? item.SlotId ?? ''),
+  }))
+  const failed = (raw.failed ?? raw.Failed ?? []).map((item) => {
+    const registrationIdRaw = item.registrationId ?? item.RegistrationId
+    const slotIdRaw = item.slotId ?? item.SlotId
+    return {
+      registrationId: registrationIdRaw ? String(registrationIdRaw) : null,
+      slotId: slotIdRaw ? String(slotIdRaw) : null,
+      message: item.message ?? item.Message ?? 'Thất bại',
+    }
+  })
+  return {
+    succeededCount: Number(raw.succeededCount ?? raw.SucceededCount ?? succeeded.length),
+    failedCount: Number(raw.failedCount ?? raw.FailedCount ?? failed.length),
+    succeeded,
+    failed,
+  }
+}
+
+/** Manager duyệt / từ chối tất cả Pending của một nhân viên trong tuần. action: Approve | Reject */
+export async function bulkReviewShiftRegistrationsByUser({ userId, weekStart, area, action }) {
+  const data = await apiRequestAuth('/api/shifts/registrations/bulk-review', {
+    method: 'POST',
+    body: JSON.stringify({
+      userId,
+      weekStart,
+      action,
+      area: area || undefined,
+    }),
+  })
+  return normalizeBulkResult(data)
+}
+
+/** Sale đăng ký nhiều ô ca cùng lúc. */
+export async function bulkRegisterShiftSlots(slotIds) {
+  const data = await apiRequestAuth('/api/shifts/slots/bulk-register', {
+    method: 'POST',
+    body: JSON.stringify({ slotIds }),
+  })
+  return normalizeBulkResult(data)
+}
+
 /** Danh sách nhân viên Sale khả dụng để Manager chỉ định vào ca. */
 export async function fetchAssignableShiftStaff() {
   const data = await apiRequestAuth('/api/shifts/assignable-staff')
