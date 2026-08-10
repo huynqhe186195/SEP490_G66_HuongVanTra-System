@@ -109,6 +109,12 @@ public class ContractDocxParser : IContractDocxParser
         return null;
     }
 
+    private static bool IsBuyerSectionHeader(string para)
+    {
+        var upper = para.ToUpperInvariant();
+        return upper.Contains("BÊN MUA") && (upper.Contains("BÊN B") || upper.Contains("(B)"));
+    }
+
     private static (string? BuyerName, string? BuyerTaxCode) ExtractBuyerInfo(List<string> paragraphs)
     {
         string? buyerName = null;
@@ -117,7 +123,7 @@ public class ContractDocxParser : IContractDocxParser
 
         foreach (var para in paragraphs)
         {
-            if (para.Contains("BÊN MUA") && para.Contains("Bên B"))
+            if (IsBuyerSectionHeader(para))
             {
                 inBuyerSection = true;
                 continue;
@@ -129,9 +135,19 @@ public class ContractDocxParser : IContractDocxParser
                 {
                     buyerName = ExtractFieldValue(para, "Tên doanh nghiệp:");
                 }
+                else if (para.Contains("Họ và tên:"))
+                {
+                    buyerName ??= ExtractFieldValue(para, "Họ và tên:");
+                }
                 else if (para.Contains("Mã số doanh nghiệp:"))
                 {
                     buyerTaxCode = ExtractFieldValue(para, "Mã số doanh nghiệp:");
+                    if (buyerTaxCode?.Contains("……") == true)
+                        buyerTaxCode = null;
+                }
+                else if (para.Contains("Mã số thuế:"))
+                {
+                    buyerTaxCode ??= ExtractFieldValue(para, "Mã số thuế:");
                     if (buyerTaxCode?.Contains("……") == true)
                         buyerTaxCode = null;
                 }

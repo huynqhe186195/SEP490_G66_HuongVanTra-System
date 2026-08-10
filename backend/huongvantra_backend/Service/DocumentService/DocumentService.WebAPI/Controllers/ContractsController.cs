@@ -28,7 +28,8 @@ public class ContractsController : ControllerBase
 
     private DocumentAccessContext AccessContext() => new(
         User.GetUserId(),
-        User.HasPermission(PermissionNames.ApproveContract));
+        User.HasPermission(PermissionNames.ApproveContract),
+        User.HasPermission(PermissionNames.ManageCorporateCustomer));
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
@@ -77,6 +78,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Create([FromBody] CreateContractRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, AccessContext(), ct);
@@ -84,6 +86,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateContractRequest request, CancellationToken ct = default)
     {
         var result = await _logic.UpdateAsync(id, request, AccessContext(), ct);
@@ -91,6 +94,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         await _logic.DeleteAsync(id, AccessContext(), ct);
@@ -98,6 +102,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.SubmitAsync(id, AccessContext(), ct);

@@ -8,8 +8,9 @@ using DocumentService.Domain.Exceptions;
 
 namespace DocumentService.Application.UseCases;
 
-/// <param name="CanApprove">Quyền phán quyết hợp đồng (APPROVE_CONTRACT) — Manager. Cũng dùng làm phạm vi xem toàn bộ hợp đồng.</param>
-public sealed record DocumentAccessContext(Guid UserId, bool CanApprove);
+/// <param name="CanApprove">Quyền phán quyết hợp đồng (APPROVE_CONTRACT) — Manager.</param>
+/// <param name="CanManageContracts">Quyền quản lý hợp đồng B2B — Kế toán, Manager. Xem được tất cả hợp đồng.</param>
+public sealed record DocumentAccessContext(Guid UserId, bool CanApprove, bool CanManageContracts);
 
 public class ContractLogic
 {
@@ -51,7 +52,7 @@ public class ContractLogic
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         ContractStatus? status = ParseStatus(statusStr);
-        Guid? filterByOwner = access.CanApprove ? null : access.UserId;
+        Guid? filterByOwner = access.CanManageContracts ? null : access.UserId;
 
         var (items, total) = await _contractRepo.GetPagedAsync(
             search, customerId, status, filterByOwner, page, pageSize, ct);
@@ -325,7 +326,7 @@ public class ContractLogic
 
     private static void EnsureCanView(Contract contract, DocumentAccessContext access)
     {
-        if (access.CanApprove) return;
+        if (access.CanManageContracts) return;
         if (contract.CreatedByUserId == access.UserId) return;
         throw new ContractForbiddenException("Bạn không có quyền xem hợp đồng này.");
     }
