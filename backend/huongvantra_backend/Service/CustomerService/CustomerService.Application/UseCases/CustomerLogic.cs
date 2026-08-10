@@ -2513,14 +2513,16 @@ public class CustomerLogic
         Customer customer,
         CancellationToken ct)
     {
-        if (customerGroup == CustomerGroup.DoiNgoai)
+        // VIP / doanh nghiệp không dùng hạng thành viên (Member/Silver/Gold/…).
+        if (customerGroup is CustomerGroup.DoiNgoai or CustomerGroup.DoanhNghiep)
         {
             if (customer.TierId.HasValue)
             {
+                var groupLabel = customerGroup == CustomerGroup.DoiNgoai ? "VIP" : "doanh nghiệp";
                 await RecordActivityAsync(
                     customer.Id,
                     CustomerActivityType.TierChanged,
-                    $"Gỡ hạng thẻ khỏi khách VIP: {customer.Tier?.TierName ?? "—"}",
+                    $"Gỡ hạng thẻ khỏi khách {groupLabel}: {customer.Tier?.TierName ?? "—"}",
                     ct);
             }
             return null;

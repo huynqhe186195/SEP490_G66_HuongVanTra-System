@@ -76,4 +76,33 @@ export function normalizeTierNameInput(value) {
 }
 
 export const TIER_READONLY_HINT =
-  'Hạng thành viên do hệ thống quản lý — không chỉnh sửa tại màn hình khách hàng. Chi tiêu tích lũy vẫn được cộng khi hoàn tất đơn.'
+  'Hạng thành viên do hệ thống quản lý theo chi tiêu tích lũy — không chỉnh sửa tại hồ sơ khách.'
+
+/** Danh sách mã hạng từ API (đã sort theo ngưỡng chi tiêu). */
+export function getMembershipTierCodes(tiers) {
+  return sortTiersAsc(tiers)
+    .map((tier) => String(tier.tierCode || '').trim())
+    .filter(Boolean)
+}
+
+/** Nhãn badge theo tier thực tế (vd. "Hạng Member / Silver / Gold"). */
+export function formatMembershipTiersBadge(tiers) {
+  const codes = getMembershipTierCodes(tiers)
+  if (!codes.length) return 'Hạng thành viên'
+  return `Hạng ${codes.join(' / ')}`
+}
+
+/**
+ * Notice cho KH không dùng hạng thành viên (VIP / doanh nghiệp).
+ * Có tiers → nhắc tên hạng thực tế; không có → câu đơn giản.
+ */
+export function formatNonMembershipTierNotice(tiers) {
+  const codes = getMembershipTierCodes(tiers)
+  if (!codes.length) {
+    return 'Không áp dụng hạng thành viên · chiết khấu thủ công trên đơn'
+  }
+  return `Không dùng hạng ${codes.join(' / ')} · chiết khấu thủ công trên đơn`
+}
+
+/** Bản ngắn cho badge header danh sách. */
+export const NON_MEMBERSHIP_TIER_NOTICE = 'Không áp dụng hạng thành viên · chiết khấu thủ công trên đơn'

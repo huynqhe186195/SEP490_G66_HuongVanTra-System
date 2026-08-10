@@ -157,6 +157,7 @@ Key implementation:
 - `ReplaceCodReservationAsync` — atomic release-old + re-reserve-new when COD order items are edited.
 - Available-stock at Shelf = `SkuStock.QuantityOnHand - SkuStock.ReservedQuantity`.
 - All read/trace endpoints present (`/reservations/by-order`, `/by-sku`, `/active-orders`).
+- **Bug fix 2026-08-10**: COD reservation now checks both Shelf and Warehouse finished goods (like POS direct checkout). When Shelf insufficient but Warehouse has stock, reserves only Shelf portion and marks `WarehouseTransferQuantity` for Thủ kho to transfer. Queue stays `Waiting` (not `Insufficient`) so warehouse staff can process. Only fails when both Shelf + Warehouse insufficient.
 
 Partially completed:
 

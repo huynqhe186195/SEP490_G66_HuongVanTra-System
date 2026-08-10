@@ -1,0 +1,2 @@
+-- Prefer this script on other machines (supersedes fix-tool-product-boms-tem-only.sql).
+-- See fix-tool-product-boms-with-nl.sql

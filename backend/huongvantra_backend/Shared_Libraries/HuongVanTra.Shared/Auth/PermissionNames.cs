@@ -70,6 +70,12 @@ public static class PermissionNames
     /// </summary>
     public const string ShipOrderAccess = "SHIP_ORDER_ACCESS";
 
+    /// <summary>Đọc danh mục hạng thành viên (tham chiếu cho KH / POS / khuyến mãi).</summary>
+    public const string ViewMembershipTierAccess = "VIEW_MEMBERSHIP_TIER_ACCESS";
+
+    /// <summary>Tạo/sửa/ngưng hạng thành viên — Admin (MANAGE_BUSINESS_POLICY) hoặc Manager (CREATE_CUSTOMER).</summary>
+    public const string ManageMembershipTierAccess = "MANAGE_MEMBERSHIP_TIER_ACCESS";
+
     public static readonly string[] All =
     [
         CreateOrder,

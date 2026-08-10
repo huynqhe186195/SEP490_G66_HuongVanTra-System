@@ -38,7 +38,12 @@ const LOCATION_OPTIONS = [
   { value: 'Shelf', label: 'Kệ Hàng' },
 ]
 
-const WAREHOUSE_PRODUCT_TYPES = new Set([PRODUCT_TYPE.NGUYEN_LIEU, PRODUCT_TYPE.BAO_BI])
+// Kho chứa và được kiểm kê cả nguyên liệu/vật tư, bao bì lẫn thành phẩm.
+const WAREHOUSE_PRODUCT_TYPES = new Set([
+  PRODUCT_TYPE.NGUYEN_LIEU,
+  PRODUCT_TYPE.BAO_BI,
+  PRODUCT_TYPE.THANH_PHAM,
+])
 const SHELF_PRODUCT_TYPES = new Set([PRODUCT_TYPE.THANH_PHAM])
 
 const STATUS_OPTIONS = [

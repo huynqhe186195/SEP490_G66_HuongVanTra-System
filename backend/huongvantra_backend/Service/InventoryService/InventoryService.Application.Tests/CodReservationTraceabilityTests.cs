@@ -313,4 +313,135 @@ public sealed class CodReservationTraceabilityTests
             detail.Lines, l => l.ReservationStatus == nameof(StockReservationStatus.Active));
         Assert.Equal(skuB, activeLine.SkuId);
     }
+
+    [Fact]
+    public async Task CodReservation_ShelfInsufficient_WarehouseSufficient_ReservesShelfAndMarksWarehouseTransfer()
+    {
+        // Bug fix: COD yêu cầu 10, Kệ chỉ 3, Kho thành phẩm còn 15
+        // → giữ chỗ 3 từ Kệ, đánh dấu 7 chờ điều chuyển Kho, queue Waiting (không phải Insufficient).
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        db.SkuStocks.Add(new SkuStock
+        {
+            SkuId = skuId,
+            SkuCode = "SKU-1",
+            QuantityOnHand = 3, // Kệ chỉ còn 3
+            WarehouseQuantityOnHand = 15, // Kho còn 15
+            ReservedQuantity = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 10));
+
+        // Queue phải Waiting, không phải Insufficient.
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        Assert.Equal(QueueStatus.Waiting, queue.QueueStatus);
+        Assert.True(queue.IsReserved);
+
+        // SkuStock: giữ chỗ chỉ 3 từ Kệ (phần Kho không giữ chỗ).
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(3, stock.ReservedQuantity);
+
+        // Queue item: WarehouseTransferQuantity = 7, FinishedDeductedQuantity = 3.
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(7, item.WarehouseTransferQuantity);
+        Assert.Equal(3, item.FinishedDeductedQuantity);
+        Assert.Equal(StockReservationStatus.Active, item.ReservationStatus);
+        Assert.Equal(3, item.ReservedQuantity); // chỉ phần Kệ vào Reserved
+
+        // COD reservation trace: 3 đang giữ chỗ (phần Kệ).
+        var summary = await logic.GetSkuCodReservationsAsync(skuId);
+        var order = Assert.Single(summary.Orders);
+        Assert.Equal(3, order.ReservedQuantity);
+        Assert.Equal(3, summary.TotalActiveReservedQuantity);
+        Assert.Equal(3, summary.SkuStockReservedQuantity);
+    }
+
+    [Fact]
+    public async Task CodReservation_ShelfAndWarehouseInsufficient_MarksQueueInsufficient()
+    {
+        // COD yêu cầu 20, Kệ 3, Kho thành phẩm 10 → tổng chỉ 13 → Insufficient.
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        db.SkuStocks.Add(new SkuStock
+        {
+            SkuId = skuId,
+            SkuCode = "SKU-1",
+            QuantityOnHand = 3,
+            WarehouseQuantityOnHand = 10,
+            ReservedQuantity = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 20));
+
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        Assert.Equal(QueueStatus.Insufficient, queue.QueueStatus);
+        Assert.False(queue.IsReserved);
+        Assert.Contains("Kệ + Kho thành phẩm", queue.LastShortageReason);
+
+        // Không giữ chỗ gì cả.
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(0, stock.ReservedQuantity);
+
+        var summary = await logic.GetSkuCodReservationsAsync(skuId);
+        Assert.Empty(summary.Orders);
+    }
+
+    [Fact]
+    public async Task CodReservation_WithWarehouseTransfer_ConfirmSucceeds()
+    {
+        // COD yêu cầu 10: Kệ 3, Kho 15 → giữ chỗ 3, chờ điều chuyển 7.
+        // Khi Thủ kho confirm → phần Kệ 3 xuất bán, phần Kho 7 điều chuyển Kho→Kệ rồi xuất bán.
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        db.SkuStocks.Add(new SkuStock
+        {
+            SkuId = skuId,
+            SkuCode = "SKU-1",
+            QuantityOnHand = 3,
+            WarehouseQuantityOnHand = 15,
+            ReservedQuantity = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 10));
+
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        Assert.Equal(QueueStatus.Waiting, queue.QueueStatus);
+        Assert.True(queue.IsReserved);
+
+        // Confirm queue.
+        await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        // Queue → Confirmed, IsDeducted = true.
+        await db.Entry(queue).ReloadAsync();
+        Assert.Equal(QueueStatus.Confirmed, queue.QueueStatus);
+        Assert.True(queue.IsDeducted);
+
+        // Stock: Kệ xuất hết 10 (3 + 7 từ Kho), giữ chỗ nhả hết.
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(0, stock.ReservedQuantity);
+        // QuantityOnHand ban đầu 3, sau điều chuyển +7 từ Kho, xuất bán -10 → còn 0.
+        Assert.Equal(0, stock.QuantityOnHand);
+        // WarehouseQuantityOnHand ban đầu 15, điều chuyển -7 → còn 8.
+        Assert.Equal(8, stock.WarehouseQuantityOnHand);
+
+        // Reservation status → Deducted.
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(StockReservationStatus.Deducted, item.ReservationStatus);
+        Assert.NotNull(item.DeductedAt);
+    }
 }

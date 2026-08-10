@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -11,7 +11,6 @@ import {
   canCreateStockReplenishmentRequest,
   canFilterStockReplenishmentByCreator,
   canReviewStockReplenishmentRequest,
-  canViewStockTransfer,
   isAuditOnlyAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
@@ -291,9 +290,6 @@ function StockAdjustmentRequestOperationsPage() {
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
   const canFilterByCreator = canFilterStockReplenishmentByCreator(session)
-  // Quản lý vào Điều chuyển / Gợi ý từ đây; Thủ kho dùng nút bên trang Điều chuyển, Admin dùng sidebar.
-  const canViewTransferShortcuts =
-    canViewStockTransfer(session) && !isWarehouseRole(session) && !isAuditOnlyAdmin(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS
@@ -615,29 +611,7 @@ function StockAdjustmentRequestOperationsPage() {
           >
             Tạo yêu cầu
           </button>
-        ) : <span className="ml-auto" />}
-        {canViewTransferShortcuts ? (
-          <>
-            <Link
-              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              to="/inventory/stock-transfers"
-            >
-              Phiếu điều chuyển Kho → Kệ
-            </Link>
-            <Link
-              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              to="/inventory/shelf-replenishment-suggestions"
-            >
-              Gợi ý bổ sung Kệ Hàng
-            </Link>
-          </>
         ) : null}
-        <Link
-          className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          to="/inventory/products"
-        >
-          Sản phẩm &amp; số lượng
-        </Link>
       </div>
 
       <form
@@ -782,14 +756,60 @@ function StockAdjustmentRequestOperationsPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Đang tải...
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <span className="inline-flex items-center gap-2 font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải yêu cầu...
+                    </span>
                   </td>
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Không có yêu cầu nào khớp bộ lọc.
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <p className="font-semibold text-slate-800">
+                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all')
+                        ? 'Không có yêu cầu khớp bộ lọc'
+                        : 'Chưa có yêu cầu bổ sung tồn'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all')
+                        ? 'Thử đổi tab hoặc xóa từ khóa tìm kiếm.'
+                        : 'Tạo yêu cầu khi Kệ thiếu hàng. Thủ kho sẽ điều chuyển từ Kho sang Kệ.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all') ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchValue('')
+                            setActiveTab(canReview ? 'pending' : 'all')
+                            setPage(1)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">filter_alt_off</span>
+                          Xóa bộ lọc
+                        </button>
+                      ) : null}
+                      {canCreateRequest ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/inventory/stock-requests/create')}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">add</span>
+                          Tạo yêu cầu
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/inventory/stock-transfers')}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
+                        Xem điều chuyển
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : (

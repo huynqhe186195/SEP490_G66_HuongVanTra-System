@@ -29,7 +29,7 @@ import {
   fetchMembershipTiers,
   updateCustomer,
 } from '../services/customersApi.js'
-import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
+import { TIER_READONLY_HINT, formatNonMembershipTierNotice } from '../utils/membershipTierUtils.js'
 import { DEFAULT_MEMBERSHIP_TIER } from '../utils/customerDisplay.js'
 import {
   customerTypeFromTab,
@@ -726,9 +726,9 @@ function CustomerFormPage() {
                     <p className="mt-1 text-xs leading-relaxed text-[#717971]">{TIER_READONLY_HINT}</p>
                   </div>
                 </div>
-              ) : form.type === 'vip' ? (
+              ) : form.type === 'vip' || form.type === 'corporate' ? (
                 <div className="rounded-xl border border-[#7e5700]/20 bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
-                  Khách VIP không dùng hạng Member / Silver / Gold / Diamond. Chiết khấu và quyền lợi áp dụng thủ công trên đơn (POS), chờ DN chốt bảng VIP riêng.
+                  {formatNonMembershipTierNotice(tiers)}. Chiết khấu và quyền lợi áp dụng thủ công trên đơn (POS).
                 </div>
               ) : null}
 

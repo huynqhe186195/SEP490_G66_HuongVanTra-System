@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { showError } from './toast.js'
+import { isAuthLoggingOut } from '../features/auth/services/authSession.js'
 import { canAccessPath, getAccessDeniedMessage, resolveHomeRoute } from './navigation.js'
 
 function ModuleRouteGuard({ session, isLoadingAccess, children }) {
@@ -8,7 +9,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
   const lastDeniedPathRef = useRef(null)
 
   useEffect(() => {
-    if (isLoadingAccess) {
+    if (isLoadingAccess || isAuthLoggingOut()) {
       return
     }
 

@@ -97,6 +97,24 @@ public static class AuthorizationServiceExtensions
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateOrder,
                     PermissionNames.ShipOrder)));
+
+            options.AddPolicy(PermissionNames.ViewMembershipTierAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ViewCustomer,
+                    PermissionNames.ViewAllCustomers,
+                    PermissionNames.ManageRole,
+                    PermissionNames.ManageBusinessPolicy,
+                    PermissionNames.CreateCustomer,
+                    PermissionNames.CreateOrder,
+                    PermissionNames.CreatePosOrder,
+                    PermissionNames.CreateCodOrder,
+                    PermissionNames.ManageCorporateCustomer)));
+
+            options.AddPolicy(PermissionNames.ManageMembershipTierAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageBusinessPolicy,
+                    PermissionNames.CreateCustomer,
+                    PermissionNames.ManageRole)));
         });
 
         return services;

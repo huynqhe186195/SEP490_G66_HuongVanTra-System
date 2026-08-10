@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../auth/services/authApi.js'
 import { confirmLeaveIfCashSessionOpen } from '../../pos/utils/confirmLeaveIfCashSessionOpen.js'
-import { clearAuthSession } from '../../auth/services/authSession.js'
+import { beginAuthLogout, clearAuthSession } from '../../auth/services/authSession.js'
+import { clearToasts } from '../../../app/toast.js'
 import {
   canUsePosCounterMode,
   canViewAllOrders,
@@ -221,12 +222,16 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
     if (!allowed) return
 
     setLoggingOut(true)
+    beginAuthLogout()
+    clearToasts()
+    const accessToken = session?.accessToken
+    const refreshToken = session?.refreshToken
+    clearAuthSession()
     try {
-      await logoutApi(session?.accessToken, session?.refreshToken)
+      await logoutApi(accessToken, refreshToken)
     } catch {
       // clear local anyway
     } finally {
-      clearAuthSession()
       setLoggingOut(false)
       window.location.replace('/login')
     }

@@ -7,7 +7,6 @@ import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchStockImportSlips, getImportTypeLabel } from '../services/stockImportSlipApi.js'
 import {
   ImportSlipDocument,
@@ -92,16 +91,13 @@ function InventoryImportPage() {
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
-            <Link
-              to="/inventory/import/create"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Nhập nguyên liệu
-            </Link>
-          </div>
+          <Link
+            to="/inventory/import/create"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Nhập nguyên liệu
+          </Link>
         }
       />
 
@@ -122,14 +118,50 @@ function InventoryImportPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoadingImportSlips ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">
-                    Đang tải...
+                  <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                      <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+                      Đang tải phiếu nhập...
+                    </span>
                   </td>
                 </tr>
               ) : importSlips.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">
-                    Chưa có phiếu nhập kho.
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <p className="font-semibold text-slate-800">
+                      {searchInput.trim() ? 'Không tìm thấy phiếu khớp từ khóa' : 'Chưa có phiếu nhập kho'}
+                    </p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                      {searchInput.trim()
+                        ? 'Thử mã phiếu, SKU hoặc mã lô khác.'
+                        : 'Nhập nguyên liệu từ NCC để tạo phiếu và tăng tồn Kho theo lô.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      {searchInput.trim() ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearchInput('')}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">search_off</span>
+                          Xóa tìm kiếm
+                        </button>
+                      ) : null}
+                      <Link
+                        to="/inventory/import/create"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">add</span>
+                        Nhập nguyên liệu
+                      </Link>
+                      <Link
+                        to="/inventory"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">warehouse</span>
+                        Về trang Kho
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ) : (
