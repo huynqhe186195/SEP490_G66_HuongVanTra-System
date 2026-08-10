@@ -73,6 +73,7 @@ import {
   resolveOrderPaymentDisplay,
   getOrderRemainingDebt,
   getPrimaryPayment,
+  normalizeOrderKey,
   requiresShippingAddress,
 } from '../utils/orderDisplay.js'
 import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
@@ -163,6 +164,20 @@ function OrderDetailPage() {
   const canOperateContract = contractOrder && (canShipContract || canReceiveContract)
   const canRunActions = canManage || canOperateContract || canReviewRefund || canFinalizeRefund
   const canApplyChanges = contractOrder ? canOperateContract : (canManage && canMutate)
+  // COD đã đồng bộ kho: chuyển «đang giao» không phụ thuộc ca quầy (khớp MarkShippingAsync).
+  const inventorySyncedForShip = normalizeOrderKey(order?.inventorySyncStatus) === 'Synced'
+  const canApplyShip = contractOrder
+    ? canOperateContract && canShipContract
+    : (canManage && (canMutate || (canShipOrder(order) && inventorySyncedForShip)))
+  const shipLockReason = !canShipOrder(order) || (contractOrder && !canShipContract)
+    ? ''
+    : !canManage && !canOperateContract
+      ? 'Cần tài khoản Sale/Manager (quyền lập đơn COD/POS) để chuyển sang đang giao.'
+      : checkingShift
+        ? 'Đang kiểm tra ca Kệ Hàng…'
+        : !canApplyShip
+          ? 'Chưa mở / ngoài giờ ca Kệ Hàng — vào «Ca của tôi» hoặc đăng nhập Manager. (Sau khi kho đã đồng bộ thì Sale vẫn ship được.)'
+          : ''
 
   useEffect(() => {
     if (!order?.customerId) {
@@ -425,7 +440,12 @@ function OrderDetailPage() {
   }
 
   async function runAction(action) {
-    if (!canApplyChanges || !order) return
+    if (!order) return
+    if (action === 'ship') {
+      if (!canApplyShip) return
+    } else if (!canApplyChanges) {
+      return
+    }
     try {
       setIsSaving(true)
       if (action === 'ship') {
@@ -630,7 +650,8 @@ function OrderDetailPage() {
               {canShipOrder(order) && (!contractOrder || canShipContract) ? (
                 <button
                   type="button"
-                  disabled={isSaving || !canApplyChanges}
+                  disabled={isSaving || !canApplyShip}
+                  title={shipLockReason || undefined}
                   onClick={() => runAction('ship')}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
                 >
@@ -728,6 +749,18 @@ function OrderDetailPage() {
           </button>
         </div>
       </div>
+
+      {shipLockReason && canShipOrder(order) ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Nút «Chuyển sang đang giao» đang khóa</p>
+          <p className="mt-1">{shipLockReason}</p>
+          {!inventorySyncedForShip ? (
+            <p className="mt-1 text-amber-800">
+              Đợi Thủ kho xác nhận xuất/SX (trạng thái «Đã đồng bộ kho») — sau đó Sale có thể chuyển đang giao kể cả ngoài giờ ca.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="space-y-4">
