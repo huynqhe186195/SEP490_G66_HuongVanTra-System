@@ -142,6 +142,14 @@ public record StockDeductConfirmResponse(
     DateTime? CancelledAt = null,
     string? CancelReason = null);
 
+/// <summary>Kết quả hủy lệnh chờ trừ kho theo OrderId (đồng bộ từ OrderService).</summary>
+public record CancelStockQueuesForOrderResponse(
+    Guid OrderId,
+    Guid? QueueId,
+    string QueueStatus,
+    bool Changed,
+    string Message);
+
 public record PosStockHandlingLineResponse(
     Guid SkuId,
     string? SkuCode,

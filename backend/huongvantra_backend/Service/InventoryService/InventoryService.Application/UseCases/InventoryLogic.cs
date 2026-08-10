@@ -518,45 +518,219 @@ public class InventoryLogic(
         if (await _processedEvents.ExistsAsync(OrderCancelledEventType, message.OrderId, ct))
             return;
 
-        var queue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
-        if (queue == null)
-        {
-            await _processedEvents.AddAsync(OrderCancelledEventType, message.OrderId, NullableEventId(message.EventId), ct);
-            await _queueRepo.SaveChangesAsync(ct);
-            return;
-        }
-
-        if (queue.IsDeducted)
-        {
-            if (IsAfterShippingStatus(message.PreviousOrderStatus))
-            {
-                // POS-04 (quyết định #10): hủy/giao thất bại SAU khi đã bàn giao giao hàng
-                // không được cộng trực tiếp lại tồn Kệ — hàng phải qua Return Inspection
-                // (Phase J) mới quyết định restock/quarantine/dispose.
-                queue.QueueStatus = QueueStatus.Cancelled;
-                queue.OrderStockStatus = "cancelled_after_shipping";
-                queue.ConfirmedAt ??= DateTime.UtcNow;
-
-                await _processedEvents.AddAsync(OrderCancelledEventType, message.OrderId, NullableEventId(message.EventId), ct);
-                await _queueRepo.SaveChangesAsync(ct);
-                return;
-            }
-
-            await RestoreStockAsync(queue, ct);
-            queue.IsDeducted = false;
-        }
-        else
-        {
-            await ReleaseOrRestoreQueueHoldAsync(queue, ct);
-        }
-
-        queue.QueueStatus = QueueStatus.Cancelled;
-        queue.OrderStockStatus = queue.IsDeducted ? "restored" : "cancelled";
-        queue.ConfirmedAt ??= DateTime.UtcNow;
+        await CancelStockQueuesForOrderCoreAsync(
+            message.OrderId,
+            reason: "Đơn hàng đã hủy",
+            previousOrderStatus: message.PreviousOrderStatus,
+            cancelledBy: Guid.Empty,
+            canceller: null,
+            ct);
 
         await _processedEvents.AddAsync(OrderCancelledEventType, message.OrderId, NullableEventId(message.EventId), ct);
         await _queueRepo.SaveChangesAsync(ct);
     }
+
+    /// <summary>
+    /// Hủy lệnh chờ trừ kho theo OrderId (đồng bộ từ OrderService khi hủy đơn).
+    /// Idempotent: queue đã Cancelled/Confirmed không đụng lại; không có queue → no-op.
+    /// Luôn đánh dấu Cancelled trước khi cho phép Confirm — tránh void tồn sau khi đơn đã hủy.
+    /// </summary>
+    public async Task<CancelStockQueuesForOrderResponse> CancelStockQueuesForOrderAsync(
+        CancelStockQueuesForOrderRequest request,
+        Guid cancelledBy,
+        CreatorSnapshot? canceller,
+        CancellationToken ct = default)
+    {
+        if (request.OrderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId không hợp lệ.");
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? "Đơn hàng đã hủy"
+            : request.Reason.Trim();
+        if (reason.Length > 500)
+            reason = reason[..500];
+
+        var outcome = await CancelStockQueuesForOrderCoreAsync(
+            request.OrderId,
+            reason,
+            request.PreviousOrderStatus,
+            cancelledBy,
+            canceller,
+            ct);
+
+        return new CancelStockQueuesForOrderResponse(
+            request.OrderId,
+            outcome.QueueId,
+            outcome.QueueStatus,
+            outcome.Changed,
+            outcome.Message);
+    }
+
+    /// <summary>
+    /// Đóng băng queue khi đơn chuyển CancellationRequested — Thủ kho không được Confirm/trừ tồn.
+    /// </summary>
+    public async Task FreezeStockQueuesForOrderCancellationAsync(
+        Guid orderId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        if (orderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId không hợp lệ.");
+
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue is null)
+            return;
+
+        if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
+            return;
+
+        if (queue.IsDeducted)
+            return;
+
+        queue.OrderStockStatus = OrderStockStatusCancellationRequested;
+        queue.CancelReason = string.IsNullOrWhiteSpace(reason)
+            ? "Đơn đang chờ duyệt hủy / hoàn tiền"
+            : reason.Trim()[..Math.Min(reason.Trim().Length, 500)];
+        queue.LastAttemptAt = DateTime.UtcNow;
+        await _queueRepo.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Gỡ đóng băng khi Manager từ chối yêu cầu hủy — queue Waiting lại được Confirm.
+    /// </summary>
+    public async Task UnfreezeStockQueuesForOrderCancellationAsync(Guid orderId, CancellationToken ct = default)
+    {
+        if (orderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId không hợp lệ.");
+
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue is null)
+            return;
+
+        if (!string.Equals(queue.OrderStockStatus, OrderStockStatusCancellationRequested, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
+            return;
+
+        queue.OrderStockStatus = "pending";
+        queue.CancelReason = null;
+        queue.LastAttemptAt = DateTime.UtcNow;
+        await _queueRepo.SaveChangesAsync(ct);
+    }
+
+    private sealed record CancelStockQueuesCoreResult(
+        Guid? QueueId,
+        string QueueStatus,
+        bool Changed,
+        string Message);
+
+    private async Task<CancelStockQueuesCoreResult> CancelStockQueuesForOrderCoreAsync(
+        Guid orderId,
+        string reason,
+        string? previousOrderStatus,
+        Guid cancelledBy,
+        CreatorSnapshot? canceller,
+        CancellationToken ct)
+    {
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue is null)
+        {
+            return new CancelStockQueuesCoreResult(null, "none", false, "Không có lệnh chờ trừ kho cho đơn này.");
+        }
+
+        if (queue.QueueStatus == QueueStatus.Cancelled)
+        {
+            return new CancelStockQueuesCoreResult(
+                queue.Id,
+                queue.QueueStatus.ToString().ToLowerInvariant(),
+                false,
+                "Lệnh chờ trừ kho đã được hủy trước đó.");
+        }
+
+        if (queue.QueueStatus == QueueStatus.Confirmed || queue.IsDeducted)
+        {
+            if (IsAfterShippingStatus(previousOrderStatus))
+            {
+                // Hàng đã bàn giao: không cộng lại Kệ — Phase J Return Inspection.
+                queue.QueueStatus = QueueStatus.Cancelled;
+                queue.OrderStockStatus = "cancelled_after_shipping";
+                queue.ConfirmedAt ??= DateTime.UtcNow;
+                queue.CancelledAt = DateTime.UtcNow;
+                queue.CancelledBy = cancelledBy == Guid.Empty ? queue.CancelledBy : cancelledBy;
+                queue.CancelledByName = NormalizeSnapshotText(canceller?.CreatedByName) ?? queue.CancelledByName;
+                queue.CancelledByRoleName = NormalizeSnapshotText(canceller?.CreatedByRoleName) ?? queue.CancelledByRoleName;
+                queue.CancelReason = reason;
+                await _queueRepo.SaveChangesAsync(ct);
+                return new CancelStockQueuesCoreResult(
+                    queue.Id,
+                    "cancelled",
+                    true,
+                    "Đã đánh dấu hủy (sau shipping — không hoàn tồn Kệ).");
+            }
+
+            // Đã trừ tồn nhưng đơn chưa shipping: cố hoàn; dù restore lỗi vẫn Cancelled để chặn Confirm.
+            Exception? restoreError = null;
+            try
+            {
+                await RestoreStockAsync(queue, ct);
+                queue.IsDeducted = false;
+                queue.OrderStockStatus = "restored";
+            }
+            catch (Exception ex)
+            {
+                restoreError = ex;
+                queue.OrderStockStatus = "cancelled_pending_restore";
+            }
+
+            queue.QueueStatus = QueueStatus.Cancelled;
+            queue.ConfirmedAt ??= DateTime.UtcNow;
+            queue.CancelledAt = DateTime.UtcNow;
+            queue.CancelledBy = cancelledBy == Guid.Empty ? queue.CancelledBy : cancelledBy;
+            queue.CancelledByName = NormalizeSnapshotText(canceller?.CreatedByName) ?? queue.CancelledByName;
+            queue.CancelledByRoleName = NormalizeSnapshotText(canceller?.CreatedByRoleName) ?? queue.CancelledByRoleName;
+            queue.CancelReason = reason;
+            await _queueRepo.SaveChangesAsync(ct);
+
+            if (restoreError is not null)
+                throw restoreError;
+
+            return new CancelStockQueuesCoreResult(queue.Id, "cancelled", true, "Đã hủy lệnh và hoàn tồn đã trừ.");
+        }
+
+        // Waiting / Insufficient (POS WaitingTransfer / WaitingProduction / Backorder): nhả giữ / hoàn phần Kệ đã trừ.
+        Exception? holdError = null;
+        try
+        {
+            await ReleaseOrRestoreQueueHoldAsync(queue, ct);
+        }
+        catch (Exception ex)
+        {
+            holdError = ex;
+        }
+
+        queue.QueueStatus = QueueStatus.Cancelled;
+        queue.OrderStockStatus = holdError is null ? "cancelled" : "cancelled_pending_restore";
+        queue.ConfirmedAt ??= DateTime.UtcNow;
+        queue.CancelledAt = DateTime.UtcNow;
+        queue.CancelledBy = cancelledBy == Guid.Empty ? null : cancelledBy;
+        queue.CancelledByName = NormalizeSnapshotText(canceller?.CreatedByName);
+        queue.CancelledByRoleName = NormalizeSnapshotText(canceller?.CreatedByRoleName);
+        queue.CancelReason = reason;
+        queue.LastShortageReason = null;
+        await _queueRepo.SaveChangesAsync(ct);
+
+        if (holdError is not null)
+            throw holdError;
+
+        return new CancelStockQueuesCoreResult(
+            queue.Id,
+            "cancelled",
+            true,
+            "Đã hủy lệnh chờ trừ kho theo đơn.");
+    }
+
+    private const string OrderStockStatusCancellationRequested = "cancellation_requested";
 
     /// <summary>
     /// POS-04 (H5, quyết định #7/#8): đơn COD bàn giao giao hàng → trừ tồn vật lý Kệ Hàng
@@ -874,6 +1048,12 @@ public class InventoryLogic(
 
         if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
             throw new InventoryValidationException("Chỉ có thể trừ tồn cho queue đang chờ xử lý hoặc chờ hàng.");
+
+        if (string.Equals(queue.OrderStockStatus, OrderStockStatusCancellationRequested, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InventoryValidationException(
+                "Đơn đang chờ duyệt hủy/hoàn tiền — không được xác nhận trừ kho. Chờ hoàn tất hủy đơn hoặc Manager từ chối yêu cầu hủy.");
+        }
 
         var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {

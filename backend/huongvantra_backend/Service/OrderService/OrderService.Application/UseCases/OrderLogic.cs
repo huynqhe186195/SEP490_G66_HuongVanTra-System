@@ -1308,6 +1308,13 @@ public class OrderLogic(
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
+
+        // Đồng bộ hủy lệnh chờ trừ kho ngay (không chờ Outbox/Rabbit) — tránh Thủ kho Confirm void tồn.
+        await TryCancelLinkedStockQueuesAsync(
+            order.Id,
+            string.IsNullOrWhiteSpace(reason) ? "Đơn hàng đã hủy" : reason.Trim(),
+            statusBeforeCancel.ToString(),
+            ct);
     }
 
     public async Task<OrderResponse> RequestBackorderCancellationAsync(
@@ -1361,6 +1368,10 @@ public class OrderLogic(
             actorName,
             ct);
         await _orderRepo.SaveChangesAsync(ct);
+
+        // Đóng băng lệnh chờ trừ kho — Thủ kho không Confirm trong lúc chờ duyệt hủy/hoàn tiền.
+        await TryFreezeLinkedStockQueuesAsync(order.Id, reason.Trim(), ct);
+
         return MapToResponse(order);
     }
 
@@ -1415,6 +1426,10 @@ public class OrderLogic(
             actorName,
             ct);
         await _orderRepo.SaveChangesAsync(ct);
+
+        if (!request.Approved)
+            await TryUnfreezeLinkedStockQueuesAsync(order.Id, ct);
+
         return MapToResponse(order);
     }
 
@@ -1500,6 +1515,12 @@ public class OrderLogic(
             ct);
         await _orderRepo.SaveChangesAsync(ct);
 
+        await TryCancelLinkedStockQueuesAsync(
+            order.Id,
+            "Hoàn tiền backorder và hủy đơn",
+            OrderStatus.WaitingMaterials.ToString(),
+            ct);
+
         if (cashRefund > 0)
             await _posCashSessionLogic.RecordCashRefundAsync(cashRefund, ct);
 
@@ -1583,6 +1604,12 @@ public class OrderLogic(
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
+
+        await TryCancelLinkedStockQueuesAsync(
+            order.Id,
+            "Hủy thanh toán chuyển khoản POS",
+            OrderStatus.PendingPayment.ToString(),
+            ct);
 
         return MapToResponse(order);
     }
@@ -1836,6 +1863,13 @@ public class OrderLogic(
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
+
+        await TryCancelLinkedStockQueuesAsync(
+            order.Id,
+            string.IsNullOrWhiteSpace(reason) ? "Hủy đơn đặt cọc quá hạn" : reason.Trim(),
+            statusBeforeCancel.ToString(),
+            ct);
+
         return MapToResponse(order);
     }
 
@@ -2634,6 +2668,49 @@ public class OrderLogic(
         catch (InventoryStockHandlingException ex)
         {
             throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Fail-soft: đơn đã Cancelled + Outbox; nếu Inventory lỗi vẫn không rollback đơn — event là lớp dự phòng.
+    /// </summary>
+    private async Task TryCancelLinkedStockQueuesAsync(
+        Guid orderId,
+        string reason,
+        string previousOrderStatus,
+        CancellationToken ct)
+    {
+        try
+        {
+            await _inventoryCatalogClient.CancelStockQueuesForOrderAsync(
+                orderId, reason, previousOrderStatus, ct);
+        }
+        catch (Exception)
+        {
+            // Outbox OrderCancelledEvent vẫn xử lý hủy queue; không chặn hủy đơn.
+        }
+    }
+
+    private async Task TryFreezeLinkedStockQueuesAsync(Guid orderId, string reason, CancellationToken ct)
+    {
+        try
+        {
+            await _inventoryCatalogClient.FreezeStockQueuesForOrderCancellationAsync(orderId, reason, ct);
+        }
+        catch (Exception)
+        {
+            // Fail-soft — Confirm vẫn bị chặn khi OrderCancelled hoàn tất; freeze là lớp sớm.
+        }
+    }
+
+    private async Task TryUnfreezeLinkedStockQueuesAsync(Guid orderId, CancellationToken ct)
+    {
+        try
+        {
+            await _inventoryCatalogClient.UnfreezeStockQueuesForOrderCancellationAsync(orderId, ct);
+        }
+        catch (Exception)
+        {
         }
     }
 

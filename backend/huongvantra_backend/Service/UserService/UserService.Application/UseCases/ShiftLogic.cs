@@ -471,6 +471,95 @@ public class ShiftLogic(
     }
 
     /// <summary>
+    /// Duyệt / từ chối tất cả đăng ký Pending của một nhân viên trong tuần (partial success).
+    /// </summary>
+    public async Task<ShiftBulkOperationResponse> BulkReviewByUserAsync(
+        BulkReviewShiftByUserRequest request,
+        Guid actorUserId)
+    {
+        if (request.UserId == Guid.Empty)
+            throw new UserValidationException("userId không hợp lệ.");
+
+        var action = (request.Action ?? string.Empty).Trim();
+        var isApprove = action.Equals("Approve", StringComparison.OrdinalIgnoreCase);
+        var isReject = action.Equals("Reject", StringComparison.OrdinalIgnoreCase);
+        if (!isApprove && !isReject)
+            throw new UserValidationException("action phải là Approve hoặc Reject.");
+
+        var monday = ToMonday(ParseDate(request.WeekStart, "weekStart"));
+        var weekEnd = monday.AddDays(6);
+        var area = ParseAreaOrNull(request.Area);
+
+        var pending = await shiftRepo.GetPendingRegistrationsForUserInWeekAsync(
+            request.UserId, monday, weekEnd, area);
+
+        var succeeded = new List<ShiftBulkItemSuccess>();
+        var failed = new List<ShiftBulkItemFailure>();
+
+        foreach (var registration in pending)
+        {
+            try
+            {
+                if (isApprove)
+                    await ApproveAsync(registration.Id, actorUserId);
+                else
+                    await RejectAsync(registration.Id, actorUserId);
+
+                succeeded.Add(new ShiftBulkItemSuccess(registration.Id, registration.SlotId));
+            }
+            catch (Exception ex) when (
+                ex is UserValidationException
+                or ShiftRegistrationNotFoundException
+                or ShiftSlotNotFoundException)
+            {
+                failed.Add(new ShiftBulkItemFailure(registration.Id, registration.SlotId, ex.Message));
+            }
+        }
+
+        return new ShiftBulkOperationResponse(succeeded.Count, failed.Count, succeeded, failed);
+    }
+
+    /// <summary>
+    /// Sale đăng ký nhiều ô ca cùng lúc (partial success). Tối đa 20 slot / request.
+    /// </summary>
+    public async Task<ShiftBulkOperationResponse> BulkRegisterAsync(
+        BulkRegisterShiftSlotsRequest request,
+        Guid actorUserId)
+    {
+        var rawIds = request.SlotIds ?? Array.Empty<Guid>();
+        var slotIds = rawIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (slotIds.Count == 0)
+            throw new UserValidationException("Cần chọn ít nhất một ô ca để đăng ký.");
+
+        if (slotIds.Count > 20)
+            throw new UserValidationException("Mỗi lần đăng ký tối đa 20 ô ca.");
+
+        var succeeded = new List<ShiftBulkItemSuccess>();
+        var failed = new List<ShiftBulkItemFailure>();
+
+        foreach (var slotId in slotIds)
+        {
+            try
+            {
+                var assignment = await RegisterAsync(slotId, actorUserId);
+                succeeded.Add(new ShiftBulkItemSuccess(assignment.Id, slotId));
+            }
+            catch (Exception ex) when (
+                ex is UserValidationException
+                or ShiftSlotNotFoundException)
+            {
+                failed.Add(new ShiftBulkItemFailure(null, slotId, ex.Message));
+            }
+        }
+
+        return new ShiftBulkOperationResponse(succeeded.Count, failed.Count, succeeded, failed);
+    }
+
+    /// <summary>
     /// Ca đã duyệt của user đang trong khung giờ ca (graceMinutes mặc định 0 = đúng giờ bắt đầu–kết thúc).
     /// </summary>
     public async Task<OnDutyShiftResponse?> GetOnDutyAsync(

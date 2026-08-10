@@ -565,6 +565,67 @@ public sealed class SellFirstCheckoutTests
         Assert.Equal(QueueStatus.Cancelled, queue.QueueStatus);
     }
 
+    [Fact]
+    public async Task CancelStockQueuesForOrder_WaitingTransfer_BlocksConfirmAndRestoresShelf()
+    {
+        await using var db = NewDb();
+        var orderId = Guid.NewGuid();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 3, code: "FINISH-VOID", warehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var prepare = await logic.PreparePosStockDeductionAsync(
+            Req(orderId, (sku, 7)), Guid.NewGuid(), null);
+        Assert.Equal("WarehouseTransferPending", prepare.StockHandlingMode);
+        var queueId = Assert.Single(prepare.QueueIds);
+
+        var afterPrepare = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == sku);
+        Assert.Equal(0, afterPrepare.QuantityOnHand);
+        Assert.Equal(10, afterPrepare.WarehouseQuantityOnHand);
+
+        var cancel = await logic.CancelStockQueuesForOrderAsync(
+            new CancelStockQueuesForOrderRequest(orderId, "Sale hủy đơn", "WaitingTransfer"),
+            Guid.NewGuid(),
+            null);
+        Assert.True(cancel.Changed);
+        Assert.Equal("cancelled", cancel.QueueStatus);
+
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking().SingleAsync(q => q.Id == queueId);
+        Assert.Equal(QueueStatus.Cancelled, queue.QueueStatus);
+
+        var afterCancel = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == sku);
+        Assert.Equal(3, afterCancel.QuantityOnHand);
+        Assert.Equal(10, afterCancel.WarehouseQuantityOnHand);
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ConfirmQueueAsync(queueId, Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public async Task FreezeStockQueues_CancellationRequested_BlocksConfirm()
+    {
+        await using var db = NewDb();
+        var orderId = Guid.NewGuid();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 0, code: "FINISH-FREEZE", warehouseQty: 8);
+
+        var logic = BuildLogic(db);
+        var prepare = await logic.PreparePosStockDeductionAsync(
+            Req(orderId, (sku, 4)), Guid.NewGuid(), null);
+        var queueId = Assert.Single(prepare.QueueIds);
+
+        await logic.FreezeStockQueuesForOrderCancellationAsync(orderId, "Chờ duyệt hủy", default);
+
+        var ex = await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ConfirmQueueAsync(queueId, Guid.NewGuid(), null));
+        Assert.Contains("hủy", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        await logic.UnfreezeStockQueuesForOrderCancellationAsync(orderId, default);
+        // Unfreeze alone does not guarantee Confirm success (need WH stock / transfer path); only that status cleared.
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking().SingleAsync(q => q.Id == queueId);
+        Assert.Equal("pending", queue.OrderStockStatus);
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private static ProductCatalogSnapshot BuildCatalogWithBom(

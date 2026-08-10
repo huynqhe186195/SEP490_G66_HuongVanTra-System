@@ -6,6 +6,14 @@ public record AdjustWarehouseStockRequest(int QuantityDelta);
 
 public record CancelStockDeductRequest(string? Reason);
 
+/// <summary>OrderService gọi đồng bộ khi hủy đơn — hủy lệnh chờ trừ kho theo OrderId.</summary>
+public record CancelStockQueuesForOrderRequest(
+    Guid OrderId,
+    string? Reason = null,
+    string? PreviousOrderStatus = null);
+
+public record FreezeStockQueuesForOrderRequest(Guid OrderId, string? Reason = null);
+
 public record PreparePosStockDeductionItemRequest(
     Guid SkuId,
     string? SkuSnapshotName,

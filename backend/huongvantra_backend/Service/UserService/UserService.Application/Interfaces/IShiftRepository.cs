@@ -15,6 +15,12 @@ public interface IShiftRepository
     Task<IReadOnlyList<ShiftRegistration>> GetActiveRegistrationsForSlotAsync(Guid slotId);
     Task<ShiftRegistration?> GetRegistrationByIdAsync(Guid id);
     Task<ShiftRegistration?> GetRegistrationAsync(Guid slotId, Guid userId);
+    /// <summary>Đăng ký Pending của user trong tuần, tùy lọc theo khu vực template.</summary>
+    Task<IReadOnlyList<ShiftRegistration>> GetPendingRegistrationsForUserInWeekAsync(
+        Guid userId,
+        DateOnly weekStart,
+        DateOnly weekEnd,
+        ShiftArea? area = null);
     Task<IReadOnlyList<ShiftRegistration>> GetApprovedForUserOnDateAsync(Guid userId, DateOnly workDate);
     Task<int> CountApprovedForUserInWeekAsync(
         Guid userId,
