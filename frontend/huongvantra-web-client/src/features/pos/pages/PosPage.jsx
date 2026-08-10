@@ -2716,7 +2716,7 @@ function PosPage() {
                 </div>
 
                 {showCashSessionUi ? (
-                  <div className="mt-1.5 min-w-0">
+                  <div className="mt-1.5 flex min-w-0 justify-end">
                     <PosCashSessionBar
                       dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
                       dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
