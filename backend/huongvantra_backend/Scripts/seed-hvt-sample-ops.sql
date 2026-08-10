@@ -37,6 +37,7 @@ SET @WH_NAME = (
 SET @NCC1 = (SELECT Id FROM hvt_inventory_db.Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-01' AND IsDeleted = 0 LIMIT 1);
 SET @NCC2 = (SELECT Id FROM hvt_inventory_db.Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-02' AND IsDeleted = 0 LIMIT 1);
 SET @NCC3 = (SELECT Id FROM hvt_inventory_db.Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-03' AND IsDeleted = 0 LIMIT 1);
+SET @NCC4 = (SELECT Id FROM hvt_inventory_db.Suppliers WHERE NormalizedSupplierCode = 'NCC-HVT-04' AND IsDeleted = 0 LIMIT 1);
 
 SET @SKU_NL_TRA   = (SELECT Id FROM hvt_product_db.ProductVariants WHERE SkuCode = 'NL-TRA-XANH-G' AND IsDeleted = 0 LIMIT 1);
 SET @SKU_NL_HONG  = (SELECT Id FROM hvt_product_db.ProductVariants WHERE SkuCode = 'NL-HONG-TRA-G' AND IsDeleted = 0 LIMIT 1);
@@ -169,6 +170,103 @@ INSERT INTO SupplierProducts
 SELECT 'bbbbbbbb-2001-4000-8000-000000000007', @NCC3, @SKU_BB_HU, 'BB-HU-SU-HVT', @NAME_BB_HU, 'BAO_BI', @UNIT_BB,
        'BT-HU50', 'BT-HU50', 'Hũ sứ 50g', 45000.00, 20, 10, 1, NULL, 1, @NOW, @NOW
 WHERE @SKU_BB_HU IS NOT NULL AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000007');
+
+-- NL dụng cụ trà → NCC-04 (xúc) / NCC-03 (tống). Chi tiết đầy đủ: seed-tool-nl-inventory.sql
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000015', @NCC4, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-XUC-TRE', 'DC-XUC-TRE', 'Xúc trà tre (NL)', 20000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-XUC-TRE' AND v.IsDeleted = 0 AND @NCC4 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000015');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000016', @NCC4, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-XUC-DONG', 'DC-XUC-DONG', 'Xúc trà đồng cán gỗ (NL)', 25000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-XUC-DONG-GO' AND v.IsDeleted = 0 AND @NCC4 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000016');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000017', @NCC4, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-XUC-GO', 'DC-XUC-GO', 'Xúc trà gỗ nâu (NL)', 45000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-XUC-GO-NAU' AND v.IsDeleted = 0 AND @NCC4 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000017');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000018', @NCC4, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-XUC-VANG', 'DC-XUC-VANG', 'Xúc trà vàng chuôi đen (NL)', 120000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-XUC-VANG-DEN' AND v.IsDeleted = 0 AND @NCC4 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000018');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000019', @NCC4, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-XUC-RONG', 'DC-XUC-RONG', 'Xúc trà chuôi rồng (NL)', 55000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-XUC-CHUOI-RONG' AND v.IsDeleted = 0 AND @NCC4 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000019');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000020', @NCC3, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-TONG-TT', 'DC-TONG-TT', 'Tống thủy tinh trong (NL)', 250000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-TONG-THUY-TINH' AND v.IsDeleted = 0 AND @NCC3 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000020');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000021', @NCC3, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-TONG-ND', 'DC-TONG-ND', 'Tống nâu đỏ (NL)', 60000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-TONG-NAU-DO' AND v.IsDeleted = 0 AND @NCC3 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000021');
+
+INSERT INTO SupplierProducts
+  (Id, SupplierId, SkuId, SkuCodeSnapshot, SkuNameSnapshot, ProductTypeSnapshot, InventoryUnitSnapshot,
+   SupplierItemCode, NormalizedSupplierItemCode, SupplierItemName, QuotedPrice, MinimumOrderQuantity,
+   LeadTimeDays, IsPrimarySource, Note, IsActive, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-2001-4000-8000-000000000022', @NCC3, v.Id, v.SkuCode,
+       CONCAT(p.Name, ' - ', COALESCE(v.VariantName, v.SkuCode)), 'NGUYEN_LIEU', 'Piece',
+       'DC-TONG-QG', 'DC-TONG-QG', 'Tống quai gỗ to (NL)', 180000.00, 10, 7, 1, 'Seed NL dụng cụ', 1, @NOW, @NOW
+FROM hvt_product_db.ProductVariants v
+JOIN hvt_product_db.Products p ON p.Id = v.ProductId
+WHERE v.SkuCode = 'NL-TONG-QUAI-GO' AND v.IsDeleted = 0 AND @NCC3 IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM SupplierProducts WHERE Id='bbbbbbbb-2001-4000-8000-000000000022');
 
 -- -----------------------------------------------------------------------------
 -- 2) Phiếu nhập NCC — 1 Draft + 1 PendingApproval (không Completed)

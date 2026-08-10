@@ -96,16 +96,25 @@ INNER JOIN tmp_tool_nl t ON t.FinishedSku = fv.SkuCode
 SET b.IsDeleted = 1, b.UpdatedAt = @NOW
 WHERE b.IsDeleted = 0;
 
--- BOM: NL x1 (required base) + TEM x1
+-- BOM: NL x1 (operational) + TEM x1 — IsRequiredBaseComponent phải = 0
+-- (flag=1 bị bom-catalog loại → bán-trước-trừ-sau không trừ NL).
 INSERT INTO ProductVariantBomLines
   (ProductVariantId, MaterialId, ComponentVariantId, Quantity, IsRequiredBaseComponent, CreatedAt, UpdatedAt, IsDeleted)
-SELECT fv.Id, t.ProductId, t.VariantId, 1.0000, 1, @NOW, @NOW, 0
+SELECT fv.Id, t.ProductId, t.VariantId, 1.0000, 0, @NOW, @NOW, 0
 FROM tmp_tool_nl t
 INNER JOIN ProductVariants fv ON fv.SkuCode = t.FinishedSku AND fv.IsDeleted = 0
 WHERE NOT EXISTS (
   SELECT 1 FROM ProductVariantBomLines x
   WHERE x.ProductVariantId = fv.Id AND x.ComponentVariantId = t.VariantId AND x.IsDeleted = 0
 );
+
+-- Heal dòng NL đã insert trước đó với flag required-base = 1
+UPDATE ProductVariantBomLines b
+INNER JOIN ProductVariants fv ON fv.Id = b.ProductVariantId AND fv.IsDeleted = 0
+INNER JOIN ProductVariants cv ON cv.Id = b.ComponentVariantId AND cv.IsDeleted = 0
+INNER JOIN tmp_tool_nl t ON t.FinishedSku = fv.SkuCode AND t.VariantId = cv.Id
+SET b.IsRequiredBaseComponent = 0, b.Quantity = 1.0000, b.UpdatedAt = @NOW
+WHERE b.IsDeleted = 0 AND b.IsRequiredBaseComponent = 1;
 
 INSERT INTO ProductVariantBomLines
   (ProductVariantId, MaterialId, ComponentVariantId, Quantity, IsRequiredBaseComponent, CreatedAt, UpdatedAt, IsDeleted)

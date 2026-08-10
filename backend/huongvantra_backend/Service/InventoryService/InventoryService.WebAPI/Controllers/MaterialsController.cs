@@ -54,4 +54,43 @@ public class MaterialsController(InventoryLogic _logic) : ControllerBase
         var result = await _logic.ReplaceCodReservationAsync(request, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// OrderService gọi đồng bộ khi hủy đơn — hủy lệnh chờ trừ kho theo OrderId (idempotent).
+    /// </summary>
+    [HttpPost("cancel-stock-queues-for-order")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> CancelStockQueuesForOrder(
+        [FromBody] CancelStockQueuesForOrderRequest request,
+        CancellationToken ct)
+    {
+        var result = await _logic.CancelStockQueuesForOrderAsync(
+            request,
+            User.GetUserId(),
+            User.ToCreatorSnapshot(),
+            ct);
+        return Ok(result);
+    }
+
+    /// <summary>Đóng băng queue khi đơn CancellationRequested — chặn Confirm trừ kho.</summary>
+    [HttpPost("freeze-stock-queues-for-order-cancellation")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> FreezeStockQueuesForOrderCancellation(
+        [FromBody] FreezeStockQueuesForOrderRequest request,
+        CancellationToken ct)
+    {
+        await _logic.FreezeStockQueuesForOrderCancellationAsync(request.OrderId, request.Reason, ct);
+        return NoContent();
+    }
+
+    /// <summary>Gỡ đóng băng khi Manager từ chối yêu cầu hủy.</summary>
+    [HttpPost("unfreeze-stock-queues-for-order-cancellation")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> UnfreezeStockQueuesForOrderCancellation(
+        [FromBody] FreezeStockQueuesForOrderRequest request,
+        CancellationToken ct)
+    {
+        await _logic.UnfreezeStockQueuesForOrderCancellationAsync(request.OrderId, ct);
+        return NoContent();
+    }
 }

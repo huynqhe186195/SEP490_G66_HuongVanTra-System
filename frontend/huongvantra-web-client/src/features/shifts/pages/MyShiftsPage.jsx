@@ -14,7 +14,7 @@ import {
   getWeekDays,
   shortName,
 } from '../data/mockShiftData.js'
-import { fetchMyShiftWeekStatus, fetchShiftWeek, isSaleShiftSeatTaken, isShiftStaffingFull, registerShiftSlot } from '../services/shiftsApi.js'
+import { bulkRegisterShiftSlots, fetchMyShiftWeekStatus, fetchShiftWeek, isSaleShiftSeatTaken, isShiftStaffingFull, registerShiftSlot } from '../services/shiftsApi.js'
 
 function statusTone(status) {
   if (status === 'Approved') return 'bg-emerald-100 text-emerald-900'
@@ -53,6 +53,8 @@ function MyShiftsPage() {
   const [templates, setTemplates] = useState([])
   const [slots, setSlots] = useState([])
   const [selectedSlotId, setSelectedSlotId] = useState(null)
+  /** Multi-select đăng ký: mảng slotId */
+  const [selectedSlotIds, setSelectedSlotIds] = useState([])
   const [loading, setLoading] = useState(true)
   const [registering, setRegistering] = useState(false)
   const [weekStatus, setWeekStatus] = useState(null)
@@ -86,6 +88,7 @@ function MyShiftsPage() {
     if (diffDays % 7 === 0) {
       setWeekOffset(diffDays / 7)
       setSelectedSlotId(null)
+      setSelectedSlotIds([])
     }
   }, [weekStatus?.canRegisterNow, weekStatus?.activeWindow?.weekStart, weekStatus?.hasApprovedShiftThisWeek])
 
@@ -125,6 +128,7 @@ function MyShiftsPage() {
   const reloadWeek = (nextOffset) => {
     setWeekOffset(nextOffset)
     setSelectedSlotId(null)
+    setSelectedSlotIds([])
   }
 
   const selected = useMemo(
@@ -172,39 +176,86 @@ function MyShiftsPage() {
 
   const canRegisterToday = Boolean(weekStatus?.canRegisterNow ?? weekStatus?.canRegisterToday)
 
-  const canRegisterSelected = () => {
-    if (!selected || !selectedTpl || !myUserId) return false
+  const mondayOf = (isoDate) => {
+    if (!isoDate) return ''
+    const d = new Date(`${isoDate}T00:00:00`)
+    const day = (d.getDay() + 6) % 7
+    d.setDate(d.getDate() - day)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
+  }
+
+  const isSlotRegistrable = (slot) => {
+    if (!slot || !myUserId) return false
     if (!canRegisterToday) return false
-    // Chỉ đăng ký được ô thuộc tuần cửa sổ đang mở
+    const tpl = getTemplate(templates, slot.templateId)
+    if (!tpl) return false
     const windowWeek = weekStatus?.activeWindow?.weekStart
-    if (windowWeek && selected.workDate) {
-      const selectedMonday = (() => {
-        const d = new Date(`${selected.workDate}T00:00:00`)
-        const day = (d.getDay() + 6) % 7
-        d.setDate(d.getDate() - day)
-        const y = d.getFullYear()
-        const m = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        return `${y}-${m}-${dd}`
-      })()
-      if (selectedMonday !== windowWeek) return false
-    }
-    if (selected.status === 'Closed') return false
-    if (selected.workDate < today) return false
-    if (myOnSelected) return false
-    if (isShiftStaffingFull(selected.assignments, selectedTpl.capacity)) return false
-    if (isSaleShiftSeatTaken(selected.assignments, myRoleName, { includePending: true })) return false
+    if (windowWeek && slot.workDate && mondayOf(slot.workDate) !== windowWeek) return false
+    if (slot.status === 'Closed') return false
+    if (slot.workDate < today) return false
+    if (slot.assignments?.some((a) => a.staffId === myUserId)) return false
+    if (isShiftStaffingFull(slot.assignments, tpl.capacity)) return false
+    if (isSaleShiftSeatTaken(slot.assignments, myRoleName, { includePending: true })) return false
     return true
   }
+
+  const canRegisterSelected = () => isSlotRegistrable(selected)
+
+  const toggleSlotSelection = (slot) => {
+    if (!slot?.id) return
+    setSelectedSlotId(slot.id)
+    if (!isSlotRegistrable(slot)) return
+    setSelectedSlotIds((prev) =>
+      prev.includes(slot.id) ? prev.filter((id) => id !== slot.id) : [...prev, slot.id],
+    )
+  }
+
+  const clearSlotSelection = () => setSelectedSlotIds([])
 
   const register = async (slotId) => {
     setRegistering(true)
     try {
       await registerShiftSlot(slotId)
       showSuccess('Đã gửi đăng ký ca — chờ Manager duyệt hoặc chỉ định.')
+      setSelectedSlotIds((prev) => prev.filter((id) => id !== slotId))
       await Promise.all([loadWeek(weekOffset), loadWeekStatus()])
     } catch (error) {
       showError(error.message || 'Không đăng ký được ca.')
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const registerSelectedSlots = async () => {
+    const ids = selectedSlotIds.filter((id) => {
+      const slot = slots.find((s) => s.id === id)
+      return isSlotRegistrable(slot)
+    })
+    if (ids.length === 0) {
+      showError('Chưa chọn ô ca nào đủ điều kiện đăng ký.')
+      return
+    }
+    setRegistering(true)
+    try {
+      const result = await bulkRegisterShiftSlots(ids)
+      await Promise.all([loadWeek(weekOffset), loadWeekStatus()])
+      setSelectedSlotIds([])
+      if (result.failedCount > 0 && result.succeededCount === 0) {
+        showError(result.failed[0]?.message || 'Không đăng ký được các ca đã chọn.')
+      } else if (result.failedCount > 0) {
+        showError(
+          `Đã gửi ${result.succeededCount}/${ids.length} ca. `
+          + `Lỗi: ${result.failed[0]?.message || 'một số ca'}`
+          + (result.failedCount > 1 ? ` (+${result.failedCount - 1})` : ''),
+        )
+      } else {
+        showSuccess(`Đã gửi đăng ký ${result.succeededCount} ca — chờ Manager duyệt.`)
+      }
+    } catch (error) {
+      showError(error.message || 'Không đăng ký được các ca đã chọn.')
     } finally {
       setRegistering(false)
     }
@@ -345,6 +396,38 @@ function MyShiftsPage() {
           </div>
         </div>
 
+        {selectedSlotIds.length > 0 ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#356647]/30 bg-[#356647]/[0.06] px-4 py-3">
+            <p className="text-sm font-semibold text-[#356647]">
+              Đã chọn {selectedSlotIds.length} ô ca để đăng ký
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={registering}
+                onClick={clearSlotSelection}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Bỏ chọn
+              </button>
+              <button
+                type="button"
+                disabled={registering}
+                onClick={registerSelectedSlots}
+                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d553b] disabled:opacity-60"
+              >
+                {registering
+                  ? 'Đang gửi…'
+                  : `Đăng ký ${selectedSlotIds.length} ca đã chọn`}
+              </button>
+            </div>
+          </div>
+        ) : canRegisterToday ? (
+          <p className="mt-4 text-xs text-slate-500">
+            Tip: click các ô còn chỗ (nét đứt) để chọn nhiều ca, rồi bấm «Đăng ký các ca đã chọn».
+          </p>
+        ) : null}
+
         {loading ? (
           <p className="mt-8 text-sm text-slate-500">Đang tải lịch làm việc…</p>
         ) : (
@@ -409,21 +492,17 @@ function MyShiftsPage() {
                           const slot = findSlot(slots, day.iso, tpl.id)
                           const mine = slot?.assignments.find((a) => a.staffId === myUserId)
                           const visiblePeople = filterAssignments(slot?.assignments || [])
-                          const approved =
-                            slot?.assignments.filter((a) => a.status === 'Approved') || []
                           const isFull = isShiftStaffingFull(slot?.assignments || [], tpl.capacity)
-                          const seatTaken = isSaleShiftSeatTaken(
-                            slot?.assignments || [],
-                            myRoleName,
-                            { includePending: true },
-                          )
                           const isClosed = slot?.status === 'Closed' || (slot && slot.workDate < today)
-                          const canPick = slot && !isClosed && !mine && !isFull && !seatTaken
+                          const canPick = slot && isSlotRegistrable(slot)
                           const isSelected = selectedSlotId === slot?.id
+                          const isMultiSelected = Boolean(slot?.id && selectedSlotIds.includes(slot.id))
                           const hasMineVisible = visiblePeople.some((a) => a.staffId === myUserId)
 
                           let cellTone = 'border-[#e7e8e0] bg-white hover:border-[#c1c9c0]'
-                          if (isSelected) {
+                          if (isMultiSelected) {
+                            cellTone = 'border-[#356647] bg-[#356647]/15 ring-2 ring-[#356647]/35'
+                          } else if (isSelected) {
                             cellTone = 'border-[#356647] bg-[#356647]/10 ring-1 ring-[#356647]/40'
                           } else if (hasMineVisible && mine?.status === 'Approved') {
                             cellTone = 'border-emerald-300 bg-emerald-50'
@@ -448,9 +527,21 @@ function MyShiftsPage() {
                               <button
                                 type="button"
                                 disabled={!slot}
-                                onClick={() => slot && setSelectedSlotId(slot.id)}
-                                className={`flex min-h-[84px] w-full flex-col rounded-xl border px-2 py-2 text-left transition ${cellTone}`}
+                                onClick={() => slot && toggleSlotSelection(slot)}
+                                className={`relative flex min-h-[84px] w-full flex-col rounded-xl border px-2 py-2 text-left transition ${cellTone}`}
                               >
+                                {canPick ? (
+                                  <span
+                                    className={`absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
+                                      isMultiSelected
+                                        ? 'border-[#356647] bg-[#356647] text-white'
+                                        : 'border-[#356647]/50 bg-white text-transparent'
+                                    }`}
+                                    aria-hidden
+                                  >
+                                    ✓
+                                  </span>
+                                ) : null}
                                 {visiblePeople.length > 0 ? (
                                   <>
                                     <span className="text-[10px] font-bold uppercase text-slate-500">
@@ -482,7 +573,7 @@ function MyShiftsPage() {
                                 ) : canPick ? (
                                   <>
                                     <span className="text-[10px] font-bold uppercase text-[#356647]">
-                                      Đăng ký
+                                      {isMultiSelected ? 'Đã chọn' : 'Đăng ký'}
                                     </span>
                                     <span className="mt-1 text-[11px] text-slate-500">
                                       Còn chỗ cho vai trò của bạn
@@ -511,7 +602,7 @@ function MyShiftsPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Ô đã chọn</p>
                 {!selected ? (
                   <p className="mt-3 text-sm text-slate-500">
-                    Click một ô trên lịch — ô nét đứt xanh là còn chỗ để đăng ký.
+                    Click ô còn chỗ để chọn (có thể chọn nhiều). Dùng thanh «Đăng ký N ca» hoặc nút bên dưới cho 1 ca.
                   </p>
                 ) : (
                   <>

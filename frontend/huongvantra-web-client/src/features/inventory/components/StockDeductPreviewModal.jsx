@@ -66,7 +66,13 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
         return
       }
 
-      showSuccess('Đã xác nhận đóng gói thành công.')
+      showSuccess(
+        preview?.willCreateProductionOrder
+          ? 'Đã xác nhận: đã sinh lệnh sản xuất và phiếu điều chuyển (nếu cần), trừ tồn Kệ.'
+          : preview?.willCreateStockTransfer
+            ? 'Đã xác nhận: đã sinh phiếu điều chuyển Kho → Kệ và trừ tồn.'
+            : 'Đã xác nhận trừ tồn thành công.',
+      )
       onConfirmed?.()
       onClose?.()
     } catch (error) {

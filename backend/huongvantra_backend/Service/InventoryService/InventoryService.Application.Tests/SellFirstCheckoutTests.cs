@@ -565,6 +565,308 @@ public sealed class SellFirstCheckoutTests
         Assert.Equal(QueueStatus.Cancelled, queue.QueueStatus);
     }
 
+    [Fact]
+    public async Task CancelStockQueuesForOrder_WaitingTransfer_BlocksConfirmAndRestoresShelf()
+    {
+        await using var db = NewDb();
+        var orderId = Guid.NewGuid();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 3, code: "FINISH-VOID", warehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var prepare = await logic.PreparePosStockDeductionAsync(
+            Req(orderId, (sku, 7)), Guid.NewGuid(), null);
+        Assert.Equal("WarehouseTransferPending", prepare.StockHandlingMode);
+        var queueId = Assert.Single(prepare.QueueIds);
+
+        var afterPrepare = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == sku);
+        Assert.Equal(0, afterPrepare.QuantityOnHand);
+        Assert.Equal(10, afterPrepare.WarehouseQuantityOnHand);
+
+        var cancel = await logic.CancelStockQueuesForOrderAsync(
+            new CancelStockQueuesForOrderRequest(orderId, "Sale hủy đơn", "WaitingTransfer"),
+            Guid.NewGuid(),
+            null);
+        Assert.True(cancel.Changed);
+        Assert.Equal("cancelled", cancel.QueueStatus);
+
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking().SingleAsync(q => q.Id == queueId);
+        Assert.Equal(QueueStatus.Cancelled, queue.QueueStatus);
+
+        var afterCancel = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == sku);
+        Assert.Equal(3, afterCancel.QuantityOnHand);
+        Assert.Equal(10, afterCancel.WarehouseQuantityOnHand);
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ConfirmQueueAsync(queueId, Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public async Task FreezeStockQueues_CancellationRequested_BlocksConfirm()
+    {
+        await using var db = NewDb();
+        var orderId = Guid.NewGuid();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 0, code: "FINISH-FREEZE", warehouseQty: 8);
+
+        var logic = BuildLogic(db);
+        var prepare = await logic.PreparePosStockDeductionAsync(
+            Req(orderId, (sku, 4)), Guid.NewGuid(), null);
+        var queueId = Assert.Single(prepare.QueueIds);
+
+        await logic.FreezeStockQueuesForOrderCancellationAsync(orderId, "Chờ duyệt hủy", default);
+
+        var ex = await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ConfirmQueueAsync(queueId, Guid.NewGuid(), null));
+        Assert.Contains("hủy", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        await logic.UnfreezeStockQueuesForOrderCancellationAsync(orderId, default);
+        // Unfreeze alone does not guarantee Confirm success (need WH stock / transfer path); only that status cleared.
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking().SingleAsync(q => q.Id == queueId);
+        Assert.Equal("pending", queue.OrderStockStatus);
+    }
+
+    // ── COD ReserveOnly: không trừ Kệ lúc tạo; reserve + 3 mode giống POS ──
+
+    private static PreparePosStockDeductionRequest CodReq(Guid orderId, params (Guid skuId, int qty)[] lines) =>
+        Req(orderId, lines) with { OrderStatus = "PendingPayment", ReserveOnly = true };
+
+    [Fact]
+    public async Task CodReserveOnly_ShelfSufficient_ReservesWithoutDeducting()
+    {
+        await using var db = NewDb();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.PreparePosStockDeductionAsync(
+            CodReq(Guid.NewGuid(), (sku, 4)), Guid.NewGuid(), null);
+
+        Assert.Equal("ImmediateFinishedStockOnly", result.StockHandlingMode);
+        Assert.False(result.HasPendingStockReconciliation);
+        Assert.Single(result.QueueIds);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == sku);
+        Assert.Equal(10, stock.QuantityOnHand);
+        Assert.Equal(4, stock.ReservedQuantity);
+
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking()
+            .Include(q => q.Items)
+            .SingleAsync(q => q.Id == result.QueueIds[0]);
+        Assert.True(queue.IsReserved);
+        Assert.Equal(4, queue.Items.Sum(i => i.Quantity));
+        Assert.Equal(4, queue.Items.Sum(i => i.ReservedQuantity));
+    }
+
+    [Fact]
+    public async Task CodReserveOnly_ShelfShort_WarehouseCovers_QueuesTransfer_NoShelfDeduct()
+    {
+        await using var db = NewDb();
+        var sku = Guid.NewGuid();
+        await SeedAsync(db, sku, onHand: 2, code: "COD-WH", warehouseQty: 10);
+
+        var logic = BuildLogic(db);
+        var result = await logic.PreparePosStockDeductionAsync(
+            CodReq(Guid.NewGuid(), (sku, 7)), Guid.NewGuid(), null);
+
+        Assert.Equal("WarehouseTransferPending", result.StockHandlingMode);
+        Assert.True(result.HasPendingStockReconciliation);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == sku);
+        Assert.Equal(2, stock.QuantityOnHand);
+        Assert.Equal(2, stock.ReservedQuantity);
+        Assert.Equal(10, stock.WarehouseQuantityOnHand);
+
+        var item = await db.Set<StockDeductQueueItem>().AsNoTracking()
+            .SingleAsync(i => i.QueueId == result.QueueIds[0]);
+        Assert.Equal(7, item.Quantity);
+        Assert.Equal(2, item.FinishedDeductedQuantity);
+        Assert.Equal(5, item.WarehouseTransferQuantity);
+        Assert.Equal(2, item.ReservedQuantity);
+    }
+
+    [Fact]
+    public async Task CodReserveOnly_NeedsBom_CreatesPendingQueue_NoShelfDeduct()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 1, code: "COD-BOM-F", warehouseQty: 0);
+        await SeedAsync(db, materialSku, onHand: 0, code: "COD-BOM-M", warehouseQty: 20);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(c => c.GetCatalogForVariantIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var result = await logic.PreparePosStockDeductionAsync(
+            CodReq(Guid.NewGuid(), (finishedSku, 3)), Guid.NewGuid(), null);
+
+        Assert.Equal("PartialOrFullPendingBomReconciliation", result.StockHandlingMode);
+        Assert.True(result.HasPendingStockReconciliation);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(1, stock.QuantityOnHand);
+        Assert.Equal(1, stock.ReservedQuantity);
+
+        var item = await db.Set<StockDeductQueueItem>().AsNoTracking()
+            .SingleAsync(i => i.QueueId == result.QueueIds[0]);
+        Assert.Equal(3, item.Quantity);
+        Assert.Equal(1, item.FinishedDeductedQuantity);
+        Assert.Equal(2, item.PendingBomQuantity);
+    }
+
+    [Fact]
+    public async Task CodReserveOnly_MaterialShortage_AcceptBackorder_InsufficientQueue()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 0, code: "COD-BO-F", warehouseQty: 0);
+        await SeedAsync(db, materialSku, onHand: 0, code: "COD-BO-M", warehouseQty: 0);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(c => c.GetCatalogForVariantIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var logic = BuildLogic(db, catalogClient.Object);
+        var result = await logic.PreparePosStockDeductionAsync(
+            CodReq(Guid.NewGuid(), (finishedSku, 2)) with { AcceptBackorder = true },
+            Guid.NewGuid(),
+            null);
+
+        Assert.Equal("BackorderAccepted", result.StockHandlingMode);
+        Assert.True(result.HasPendingStockReconciliation);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(0, stock.QuantityOnHand);
+        Assert.Equal(0, stock.ReservedQuantity);
+
+        var queue = await db.Set<StockDeductQueue>().AsNoTracking()
+            .SingleAsync(q => q.Id == result.QueueIds[0]);
+        Assert.Equal(QueueStatus.Insufficient, queue.QueueStatus);
+        Assert.Equal("waiting_materials", queue.OrderStockStatus);
+    }
+
+    [Fact]
+    public async Task CodLegacyQueue_PreviewAndConfirm_EnrichesBom_LikePos()
+    {
+        await using var db = NewDb();
+        var finishedSku = Guid.NewGuid();
+        var materialSku = Guid.NewGuid();
+        await SeedAsync(db, finishedSku, onHand: 1, code: "COD-LEGACY-F", warehouseQty: 0, reserved: 1);
+        await SeedAsync(db, materialSku, onHand: 0, code: "COD-LEGACY-M", warehouseQty: 50);
+
+        var catalogClient = new Mock<IProductCatalogClient>();
+        catalogClient
+            .Setup(c => c.GetCatalogForVariantIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildCatalogWithBom(finishedSku, materialSku, bomQty: 1m));
+
+        var productionOrders = new List<ProductionOrder>();
+        var productionRepo = new Mock<IProductionOrderRepository>();
+        productionRepo
+            .Setup(r => r.CountCreatedSinceAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+        productionRepo
+            .Setup(r => r.AddAsync(It.IsAny<ProductionOrder>(), It.IsAny<CancellationToken>()))
+            .Callback<ProductionOrder, CancellationToken>((o, _) => productionOrders.Add(o))
+            .Returns(Task.CompletedTask);
+        productionRepo
+            .Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var logic = BuildLogicWithProduction(db, catalogClient.Object, productionRepo.Object);
+
+        var orderId = Guid.NewGuid();
+        var queue = new StockDeductQueue
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            OrderCode = "COD-LEGACY-1",
+            OrderPaymentStatus = "pending",
+            OrderStockStatus = "pending_deduct",
+            QueueStatus = QueueStatus.Waiting,
+            TotalAmount = 100m,
+            IsReserved = true,
+            IsDeducted = false,
+            CreatedAt = DateTime.UtcNow,
+            Items =
+            [
+                new StockDeductQueueItem
+                {
+                    Id = Guid.NewGuid(),
+                    SkuId = finishedSku,
+                    SkuSnapshotName = "Thành phẩm",
+                    SkuSnapshotCode = "COD-LEGACY-F",
+                    Quantity = 3,
+                    OrderedQuantity = 3,
+                    ReservedQuantity = 1,
+                    ReservationStatus = StockReservationStatus.Active,
+                    ReservedAt = DateTime.UtcNow,
+                }
+            ]
+        };
+        foreach (var item in queue.Items)
+            item.QueueId = queue.Id;
+        db.Set<StockDeductQueue>().Add(queue);
+        await db.SaveChangesAsync();
+
+        var preview = await logic.PreviewQueueAsync(queue.Id);
+        Assert.True(preview.IsBomReconciliation);
+        Assert.True(preview.WillCreateProductionOrder);
+        Assert.True(preview.WillCreateStockTransfer);
+
+        var itemAfterPreview = await db.Set<StockDeductQueueItem>().AsNoTracking()
+            .SingleAsync(i => i.QueueId == queue.Id);
+        Assert.Equal(2, itemAfterPreview.PendingBomQuantity);
+        Assert.False(string.IsNullOrWhiteSpace(itemAfterPreview.MaterialRequirementSnapshotJson));
+
+        var confirm = await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+        Assert.True(confirm.CanDeduct);
+        Assert.Single(productionOrders);
+        Assert.StartsWith("SX-", productionOrders[0].ProductionCode);
+
+        var finished = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == finishedSku);
+        Assert.Equal(0, finished.QuantityOnHand);
+        Assert.Equal(0, finished.ReservedQuantity);
+
+        var material = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == materialSku);
+        Assert.Equal(48, material.WarehouseQuantityOnHand);
+    }
+
+    private static InventoryLogic BuildLogicWithProduction(
+        InventoryDbContext db,
+        IProductCatalogClient catalogClient,
+        IProductionOrderRepository productionRepo)
+    {
+        var opts = MSOptions.Create(new InventoryOptions { SimulateWarehouse = true });
+        return new InventoryLogic(
+            new InMemorySkuStockRepo(db),
+            new StockDeductQueueRepository(db),
+            Mock.Of<IStockAdjustmentRequestRepository>(),
+            Mock.Of<IStockExportSlipRepository>(),
+            Mock.Of<IStockImportSlipRepository>(),
+            Mock.Of<IWarehouseBatchRepository>(),
+            Mock.Of<IStockExportBatchAllocationRepository>(),
+            Mock.Of<IInventoryLedgerRepository>(),
+            Mock.Of<ISupplierReceiptRepository>(),
+            Mock.Of<ISupplierReturnRequestRepository>(),
+            Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
+            new ProcessedIntegrationEventRepository(db),
+            Mock.Of<IInventoryEventPublisher>(),
+            new PassThrough(),
+            productionRepo,
+            Mock.Of<IStockTransferRepository>(),
+            catalogClient,
+            Mock.Of<ISupplierRepository>(),
+            Mock.Of<ISupplierProductRepository>(),
+            new ReturnInspectionRepository(db),
+            opts);
+    }
+
     // ── helper ────────────────────────────────────────────────────────────────
 
     private static ProductCatalogSnapshot BuildCatalogWithBom(

@@ -30,6 +30,8 @@ export default function BackorderConfirmModal({
   selectedCustomer = null,
   orderTotal = 0,
   isSubmitting = false,
+  /** COD: không bắt cọc khi khách đồng ý chờ hàng. */
+  skipDeposit = false,
   onAccept,
   onDecline,
   onCustomerSelected,
@@ -114,7 +116,9 @@ export default function BackorderConfirmModal({
 
   const depositAmount = parseVndInput(depositInput)
   const isDepositValid =
-    total <= 0 || (depositAmount != null && depositAmount >= minDeposit && depositAmount <= total)
+    skipDeposit
+    || total <= 0
+    || (depositAmount != null && depositAmount >= minDeposit && depositAmount <= total)
 
   const canAccept = isPickupDateValid && isContactNameValid && isContactPhoneValid && isDepositValid
 
@@ -379,8 +383,8 @@ export default function BackorderConfirmModal({
               />
             </div>
 
-            {/* Tiền đặt cọc */}
-            {total > 0 ? (
+            {/* Tiền đặt cọc — chỉ POS; COD không bắt cọc */}
+            {!skipDeposit && total > 0 ? (
               <div className="mt-3 space-y-2.5">
                 <div className="rounded-xl border border-[#7e5700]/30 bg-[#fbf9f1] p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -453,7 +457,7 @@ export default function BackorderConfirmModal({
                 pickupNote: pickupNote.trim() || null,
                 pickupContactName: effectiveContactName,
                 pickupContactPhone: effectiveContactPhone,
-                depositAmount: total > 0 ? depositAmount : null,
+                depositAmount: skipDeposit || total <= 0 ? null : depositAmount,
               })
             }
             disabled={isSubmitting || !canAccept}

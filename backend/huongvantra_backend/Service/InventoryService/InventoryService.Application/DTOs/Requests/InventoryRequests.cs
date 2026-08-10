@@ -6,6 +6,14 @@ public record AdjustWarehouseStockRequest(int QuantityDelta);
 
 public record CancelStockDeductRequest(string? Reason);
 
+/// <summary>OrderService gọi đồng bộ khi hủy đơn — hủy lệnh chờ trừ kho theo OrderId.</summary>
+public record CancelStockQueuesForOrderRequest(
+    Guid OrderId,
+    string? Reason = null,
+    string? PreviousOrderStatus = null);
+
+public record FreezeStockQueuesForOrderRequest(Guid OrderId, string? Reason = null);
+
 public record PreparePosStockDeductionItemRequest(
     Guid SkuId,
     string? SkuSnapshotName,
@@ -22,7 +30,12 @@ public record PreparePosStockDeductionRequest(
     bool PreviewOnly = false,
     int BackorderMinLeadDays = 3,
     int BackorderMaxLeadDays = 5,
-    string? FulfillmentPreference = null);
+    string? FulfillmentPreference = null,
+    /// <summary>
+    /// COD: không trừ Kệ ngay — chỉ phân loại 3 kịch bản, reserve phần Kệ, tạo queue
+    /// (WH transfer / BOM / backorder) giống POS.
+    /// </summary>
+    bool ReserveOnly = false);
 
 public record ReplaceCodReservationItemRequest(
     Guid SkuId,

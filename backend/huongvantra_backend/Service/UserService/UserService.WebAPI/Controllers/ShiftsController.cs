@@ -139,4 +139,21 @@ public class ShiftsController(ShiftLogic shiftLogic) : ControllerBase
         await shiftLogic.RejectAsync(id, CurrentUserId);
         return NoContent();
     }
+
+    /// <summary>Duyệt / từ chối tất cả đăng ký Pending của một nhân viên trong tuần.</summary>
+    [HttpPost("registrations/bulk-review")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    public async Task<IActionResult> BulkReviewByUser([FromBody] BulkReviewShiftByUserRequest request)
+    {
+        var result = await shiftLogic.BulkReviewByUserAsync(request, CurrentUserId);
+        return Ok(result);
+    }
+
+    /// <summary>Sale đăng ký nhiều ô ca cùng lúc (partial success).</summary>
+    [HttpPost("slots/bulk-register")]
+    public async Task<IActionResult> BulkRegister([FromBody] BulkRegisterShiftSlotsRequest request)
+    {
+        var result = await shiftLogic.BulkRegisterAsync(request, CurrentUserId);
+        return Ok(result);
+    }
 }
