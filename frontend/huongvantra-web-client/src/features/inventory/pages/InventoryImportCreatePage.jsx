@@ -93,6 +93,13 @@ function isPositiveIntegerText(value) {
   return /^[1-9]\d*$/.test(sanitizeVndInput(value))
 }
 
+function formatQuantityInput(value) {
+  const digits = sanitizeVndInput(value)
+  if (!digits) return ''
+  const number = Number(digits)
+  return Number.isSafeInteger(number) ? new Intl.NumberFormat('en-US').format(number) : digits
+}
+
 const IMPORT_FORMAT_TIPS = [
   'Bấm “Tải mẫu”, mở file vừa tải, điền vào các ô trống — đừng xóa dòng tiêu đề có chữ “Mã số” và “Số lượng”.',
   'Mỗi dòng hàng cần có: Mã số hàng (đúng như trên hệ thống) và Số lượng thực nhập (số nguyên, ví dụ 10).',
@@ -1626,7 +1633,7 @@ function InventoryImportCreatePage() {
                                 inputMode="numeric"
                                 pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
-                                value={formatVndInput(line.documentQuantity)}
+                                value={formatQuantityInput(line.documentQuantity)}
                                 onChange={(event) => {
                                   updateLine(line.key, { documentQuantity: sanitizeVndInput(event.target.value) })
                                   setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
@@ -1641,7 +1648,7 @@ function InventoryImportCreatePage() {
                                 inputMode="numeric"
                                 pattern="[0-9]*"
                                 className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
-                                value={formatVndInput(line.actualQuantity)}
+                                value={formatQuantityInput(line.actualQuantity)}
                                 onChange={(event) => {
                                   updateLine(line.key, { actualQuantity: sanitizeVndInput(event.target.value) })
                                   setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
