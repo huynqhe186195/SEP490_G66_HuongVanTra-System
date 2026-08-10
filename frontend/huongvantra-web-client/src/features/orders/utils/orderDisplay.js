@@ -528,6 +528,8 @@ export function canCompleteOrder(order) {
   // Đơn hợp đồng bắt buộc qua bước kho xác nhận xuất hàng trước khi ghi nợ.
   if (isContractOrder(order) && status !== 'Shipping') return false
   if (isPendingTransferPayment(order)) return false
+  // COD phải thu qua «Đã giao & thu tiền» sau khi Đang giao — không hoàn tất tay.
+  if (hasUnverifiedCodPayment(order)) return false
   if (canVerifyCod(order)) return false
   return true
 }
@@ -587,8 +589,14 @@ export function canCancelOrder(order) {
 
 export function canVerifyCod(order) {
   const status = normalizeOrderKey(order?.orderStatus)
-  // Enum từ API là PascalCase (Cancelled/Completed/Draft); so sánh UPPERCASE khiến nút vẫn hiện.
-  if (status === 'Cancelled' || status === 'Completed' || status === 'Draft') return false
+  // Chỉ thu COD sau khi đã «Chuyển sang đang giao» — không thu khi còn chờ NL/DC/SX hoặc mới tạo.
+  if (status !== 'Shipping') return false
+  const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
+  return Boolean(payment && !payment.isCodVerified)
+}
+
+/** Đơn COD còn khoản chưa xác nhận thu — không dùng nút «Hoàn tất đơn» chung. */
+export function hasUnverifiedCodPayment(order) {
   const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
   return Boolean(payment && !payment.isCodVerified)
 }

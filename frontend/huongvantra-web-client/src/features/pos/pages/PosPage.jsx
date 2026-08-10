@@ -1964,7 +1964,16 @@ function PosPage() {
         setIsPaymentSidebarOpen(true);
     };
 
-    const handleTakeawayPayment = async (debtSettlement = null, idempotencyKey) => {
+    const handleTakeawayPayment = async (
+        debtSettlement = null,
+        idempotencyKey,
+        acceptBackorder = false,
+        fulfillmentPreference = 'PartialDelivery',
+        pickupDate = null,
+        pickupNote = null,
+        pickupContactName = null,
+        pickupContactPhone = null,
+    ) => {
         const address = shippingAddress?.trim();
         if (!isUsableShippingAddress(address) || !hasSavedShippingAddress) {
             showError("Vui lòng chọn địa chỉ giao hàng đã lưu cho đơn COD.");
@@ -1995,6 +2004,12 @@ function PosPage() {
             promotionId: appliedPromotion?.id ?? null,
             promotionCode: appliedPromotion?.promoCode ?? null,
         });
+        payload.acceptBackorder = acceptBackorder;
+        payload.fulfillmentPreference = fulfillmentPreference;
+        payload.pickupDate = pickupDate;
+        payload.pickupNote = pickupNote;
+        payload.pickupContactName = pickupContactName;
+        payload.pickupContactPhone = pickupContactPhone;
 
         if (isTransferPayment) {
             const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
@@ -2099,7 +2114,16 @@ function PosPage() {
         depositAmount = null,
     ) => {
         if (isTakeaway) {
-            await handleTakeawayPayment(debtSettlement, idempotencyKey);
+            await handleTakeawayPayment(
+                debtSettlement,
+                idempotencyKey,
+                acceptBackorder,
+                fulfillmentPreference,
+                pickupDate,
+                pickupNote,
+                pickupContactName,
+                pickupContactPhone,
+            );
             return;
         }
 
@@ -3486,6 +3510,7 @@ function PosPage() {
           selectedCustomer={selectedCustomer}
           orderTotal={total}
           isSubmitting={isSubmitting}
+          skipDeposit={isTakeaway}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
           onCustomerSelected={selectCustomer}
