@@ -9,5 +9,8 @@ public record OrderCompletedHandlingResult(
     decimal CurrentDebt,
     int? TierId,
     string? TierName,
-    bool TierUpgraded
+    bool TierUpgraded,
+    string? CustomerName = null,
+    string? CustomerEmail = null,
+    string? PreviousTierName = null
 );

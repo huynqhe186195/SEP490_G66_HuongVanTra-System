@@ -25,6 +25,7 @@ import {
   TT200_SAMPLE_URL,
   TT200_TEMPLATE_URL,
 } from '../utils/supplierReceiptTt200Excel.js'
+import { toVietnamDateInputValue } from '../../../utils/vietnamDateTime.js'
 
 const EMPTY_HEADER = {
   supplierId: '',
@@ -35,7 +36,7 @@ const EMPTY_HEADER = {
   supplierDocumentDate: '',
   deliveredByName: '',
   originalDocumentReference: '',
-  receivedDate: new Date().toISOString().slice(0, 10),
+  receivedDate: toVietnamDateInputValue(new Date()),
   note: '',
 }
 
@@ -435,7 +436,7 @@ function InventoryImportCreatePage() {
   const [importFeedback, setImportFeedback] = useState(null)
   const errorSummaryRef = useRef(null)
   const importFeedbackRef = useRef(null)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = toVietnamDateInputValue(new Date())
 
   function showImportFeedback(next) {
     setImportFeedback(next)
@@ -774,12 +775,25 @@ function InventoryImportCreatePage() {
       }
 
       if (Object.keys(nextHeader).length > 0) {
-        setHeader((prev) => ({
-          ...prev,
-          ...Object.fromEntries(
-            Object.entries(nextHeader).filter(([, value]) => value != null && String(value).trim() !== ''),
-          ),
-        }))
+        setHeader((prev) => {
+          const merged = {
+            ...prev,
+            ...Object.fromEntries(
+              Object.entries(nextHeader).filter(([, value]) => value != null && String(value).trim() !== ''),
+            ),
+          }
+          if (merged.supplierDocumentDate && merged.receivedDate
+            && merged.receivedDate < merged.supplierDocumentDate) {
+            merged.receivedDate = merged.supplierDocumentDate
+          }
+          if (merged.receivedDate && merged.receivedDate > today) {
+            merged.receivedDate = today
+          }
+          if (merged.supplierDocumentDate && merged.supplierDocumentDate > today) {
+            merged.supplierDocumentDate = today
+          }
+          return merged
+        })
         setHeaderErrors({})
       }
 
@@ -957,8 +971,10 @@ function InventoryImportCreatePage() {
     }
     if (!header.receivedDate) {
       errors.receivedDate = 'Ngày nhận hàng không được để trống.'
+    } else if (header.receivedDate > today) {
+      errors.receivedDate = 'Ngày nhận hàng chỉ được chọn hôm nay hoặc ngày trước đó (phiếu cập nhật tồn ngay khi lưu).'
     } else if (header.supplierDocumentDate && header.receivedDate < header.supplierDocumentDate) {
-      errors.receivedDate = 'Ngày nhận hàng không thể trước ngày chứng từ NCC.'
+      errors.receivedDate = 'Ngày nhận hàng phải sau hoặc bằng ngày chứng từ NCC.'
     }
     if (header.note.length > 500) {
       errors.note = 'Ghi chú không được vượt quá 500 ký tự.'
@@ -1254,8 +1270,20 @@ function InventoryImportCreatePage() {
                 className={`w-full rounded-xl border p-3 text-sm ${headerErrors.supplierDocumentDate ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
                 value={header.supplierDocumentDate}
                 onChange={(event) => {
-                  setHeader((prev) => ({ ...prev, supplierDocumentDate: event.target.value }))
-                  setHeaderErrors((prev) => ({ ...prev, supplierDocumentDate: undefined }))
+                  const supplierDocumentDate = event.target.value
+                  setHeader((prev) => {
+                    const next = { ...prev, supplierDocumentDate }
+                    // Ngày nhận hàng phải ≥ ngày chứng từ.
+                    if (supplierDocumentDate && prev.receivedDate && prev.receivedDate < supplierDocumentDate) {
+                      next.receivedDate = supplierDocumentDate
+                    }
+                    return next
+                  })
+                  setHeaderErrors((prev) => ({
+                    ...prev,
+                    supplierDocumentDate: undefined,
+                    receivedDate: undefined,
+                  }))
                 }}
               />
               {headerErrors.supplierDocumentDate ? <p className="text-xs text-red-500">{headerErrors.supplierDocumentDate}</p> : null}
@@ -1264,6 +1292,8 @@ function InventoryImportCreatePage() {
               <span className="text-xs font-semibold text-[#717971]">Ngày nhận hàng <span className="text-red-500">*</span></span>
               <input
                 type="date"
+                min={header.supplierDocumentDate || undefined}
+                max={today}
                 className={`w-full rounded-xl border p-3 text-sm ${headerErrors.receivedDate ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
                 value={header.receivedDate}
                 onChange={(event) => {
@@ -1271,6 +1301,9 @@ function InventoryImportCreatePage() {
                   setHeaderErrors((prev) => ({ ...prev, receivedDate: undefined }))
                 }}
               />
+              <p className="text-xs text-slate-500">
+                Từ ngày chứng từ đến hôm nay — tồn Kho cập nhật ngay khi lưu phiếu.
+              </p>
               {headerErrors.receivedDate ? <p className="text-xs text-red-500">{headerErrors.receivedDate}</p> : null}
             </label>
             <label className="space-y-2" data-error={headerErrors.deliveredByName ? 'true' : undefined}>
@@ -1790,7 +1823,6 @@ function InventoryImportCreatePage() {
             <p className="text-base text-slate-700">
               Tổng tiền: <strong className="text-[#356647]">{formatVnd(receiptTotals.amount)}</strong>
             </p>
-            <p className="text-xs text-slate-500">Preview do client tính; server sẽ tính lại từng LineAmount và TotalAmount.</p>
           </div>
 
           {(Object.values(headerErrors).some(Boolean) || Object.values(lineErrors).some((e) => !!e && Object.values(e).some(Boolean))) ? (

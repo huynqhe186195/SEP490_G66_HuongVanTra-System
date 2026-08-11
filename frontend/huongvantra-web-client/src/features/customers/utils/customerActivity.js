@@ -31,7 +31,12 @@ export function getCustomerIntegrationActivities(limit = 20) {
 
 export function formatActivityTime(iso) {
   if (!iso) return ''
-  const diffMs = Date.now() - new Date(iso).getTime()
+  const value = String(iso).trim()
+  // Hoạt động cũ có thể được API trả về mà không kèm offset. Các mốc này vốn được lưu theo UTC.
+  const hasOffset = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value)
+  const occurredAt = new Date(hasOffset ? value : `${value}Z`).getTime()
+  if (Number.isNaN(occurredAt)) return ''
+  const diffMs = Math.max(0, Date.now() - occurredAt)
   const minutes = Math.floor(diffMs / 60000)
   if (minutes < 1) return 'Vừa xong'
   if (minutes < 60) return `${minutes} phút trước`

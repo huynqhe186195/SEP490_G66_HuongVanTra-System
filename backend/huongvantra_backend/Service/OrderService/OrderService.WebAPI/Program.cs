@@ -127,6 +127,7 @@ builder.Services.AddScoped<IEndOfDayReportLogic, EndOfDayReportLogic>();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<StockDeductedConsumer>();
+    x.AddConsumer<CustomerTierUpgradedConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {
@@ -139,6 +140,10 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("order-service.stock-deducted", e =>
         {
             e.ConfigureConsumer<StockDeductedConsumer>(context);
+        });
+        cfg.ReceiveEndpoint("order-service.customer-tier-upgraded", e =>
+        {
+            e.ConfigureConsumer<CustomerTierUpgradedConsumer>(context);
         });
     });
 });

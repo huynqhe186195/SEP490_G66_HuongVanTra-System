@@ -213,6 +213,7 @@ public sealed class CodReservationTraceabilityTests
         Assert.Empty(summary.Orders);
         Assert.Equal(0, summary.TotalActiveReservedQuantity);
         Assert.Equal(0, summary.SkuStockReservedQuantity);
+        Assert.Equal(10, (await db.SkuStocks.SingleAsync(s => s.SkuId == skuId)).QuantityOnHand);
 
         // Nhưng lịch sử theo đơn vẫn tra cứu được.
         var detail = await logic.GetOrderCodReservationsAsync(orderId);
@@ -223,6 +224,55 @@ public sealed class CodReservationTraceabilityTests
         Assert.NotNull(line.ReservedAt);
         Assert.NotNull(line.ReleasedAt);
         Assert.Null(line.DeductedAt);
+    }
+
+    [Fact]
+    public async Task CancelledQueue_WithLeftoverReservation_ReleasesItOnCancellationRetry()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 10);
+        var stock = await db.SkuStocks.SingleAsync(s => s.SkuId == skuId);
+        stock.ReservedQuantity = 4;
+        db.StockDeductQueues.Add(new StockDeductQueue
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            OrderCode = "HVT-ORPHAN",
+            QueueStatus = QueueStatus.Cancelled,
+            IsReserved = true,
+            CreatedAt = DateTime.UtcNow,
+            Items =
+            [
+                new StockDeductQueueItem
+                {
+                    Id = Guid.NewGuid(),
+                    SkuId = skuId,
+                    SkuSnapshotName = "SKU-1",
+                    Quantity = 4,
+                    ReservedQuantity = 4,
+                    ReservationStatus = StockReservationStatus.Active,
+                    ReservedAt = DateTime.UtcNow,
+                },
+            ],
+        });
+        await db.SaveChangesAsync();
+        var logic = BuildLogic(db);
+
+        await logic.HandleOrderCancelledAsync(new OrderCancelledEvent
+        {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
+            OrderId = orderId,
+            OrderCode = "HVT-ORPHAN",
+        });
+
+        var releasedStock = await db.SkuStocks.AsNoTracking().SingleAsync(s => s.SkuId == skuId);
+        var queue = await db.StockDeductQueues.Include(q => q.Items).SingleAsync(q => q.OrderId == orderId);
+        Assert.Equal(0, releasedStock.ReservedQuantity);
+        Assert.False(queue.IsReserved);
+        Assert.Equal(StockReservationStatus.Released, Assert.Single(queue.Items).ReservationStatus);
     }
 
     [Fact]

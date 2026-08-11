@@ -933,7 +933,7 @@ function toProductPayload(row) {
           unitName: sku.unitName || baseUnit,
           conversionRate: 1,
           price: retailPrice > 0 ? retailPrice : null,
-          barcode: normalizeText(sku.barcode),
+          barcode: null,
           isDirectSell: sku.isSellable !== false,
           isBaseUnit: true,
         }],

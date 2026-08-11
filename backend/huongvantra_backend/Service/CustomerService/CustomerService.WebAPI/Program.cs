@@ -35,8 +35,10 @@ builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegr
 builder.Services.AddScoped<ICustomerDebtTransactionRepository, CustomerDebtTransactionRepository>();
 builder.Services.AddScoped<ICustomerDebtAllocationRepository, CustomerDebtAllocationRepository>();
 builder.Services.AddScoped<ICustomerActivityRepository, CustomerActivityRepository>();
+builder.Services.AddScoped<ICustomerOutboxWriter, CustomerOutboxWriter>();
 builder.Services.AddScoped<CustomerLogic>();
 builder.Services.AddScoped<CustomerTierLogic>();
+builder.Services.AddHostedService<CustomerOutboxDispatcherHostedService>();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
