@@ -7032,9 +7032,14 @@ public class InventoryLogic(
             throw new InventoryValidationException("Số chứng từ chỉ được chứa chữ cái, số và ký tự - / .");
         if (check.SupplierDocumentDate.HasValue && check.SupplierDocumentDate.Value.Date > DateTime.UtcNow.Date)
             throw new InventoryValidationException("Ngày chứng từ không được là ngày tương lai.");
+        // Phiếu nhập cập nhật tồn ngay khi lưu — không cho ghi nhận ngày nhận ở tương lai.
+        if (check.ReceivedDate.HasValue && check.ReceivedDate.Value.Date > DateTime.UtcNow.Date)
+            throw new InventoryValidationException(
+                "Ngày nhận hàng chỉ được chọn hôm nay hoặc ngày trước đó.");
         if (check.SupplierDocumentDate.HasValue && check.ReceivedDate.HasValue
             && check.ReceivedDate.Value.Date < check.SupplierDocumentDate.Value.Date)
-            throw new InventoryValidationException("Ngày nhận hàng không thể trước ngày chứng từ NCC.");
+            throw new InventoryValidationException(
+                "Ngày nhận hàng phải sau hoặc bằng ngày chứng từ NCC.");
 
         if (check.SupplierId.HasValue)
         {
