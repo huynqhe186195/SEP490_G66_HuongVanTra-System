@@ -26,6 +26,12 @@ public class Order : BaseEntity
     public string? IdempotencyKey { get; set; }
 
     /// <summary>
+    /// RowVersion cho optimistic concurrency control (EX-08).
+    /// EF Core tự động tăng mỗi lần SaveChanges, detect concurrent updates.
+    /// </summary>
+    public byte[]? RowVersion { get; set; }
+
+    /// <summary>
     /// Mốc đơn chuyển sang <see cref="OrderStatus.Completed"/>, dùng làm kỳ ghi nhận doanh thu.
     /// Không dùng <c>UpdatedAt</c> vì mọi lần sửa đơn sau đó đều ghi đè giá trị đó,
     /// cũng không dùng <c>DeliveredAt</c> vì mốc đó chỉ có ở luồng giao hàng.

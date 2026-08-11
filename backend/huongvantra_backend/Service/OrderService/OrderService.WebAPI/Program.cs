@@ -2,6 +2,7 @@ using MassTransit;
 using HuongVanTra.Shared.Messages;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
+using OrderService.Application.Services;
 using OrderService.Application.UseCases;
 using OrderService.Infrastructure.Data;
 using OrderService.Infrastructure.Messaging;
@@ -37,6 +38,8 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
             errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IPaymentIdempotencyRepository, PaymentIdempotencyRepository>();
+builder.Services.AddScoped<PaymentIdempotencyService>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();

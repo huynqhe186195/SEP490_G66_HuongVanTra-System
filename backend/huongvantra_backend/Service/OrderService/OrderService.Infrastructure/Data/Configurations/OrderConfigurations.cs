@@ -32,6 +32,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.IdempotencyKey).HasMaxLength(100);
         builder.HasIndex(e => e.IdempotencyKey).IsUnique().HasFilter("`IdempotencyKey` IS NOT NULL");
+        builder.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
         builder.Property(e => e.FulfillmentPreference).HasConversion<string>().HasMaxLength(30);
         builder.Property(e => e.RefundStatus).HasConversion<string>().HasMaxLength(30)
             .HasDefaultValue(BackorderRefundStatus.NotRequired).IsRequired();

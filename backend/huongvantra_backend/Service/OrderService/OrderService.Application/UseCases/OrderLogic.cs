@@ -6,11 +6,13 @@ using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
+using OrderService.Application.Services;
 using OrderService.Application.Validation;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
 using OrderService.Domain.Rules;
+using OrderService.Domain.ValueObjects;
 
 namespace OrderService.Application.UseCases;
 
@@ -30,6 +32,7 @@ public class OrderLogic(
     IEmailService _emailService,
     PosCashSessionLogic _posCashSessionLogic,
     StaffShiftGuard _shiftGuard,
+    PaymentIdempotencyService _idempotencyService,
     IOptions<SepayOptions> sepayOptions,
     IOptions<BackorderOptions>? backorderOptions = null)
 {
@@ -1646,6 +1649,10 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+
+        // Validate state machine transition
+        OrderStatusTransition.EnsureValidTransition(order.OrderStatus, OrderStatus.Shipping, order.Id);
+
         if (OrderAccessContext.IsContractOrder(order))
         {
             // Bước 2 của luồng hợp đồng: chỉ Thủ kho / Quản lý xác nhận xuất hàng.
@@ -1908,6 +1915,11 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+
+        // Validate state machine transition trước
+        var targetStatus = order.BackorderAcceptedAt.HasValue ? OrderStatus.WaitingMaterials : OrderStatus.Completed;
+        OrderStatusTransition.EnsureValidTransition(order.OrderStatus, targetStatus, order.Id);
+
         if (OrderAccessContext.IsContractOrder(order))
         {
             // Bước 3 của luồng hợp đồng: chỉ Kế toán / Quản lý xác nhận khách đã ký nhận.
