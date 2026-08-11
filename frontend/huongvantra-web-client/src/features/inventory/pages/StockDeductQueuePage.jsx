@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
-import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -135,44 +134,6 @@ function StockDeductQueuePage() {
 
   const waitingCount = readCount(statusCounts, 'waiting')
   const insufficientCount = readCount(statusCounts, 'insufficient')
-  const confirmedCount = readCount(statusCounts, 'confirmed')
-  const cancelledCount = readCount(statusCounts, 'cancelled')
-  const allCount = waitingCount + insufficientCount + confirmedCount + cancelledCount
-
-  const snapshotItems = useMemo(
-    () => [
-      {
-        id: 'waiting',
-        label: 'Chờ đóng gói',
-        value: waitingCount,
-        active: activeTab === 'waiting',
-        onClick: () => selectTab('waiting'),
-      },
-      {
-        id: 'insufficient',
-        label: 'Chờ hàng',
-        value: insufficientCount,
-        warn: insufficientCount > 0,
-        active: activeTab === 'insufficient',
-        onClick: () => selectTab('insufficient'),
-      },
-      {
-        id: 'confirmed',
-        label: 'Đã trừ',
-        value: confirmedCount,
-        active: activeTab === 'confirmed',
-        onClick: () => selectTab('confirmed'),
-      },
-      {
-        id: 'all',
-        label: 'Tất cả',
-        value: allCount,
-        active: activeTab === 'all',
-        onClick: () => selectTab('all'),
-      },
-    ],
-    [activeTab, waitingCount, insufficientCount, confirmedCount, allCount, selectTab],
-  )
 
   const actionItems = useMemo(
     () => [
@@ -227,8 +188,6 @@ function StockDeductQueuePage() {
           setPage(1)
         }}
       />
-
-      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
 
       <OpsActionQueue items={actionItems} className="mb-3" />
 

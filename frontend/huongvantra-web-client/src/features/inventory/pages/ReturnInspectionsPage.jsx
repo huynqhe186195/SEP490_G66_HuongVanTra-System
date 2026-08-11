@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
-import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -202,41 +201,6 @@ function ReturnInspectionsPage() {
     setPage(1)
   }
 
-  const snapshotItems = useMemo(
-    () => [
-      {
-        id: 'pending',
-        label: 'Chờ kiểm tra',
-        value: snapshotCounts.pending,
-        warn: snapshotCounts.pending > 0,
-        active: activeTab === 'pending',
-        onClick: () => selectTab('pending'),
-      },
-      {
-        id: 'restock',
-        label: 'Duyệt nhập lại',
-        value: snapshotCounts.restock,
-        active: activeTab === 'restock',
-        onClick: () => selectTab('restock'),
-      },
-      {
-        id: 'quarantined',
-        label: 'Kiểm dịch',
-        value: snapshotCounts.quarantined,
-        active: activeTab === 'quarantined',
-        onClick: () => selectTab('quarantined'),
-      },
-      {
-        id: 'all',
-        label: 'Tất cả',
-        value: snapshotCounts.all,
-        active: activeTab === 'all',
-        onClick: () => selectTab('all'),
-      },
-    ],
-    [snapshotCounts, activeTab],
-  )
-
   const actionItems = useMemo(
     () => [
       canInspect && {
@@ -278,8 +242,6 @@ function ReturnInspectionsPage() {
           setPage(1)
         }}
       />
-
-      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
 
       <OpsActionQueue items={actionItems} className="mb-3" />
 
