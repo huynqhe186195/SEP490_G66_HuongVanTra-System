@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { confirmDialog } from '../../../app/dialog.js'
@@ -18,8 +18,15 @@ const EMPTY_FORM = {
   discountPercent: '',
 }
 
+const STATUS_FILTERS = [
+  { value: 'ALL', label: 'Tất cả trạng thái' },
+  { value: 'ACTIVE', label: 'Đang hoạt động' },
+  { value: 'INACTIVE', label: 'Ngừng hoạt động' },
+]
+
 function MembershipTiersPage() {
   const [tiers, setTiers] = useState([])
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [isLoading, setIsLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -42,6 +49,18 @@ function MembershipTiersPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const filteredTiers = useMemo(() => {
+    if (statusFilter === 'ACTIVE') return tiers.filter((tier) => tier.isActive)
+    if (statusFilter === 'INACTIVE') return tiers.filter((tier) => !tier.isActive)
+    return tiers
+  }, [tiers, statusFilter])
+
+  const statusCounts = useMemo(() => ({
+    all: tiers.length,
+    active: tiers.filter((tier) => tier.isActive).length,
+    inactive: tiers.filter((tier) => !tier.isActive).length,
+  }), [tiers])
 
   const openCreate = () => {
     setEditingId(null)
@@ -135,6 +154,28 @@ function MembershipTiersPage() {
         {TIER_READONLY_HINT} Ngừng hoạt động thay vì xóa cứng — khách/đơn cũ vẫn giữ dữ liệu liên quan.
       </p>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <select
+          className="min-w-[12.5rem] appearance-none rounded-xl border border-slate-200 bg-white bg-[length:1rem] bg-[right_0.75rem_center] bg-no-repeat py-2.5 pl-4 pr-10 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23414942'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
+          }}
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          aria-label="Lọc theo trạng thái hạng thẻ"
+        >
+          {STATUS_FILTERS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+              {option.value === 'ALL' ? ` (${statusCounts.all})` : ''}
+              {option.value === 'ACTIVE' ? ` (${statusCounts.active})` : ''}
+              {option.value === 'INACTIVE' ? ` (${statusCounts.inactive})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="-mx-1 custom-scrollbar max-h-[min(65vh,720px)] overflow-auto overscroll-contain px-1 sm:mx-0 sm:max-h-none sm:px-0">
           <table className="min-w-[640px] w-full text-left text-sm">
@@ -156,15 +197,17 @@ function MembershipTiersPage() {
                   </td>
                 </tr>
               ) : null}
-              {!isLoading && tiers.length === 0 ? (
+              {!isLoading && filteredTiers.length === 0 ? (
                 <tr>
                   <td className="px-3 py-10 text-slate-500 sm:px-6" colSpan={6}>
-                    Chưa có hạng thẻ. Bấm &quot;Thêm hạng&quot; để tạo.
+                    {tiers.length === 0
+                      ? 'Chưa có hạng thẻ. Bấm "Thêm hạng" để tạo.'
+                      : 'Không có hạng thẻ khớp bộ lọc trạng thái.'}
                   </td>
                 </tr>
               ) : null}
               {!isLoading
-                ? tiers.map((tier) => (
+                ? filteredTiers.map((tier) => (
                     <tr key={tier.id} className={`hover:bg-[#fbf9f1]/30 ${!tier.isActive ? 'opacity-60' : ''}`}>
                       <td className="px-3 py-4 font-bold text-slate-800 sm:px-6 sm:py-5">{tier.tierCode}</td>
                       <td className="px-3 py-4 text-slate-700 sm:px-4 sm:py-5">

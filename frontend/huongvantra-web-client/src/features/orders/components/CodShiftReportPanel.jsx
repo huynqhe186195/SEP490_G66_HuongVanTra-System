@@ -223,41 +223,6 @@ export default function CodShiftReportPanel({ searchValue = '' }) {
     [stats],
   )
 
-  const cards = [
-    {
-      key: '',
-      label: 'Tổng tạo',
-      value: stats.createdCount,
-      note: formatVnd(stats.createdAmount),
-    },
-    {
-      key: 'pending',
-      label: 'Chờ thu',
-      value: stats.pendingCount,
-      note: formatVnd(stats.pendingAmount),
-      warn: stats.pendingCount > 0,
-    },
-    {
-      key: 'overdue',
-      label: 'Quá hạn',
-      value: stats.overdueCount,
-      note: 'Chưa thu > 7 ngày',
-      warn: stats.overdueCount > 0,
-    },
-    {
-      key: 'completed',
-      label: 'Đã thu',
-      value: stats.completedCount,
-      note: formatVnd(stats.completedAmount),
-    },
-    {
-      key: 'cancelled',
-      label: 'Đã hủy',
-      value: stats.cancelledCount,
-      note: scope === 'shift' ? 'Trong ca hiện tại' : 'Trong khoảng lọc',
-    },
-  ]
-
   function resetPageAnd(setter, value) {
     setter(value)
     setPage(1)
@@ -346,32 +311,6 @@ export default function CodShiftReportPanel({ searchValue = '' }) {
         >
           Làm mới
         </button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {cards.map((card) => {
-          const active = statusFilter === card.key
-          return (
-            <button
-              key={card.label}
-              type="button"
-              onClick={() => resetPageAnd(setStatusFilter, card.key)}
-              className={`rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition ${
-                active
-                  ? 'border-[#356647] ring-1 ring-[#356647]/30'
-                  : card.warn
-                    ? 'border-rose-200 hover:border-rose-300'
-                    : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{card.label}</p>
-              <p className={`mt-1 text-xl font-bold tabular-nums ${card.warn ? 'text-rose-700' : 'text-slate-900'}`}>
-                {card.value}
-              </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-500" title={card.note}>{card.note}</p>
-            </button>
-          )
-        })}
       </div>
 
       <StatusFilterChips
