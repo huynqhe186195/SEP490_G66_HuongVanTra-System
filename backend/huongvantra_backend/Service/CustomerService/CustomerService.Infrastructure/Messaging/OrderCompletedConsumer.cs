@@ -50,5 +50,6 @@ public class OrderCompletedConsumer : IConsumer<OrderCompletedEvent>
         _logger.LogInformation(
             "Updated customer {CustomerId}: spending={TotalSpending}, debt={CurrentDebt}, tier={TierName}, upgraded={TierUpgraded}",
             result.CustomerId, result.TotalSpending, result.CurrentDebt, result.TierName, result.TierUpgraded);
+
     }
 }

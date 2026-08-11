@@ -1,5 +1,7 @@
 using System.Net;
+using System.Globalization;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -58,6 +60,55 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
         {
             logger.LogError(ex, "Failed to send invoice email for order {OrderCode} to {Email}", order.OrderCode, targetEmail);
         }
+    }
+
+    public async Task SendTierUpgradeEmailAsync(string toEmail, string customerName, string previousTierName, string newTierName, decimal totalSpending, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SmtpHost) || string.IsNullOrWhiteSpace(_options.SmtpUser))
+            throw new InvalidOperationException("SMTP configuration is missing for tier-upgrade email.");
+        var targetEmail = !string.IsNullOrWhiteSpace(_options.DemoEmailOverride) ? _options.DemoEmailOverride : toEmail;
+        try
+        {
+            using var mail = new MailMessage
+            {
+                From = new MailAddress(_options.SmtpUser, "Hương Vân Trà", Encoding.UTF8),
+                Subject = "[Hương Vân Trà] Chúc mừng bạn được nâng hạng thành viên",
+                IsBodyHtml = true,
+                BodyEncoding = Encoding.UTF8,
+                SubjectEncoding = Encoding.UTF8,
+                HeadersEncoding = Encoding.UTF8,
+                BodyTransferEncoding = TransferEncoding.Base64,
+                Body = GenerateTierUpgradeHtml(customerName, previousTierName, newTierName, totalSpending),
+            };
+            mail.To.Add(new MailAddress(targetEmail));
+            using var smtp = new SmtpClient(_options.SmtpHost, _options.SmtpPort) { Credentials = new NetworkCredential(_options.SmtpUser, _options.SmtpPass), EnableSsl = true };
+            await smtp.SendMailAsync(mail, ct);
+            logger.LogInformation("Successfully sent tier-upgrade email to {Email} for tier {Tier}", targetEmail, newTierName);
+        }
+        catch (Exception ex) { logger.LogError(ex, "Failed to send tier-upgrade email to {Email}", targetEmail); throw; }
+    }
+
+    private static string GenerateTierUpgradeHtml(string customerName, string previousTierName, string newTierName, decimal totalSpending)
+    {
+        var name = WebUtility.HtmlEncode(customerName);
+        var fromTier = WebUtility.HtmlEncode(previousTierName);
+        var toTier = WebUtility.HtmlEncode(newTierName);
+        // Container hiện chạy globalization-invariant (Alpine), nên không thể khởi tạo vi-VN.
+        // Định dạng thủ công vẫn giữ cách phân tách tiền tệ quen thuộc của tiếng Việt.
+        var spending = totalSpending
+            .ToString("#,0", CultureInfo.InvariantCulture)
+            .Replace(',', '.');
+        return $"""
+        <!doctype html><html lang="vi"><body style="margin:0;padding:0;background:#f4f1eb;font-family:Arial,'Helvetica Neue',sans-serif;color:#24352b">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f1eb;padding:32px 12px"><tr><td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fffdf8;border-radius:18px;overflow:hidden">
+          <tr><td style="padding:28px 36px;background:#315f45;color:#fff"><table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="width:46px;height:46px;border-radius:23px;background:#d9a441;text-align:center;font-size:20px;font-weight:700">H</td><td style="padding-left:13px"><div style="font-size:20px;font-weight:700">Hương Vân Trà</div><div style="font-size:12px;opacity:.82;margin-top:3px">Thành viên thân thiết</div></td></tr></table></td></tr>
+          <tr><td style="padding:38px 36px 24px"><div style="font-size:13px;letter-spacing:1.4px;color:#a06d19;font-weight:700">CHÚC MỪNG BẠN</div><h1 style="margin:10px 0 14px;font-size:29px;line-height:1.28;color:#244b37">Bạn đã lên hạng {toTier}</h1><p style="margin:0;font-size:16px;line-height:1.7">Xin chào <strong>{name}</strong>,</p><p style="font-size:16px;line-height:1.7">Cảm ơn bạn đã tin tưởng đồng hành cùng Hương Vân Trà. Thành viên của bạn vừa được nâng từ <strong>{fromTier}</strong> lên <strong>{toTier}</strong>.</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;background:#f2f7f2;border:1px solid #d9e6da;border-radius:12px"><tr><td style="padding:20px 22px"><div style="font-size:12px;color:#637267">TỔNG CHI TIÊU TÍCH LŨY</div><div style="margin-top:6px;font-size:24px;color:#315f45;font-weight:700">{spending} đ</div></td><td align="right" style="padding:20px 22px"><span style="display:inline-block;background:#d9a441;color:#fff;padding:8px 13px;border-radius:16px;font-size:13px;font-weight:700">{toTier}</span></td></tr></table>
+          <p style="margin:0;font-size:15px;line-height:1.7">Ưu đãi theo hạng mới sẽ được tự động áp dụng trong các đơn hàng tiếp theo.</p></td></tr>
+          <tr><td style="padding:22px 36px;background:#f4f1eb;color:#6b756d;font-size:12px;line-height:1.6">Email được gửi tự động từ Hương Vân Trà. Nếu bạn cần hỗ trợ, vui lòng liên hệ cửa hàng.</td></tr>
+        </table></td></tr></table></body></html>
+        """;
     }
 
     private static string GenerateInvoiceHtml(string customerName, string? tierName, Order order)

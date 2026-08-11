@@ -69,6 +69,7 @@ public class CustomerLogic
     private readonly ICustomerDebtAllocationRepository _allocationRepo;
     private readonly ICustomerActivityRepository _activityRepo;
     private readonly ICustomerAddressRepository _addressRepo;
+    private readonly ICustomerOutboxWriter? _outboxWriter;
 
     public CustomerLogic(
         ICustomerRepository customerRepo,
@@ -77,7 +78,8 @@ public class CustomerLogic
         ICustomerDebtTransactionRepository debtRepo,
         ICustomerDebtAllocationRepository allocationRepo,
         ICustomerActivityRepository activityRepo,
-        ICustomerAddressRepository addressRepo)
+        ICustomerAddressRepository addressRepo,
+        ICustomerOutboxWriter? outboxWriter = null)
     {
         _customerRepo = customerRepo;
         _tierRepo = tierRepo;
@@ -86,6 +88,7 @@ public class CustomerLogic
         _allocationRepo = allocationRepo;
         _activityRepo = activityRepo;
         _addressRepo = addressRepo;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<CustomerResponse> CreateAsync(
@@ -365,7 +368,21 @@ public class CustomerLogic
         await RecordActivityAsync(customerId, CustomerActivityType.OrderCreated,
             $"Hoàn tất đơn {orderCode}: chi tiêu +{amountSpent:N0}", ct);
 
+        var previousTierName = customer.Tier?.TierName;
         var (tierUpgraded, upgradedTierName) = await TryUpgradeMembershipTierAsync(customer, ct);
+
+        if (tierUpgraded && _outboxWriter is not null && !string.IsNullOrWhiteSpace(customer.Email))
+        {
+            await _outboxWriter.EnqueueAsync(new HuongVanTra.Shared.Messages.CustomerTierUpgradedEvent
+            {
+                EventId = Guid.NewGuid(), OccurredAtUtc = DateTime.UtcNow,
+                OrderId = orderId, CustomerId = customer.Id,
+                CustomerName = customer.FullName ?? "Quý khách", CustomerEmail = customer.Email,
+                PreviousTierName = previousTierName ?? "Chưa có hạng",
+                NewTierName = upgradedTierName ?? string.Empty,
+                TotalSpending = customer.TotalSpending,
+            }, ct);
+        }
 
         await _customerRepo.SaveChangesAsync(ct);
 
@@ -378,7 +395,10 @@ public class CustomerLogic
             CurrentDebt: customer.CurrentDebt,
             TierId: customer.TierId,
             TierName: upgradedTierName ?? customer.Tier?.TierName,
-            TierUpgraded: tierUpgraded);
+            TierUpgraded: tierUpgraded,
+            CustomerName: customer.FullName,
+            CustomerEmail: customer.Email,
+            PreviousTierName: tierUpgraded ? previousTierName : null);
     }
 
     /// <summary>
@@ -982,7 +1002,14 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(customerId);
 
         var items = await _activityRepo.GetByCustomerIdAsync(customerId, 100, ct);
-        return items.Select(a => new CustomerActivityResponse(a.Id, a.CustomerId, a.ActivityType, a.Description, a.CreatedAt));
+        // MySQL datetime does not preserve DateTime.Kind. All activity timestamps are stored in UTC,
+        // so restore that kind before JSON serialization to emit the trailing "Z" for browser clients.
+        return items.Select(a => new CustomerActivityResponse(
+            a.Id,
+            a.CustomerId,
+            a.ActivityType,
+            a.Description,
+            DateTime.SpecifyKind(a.CreatedAt, DateTimeKind.Utc)));
     }
 
     public async Task<CustomerStatisticsResponse> GetStatisticsAsync(CustomerAccessContext access, CancellationToken ct = default)

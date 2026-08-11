@@ -19,6 +19,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<OrderReceiptPrintLog> OrderReceiptPrintLogs => Set<OrderReceiptPrintLog>();
     public DbSet<PosCashSession> PosCashSessions => Set<PosCashSession>();
+    public DbSet<TierUpgradeEmailDelivery> TierUpgradeEmailDeliveries => Set<TierUpgradeEmailDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
