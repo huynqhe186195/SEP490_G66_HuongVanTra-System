@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
-import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -118,45 +117,6 @@ function CodOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  const snapshotItems = useMemo(
-    () => [
-      {
-        id: 'pending',
-        label: 'Chờ thu',
-        value: counts.pending,
-        note: 'Chưa xác nhận thu tiền',
-        active: activeTab === 'pending',
-        onClick: () => selectListTab('pending'),
-      },
-      {
-        id: 'overdue',
-        label: 'Quá hạn',
-        value: counts.overdue,
-        note: 'Chưa xử lý > 7 ngày',
-        warn: counts.overdue > 0,
-        active: activeTab === 'overdue',
-        onClick: () => selectListTab('overdue'),
-      },
-      {
-        id: 'done',
-        label: 'Đã hoàn tất',
-        value: counts.done,
-        note: 'Đơn COD đã thu',
-        active: activeTab === 'done',
-        onClick: () => selectListTab('done'),
-      },
-      {
-        id: 'all',
-        label: 'Tất cả',
-        value: counts.all,
-        note: 'Mọi đơn kênh COD',
-        active: activeTab === 'all',
-        onClick: () => selectListTab('all'),
-      },
-    ],
-    [counts, activeTab],
-  )
-
   const actionItems = useMemo(
     () => [
       {
@@ -259,8 +219,6 @@ function CodOrdersPage() {
         <CodShiftReportPanel searchValue={searchValue} />
       ) : (
         <div className="space-y-3">
-          <OpsSnapshotStrip items={snapshotItems} />
-
           <OpsActionQueue items={actionItems} />
 
           <StatusFilterChips

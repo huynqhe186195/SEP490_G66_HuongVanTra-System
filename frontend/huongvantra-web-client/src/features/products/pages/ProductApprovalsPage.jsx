@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
-import OpsSnapshotStrip from '../../../components/shared/OpsSnapshotStrip.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -2820,41 +2819,6 @@ export default function ProductApprovalsPage() {
     loadRequests(value)
   }, [loadRequests])
 
-  const snapshotItems = useMemo(
-    () => [
-      {
-        id: 'pending-approval',
-        label: 'Chờ Manager duyệt',
-        value: snapshotCounts.pendingApproval,
-        warn: snapshotCounts.pendingApproval > 0,
-        active: statusFilter === 'PendingApproval',
-        onClick: () => handleStatusFilterChange('PendingApproval'),
-      },
-      {
-        id: 'draft',
-        label: 'Nháp',
-        value: snapshotCounts.draft,
-        active: statusFilter === 'Draft',
-        onClick: () => handleStatusFilterChange('Draft'),
-      },
-      {
-        id: 'rejected',
-        label: 'Bị từ chối',
-        value: snapshotCounts.rejected,
-        active: statusFilter === 'Rejected',
-        onClick: () => handleStatusFilterChange('Rejected'),
-      },
-      {
-        id: 'completed',
-        label: 'Đã tạo hàng hóa',
-        value: snapshotCounts.completed,
-        active: statusFilter === 'Completed',
-        onClick: () => handleStatusFilterChange('Completed'),
-      },
-    ],
-    [snapshotCounts, statusFilter, handleStatusFilterChange],
-  )
-
   const actionItems = useMemo(
     () => [
       canDecideApprovals && {
@@ -3437,8 +3401,6 @@ export default function ProductApprovalsPage() {
 
       {!showCreateForm ? (
       <>
-      <OpsSnapshotStrip items={snapshotItems} className="mb-3" />
-
       <OpsActionQueue items={actionItems} className="mb-3" />
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
