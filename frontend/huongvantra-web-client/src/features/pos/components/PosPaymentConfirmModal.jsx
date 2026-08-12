@@ -39,6 +39,7 @@ export default function PosPaymentConfirmModal({
   appliedPromotion = null,
   appliedPromotionScopeText = '',
   orderNote = '',
+  customBundles = [],
 }) {
   if (!isOpen) return null
 
@@ -70,7 +71,7 @@ export default function PosPaymentConfirmModal({
             <section className="flex min-h-0 flex-col rounded-xl border border-[#f0eee6]">
               <div className="flex shrink-0 items-center justify-between border-b border-[#f0eee6] px-4 py-3">
                 <h3 className="text-sm font-bold text-[#1b1c17]">Sản phẩm</h3>
-                <span className="text-xs text-[#717971]">{cartItemLines.length} mặt hàng</span>
+                <span className="text-xs text-[#717971]">{cartItemLines.length + customBundles.length} mặt hàng</span>
               </div>
               <CustomScrollArea
                 className="min-h-0 max-h-[min(42vh,360px)]"
@@ -110,6 +111,48 @@ export default function PosPaymentConfirmModal({
                         </td>
                       </tr>
                     ))}
+                    {customBundles.length > 0 && (
+                      <>
+                        {customBundles.map((bundle, idx) => {
+                          const bundleTotal = (bundle.ingredients ?? []).reduce(
+                            (sum, ing) => sum + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0),
+                            0
+                          )
+                          return (
+                            <tr key={`bundle-${idx}`} className="border-t-2 border-[#f0eee6]">
+                              <td className="min-w-0 px-3 py-3" colSpan="4">
+                                <p className="font-bold text-[#1b1c17]">
+                                  🎁 {bundle.label || `Gói custom #${idx + 1}`}
+                                </p>
+                                {bundle.note && (
+                                  <p className="mt-0.5 text-xs text-[#717971]">{bundle.note}</p>
+                                )}
+                                <div className="mt-2 space-y-1">
+                                  {(bundle.ingredients ?? []).map((ing, ingIdx) => {
+                                    const ingTotal = Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0
+                                    return (
+                                      <div key={ingIdx} className="flex items-center justify-between text-sm text-[#717971]">
+                                        <span>
+                                          • {ing.materialSnapshotName} × {ing.quantity}
+                                        </span>
+                                        <span className="tabular-nums">
+                                          {formatMoney(ingTotal)} đ
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                                <div className="mt-2 flex items-center justify-end border-t border-[#f0eee6] pt-2">
+                                  <span className="font-semibold text-[#1b1c17]">
+                                    Tổng gói: {formatMoney(bundleTotal)} đ
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </>
+                    )}
                   </tbody>
                 </table>
               </CustomScrollArea>

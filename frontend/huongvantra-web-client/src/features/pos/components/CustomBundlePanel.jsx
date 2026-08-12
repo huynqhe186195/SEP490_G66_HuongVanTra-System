@@ -144,9 +144,23 @@ export default function CustomBundlePanel({ bundles, onChange }) {
   }
 
   const commitQty = (skuId) => {
+    const material = materials.find((m) => m.skuId === skuId)
+    if (!material) return
+
     setQtyMap((prev) => {
-      const n = Math.floor(Number(prev[skuId]))
-      return { ...prev, [skuId]: Number.isFinite(n) && n >= 1 ? n : 1 }
+      const requested = Math.floor(Number(prev[skuId]))
+      const validated = Number.isFinite(requested) && requested >= 1 ? requested : 1
+
+      // Kiểm tra tồn kho: không cho phép đặt số lượng > stockOnHand
+      if (validated > material.stockOnHand) {
+        toast.error(
+          `${material.name}: chỉ còn ${material.stockOnHand} trong kho, không đủ ${validated}`,
+          { duration: 4000 }
+        )
+        return { ...prev, [skuId]: Math.max(1, material.stockOnHand) }
+      }
+
+      return { ...prev, [skuId]: validated }
     })
   }
 
@@ -160,6 +174,19 @@ export default function CustomBundlePanel({ bundles, onChange }) {
 
   const confirmBundle = () => {
     if (selectedMaterials.length === 0) return
+
+    // Validation cuối cùng: kiểm tra tồn kho trước khi confirm
+    const insufficientItems = selectedMaterials.filter((m) => {
+      const requested = qtyOf(m.skuId)
+      return requested > m.stockOnHand
+    })
+
+    if (insufficientItems.length > 0) {
+      const names = insufficientItems.map((m) => `${m.name} (cần ${qtyOf(m.skuId)}, còn ${m.stockOnHand})`).join(', ')
+      toast.error(`Không đủ tồn kho: ${names}`, { duration: 5000 })
+      return
+    }
+
     const newBundle = {
       label: label.trim() || null,
       note: null,

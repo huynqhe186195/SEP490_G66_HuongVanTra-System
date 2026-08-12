@@ -533,6 +533,48 @@ public class OrderLogic(
         }).ToList();
 
         var now = DateTime.UtcNow;
+
+        // Validate custom bundle ingredients trước khi tạo đơn
+        if (req.CustomBundles != null && req.CustomBundles.Count > 0)
+        {
+            var bundleSkuIds = req.CustomBundles
+                .Where(b => b.Ingredients != null && b.Ingredients.Count > 0)
+                .SelectMany(b => b.Ingredients!)
+                .Select(i => i.MaterialSkuId)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (bundleSkuIds.Count > 0)
+            {
+                var profiles = await GetRequiredSkuProfilesAsync(bundleSkuIds, ct);
+                foreach (var bundle in req.CustomBundles.Where(b => b.Ingredients != null && b.Ingredients.Count > 0))
+                {
+                    foreach (var ing in bundle.Ingredients!)
+                    {
+                        if (ing.MaterialSkuId == Guid.Empty)
+                            throw new OrderValidationException("Custom bundle chứa SKU không hợp lệ.");
+
+                        if (!profiles.TryGetValue(ing.MaterialSkuId, out var profile))
+                            throw new OrderValidationException($"SKU {ing.MaterialSkuId} không tồn tại.");
+
+                        if (!profile.CanUseInCustom)
+                            throw new OrderValidationException(
+                                $"SKU {ing.MaterialSkuCode ?? ing.MaterialSkuId.ToString()} không được phép dùng trong Custom Bundle.");
+
+                        var pType = (profile.ProductType ?? "").ToUpperInvariant();
+                        if (pType != "NGUYEN_LIEU" && pType != "BAO_BI")
+                            throw new OrderValidationException(
+                                $"SKU {ing.MaterialSkuCode ?? ing.MaterialSkuId.ToString()} không phải là nguyên liệu hoặc bao bì.");
+
+                        if (ing.Quantity <= 0)
+                            throw new OrderValidationException(
+                                $"SKU {ing.MaterialSkuCode ?? ing.MaterialSkuId.ToString()} có số lượng không hợp lệ.");
+                    }
+                }
+            }
+        }
+
         order.CustomBundles = (req.CustomBundles ?? []).Select(b => new CustomBundle
         {
             Id = Guid.NewGuid(),
@@ -3141,6 +3183,8 @@ public class OrderLogic(
         if (bundle.PackingStatus == PackingStatus.Packed)
             throw new OrderValidationException("Gói này đã được đóng gói.");
 
+        // Validation tăng cường: kiểm tra lại canUseInCustom và productType tại thời điểm pack
+        // để phát hiện trường hợp SKU bị disable sau khi đơn được tạo
         var profiles = await GetRequiredSkuProfilesAsync(bundle.Ingredients.Select(i => i.MaterialSkuId), ct);
         foreach (var ingredient in bundle.Ingredients)
         {

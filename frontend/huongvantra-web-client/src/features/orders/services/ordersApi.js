@@ -360,15 +360,15 @@ export function buildCreateOrderBody(payload) {
       unitPrice: Number(line.unitPrice),
       isGift: Boolean(line.isGift),
     })),
-    customBundles: (payload.customBundles ?? []).map((b) => ({
-      label: b.label || null,
-      note: b.note || null,
-      ingredients: (b.ingredients ?? []).map((i) => ({
-        materialSkuId: i.materialSkuId,
-        materialSkuCode: i.materialSkuCode,
-        materialSnapshotName: i.materialSnapshotName,
-        quantity: Number(i.quantity),
-        unitPrice: Number(i.unitPrice),
+    CustomBundles: ((payload.customBundles || payload.CustomBundles) ?? []).map((b) => ({
+      Label: b.label || b.Label || null,
+      Note: b.note || b.Note || null,
+      Ingredients: ((b.ingredients || b.Ingredients) ?? []).map((i) => ({
+        MaterialSkuId: i.materialSkuId || i.MaterialSkuId,
+        MaterialSkuCode: i.materialSkuCode || i.MaterialSkuCode,
+        MaterialSnapshotName: i.materialSnapshotName || i.MaterialSnapshotName,
+        Quantity: Number(i.quantity || i.Quantity),
+        UnitPrice: Number(i.unitPrice || i.UnitPrice),
       })),
     })),
   }

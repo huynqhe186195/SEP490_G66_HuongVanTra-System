@@ -1562,7 +1562,7 @@ function PosPage() {
         return `-${percent}%`;
     };
 
-    const hasCartItems = cartItems.length > 0 || customBundles.length > 0;
+    const hasCartItems = cartItems.length > 0 || (customBundles || []).some(b => (b.ingredients || []).length > 0);
     const hasUnavailableItems = cartItems.some((item) => item.isUnavailable);
     const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
@@ -1671,35 +1671,47 @@ function PosPage() {
     const manualDiscount = Math.round(vipManualDiscount)
     const paymentAllocations = amount > 0
       ? [{
-          paymentMethod: method,
-          amount,
-          debtSettlementJson,
+          PaymentMethod: method,
+          Amount: amount,
+          DebtSettlementJson: debtSettlementJson,
         }]
       : []
     return {
-      storeId,
-      customerId: selectedCustomer?.customerId || null,
-      customerSnapshotName: selectedCustomer
+      StoreId: storeId,
+      CustomerId: selectedCustomer?.customerId || null,
+      CustomerSnapshotName: selectedCustomer
         ? formatCustomerOrderSnapshot(selectedCustomer)
         : 'Khách lẻ',
-      promotionId: appliedPromotion?.id ?? null,
-      promotionCode: appliedPromotion?.promoCode ?? null,
-      manualDiscount,
-      note: orderNote,
-      items: cartItems.map((item) => ({
-        productId: item.productId,
-        sku: item.sku,
-        name: item.name,
-        quantity: item.qty,
-        unitPrice: item.isGift ? 0 : item.price,
-        costPrice: item.costPrice ?? 0,
-        categoryName: item.categoryName ?? null,
-        inventoryUnit: item.inventoryUnit,
-        priceUnit: item.priceUnit,
-        isGift: item.isGift ? 1 : 0,
+      orderChannel: isTakeaway ? 'COD' : 'POS',
+      PromotionId: appliedPromotion?.id ?? null,
+      PromotionCode: appliedPromotion?.promoCode ?? null,
+      DiscountAmount: manualDiscount,
+      Note: orderNote,
+      Items: cartItems.map((item) => ({
+        SkuId: item.sku,
+        SkuSnapshotName: item.name,
+        SkuSnapshotCode: item.skuCode || null,
+        CategorySnapshotName: item.categoryName || null,
+        Quantity: item.qty,
+        UnitPrice: item.isGift ? 0 : item.price,
+        CostPrice: item.costPrice ?? 0,
+        IsGift: item.isGift,
+        CategoryId: item.categoryId || null,
       })),
-      payments: paymentAllocations,
-      customBundles,
+      Payments: paymentAllocations,
+      CustomBundles: (customBundles || [])
+        .filter(bundle => (bundle.ingredients || []).length > 0)
+        .map(bundle => ({
+          Label: bundle.label || null,
+          Note: bundle.note || null,
+          Ingredients: (bundle.ingredients || []).map(ing => ({
+            MaterialSkuId: ing.materialSkuId,
+            MaterialSkuCode: ing.materialSkuCode,
+            MaterialSnapshotName: ing.materialSnapshotName,
+            Quantity: ing.quantity,
+            UnitPrice: ing.unitPrice,
+          })),
+        })),
     }
   }
 
@@ -1855,7 +1867,10 @@ function PosPage() {
     payload.pickupContactName = pickupContactName
     payload.pickupContactPhone = pickupContactPhone
     payload.depositAmount = depositAmount
-    const result = await createOrder(payload, { idempotencyKey })
+    console.log('🔍 DEBUG - Payload gửi lên backend:', JSON.stringify(payload, null, 2))
+
+    try {
+      const result = await createOrder(payload, { idempotencyKey })
 
     if (method === 'CASH' && collectedNow > 0) {
       await recordCashSale()
@@ -1901,7 +1916,13 @@ function PosPage() {
         resetCheckoutState();
         setCatalogReloadKey((key) => key + 1);
         await printReceiptSequence(receipts);
-    };
+    } catch (error) {
+      console.error('❌ Lỗi khi tạo đơn:', error)
+      console.error('❌ Error response:', error.response?.data)
+      console.error('❌ Error status:', error.response?.status)
+      throw error
+    }
+  };
 
     const resetCheckoutState = () => {
         setWorkspaceByMode((current) => {
@@ -3497,6 +3518,7 @@ function PosPage() {
         appliedPromotion={appliedPromotion}
         appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
+        customBundles={customBundles}
       />
 
       {backorderPrompt ? (

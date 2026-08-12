@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { apiRequest } from '../../../lib/apiClient.js'
+import { apiRequestAuth } from '../../../lib/apiClient.js'
 
 function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'

@@ -83,6 +83,17 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)
     {
+        // DEBUG LOG
+        Console.WriteLine($"🔍 Backend nhận được CustomBundles: {request.CustomBundles?.Count ?? 0} bundles");
+        if (request.CustomBundles != null)
+        {
+            foreach (var bundle in request.CustomBundles)
+            {
+                Console.WriteLine($"  - Bundle: Label={bundle.Label}, Ingredients={bundle.Ingredients?.Count ?? 0}");
+            }
+        }
+        Console.WriteLine($"🔍 Backend nhận được Items: {request.Items?.Count ?? 0} items");
+
         if (IsB2BCheckout(request) && !CanOperateB2B())
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
