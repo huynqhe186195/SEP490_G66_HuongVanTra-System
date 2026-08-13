@@ -56,16 +56,17 @@ export function buildReceiptPaperHtml(receipt) {
     )
     .join('')
 
+  const isDepositReceipt = Number(receipt.depositAmount ?? 0) > 0
   const paymentRows = isRecordedPayment
     ? `
       <div class="receipt-total-row">
-        <span>Khách trả</span>
+        <span>${isDepositReceipt ? 'Đã nhận cọc' : 'Khách trả'}</span>
         <span>${formatMoney(receipt.customerPaid ?? receipt.amountPaid ?? 0)}</span>
       </div>
       ${
         (receipt.debtAmount ?? 0) > 0
           ? `<div class="receipt-total-row receipt-debt">
-        <span>Còn nợ (đơn)</span>
+        <span>${isDepositReceipt ? 'Còn lại thu khi nhận hàng' : 'Còn nợ (đơn)'}</span>
         <span>${formatMoney(receipt.debtAmount)}</span>
       </div>`
           : ''

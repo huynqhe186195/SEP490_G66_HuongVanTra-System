@@ -18,9 +18,6 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 20_000_000; // 20MB
 });
 
-builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
-
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddAuthorization(options =>
 {

@@ -142,6 +142,20 @@ public record StockDeductConfirmResponse(
     DateTime? CancelledAt = null,
     string? CancelReason = null);
 
+public record ProductionOrderAvailabilityItemResponse(
+    Guid MaterialSkuId,
+    string MaterialSkuCode,
+    string MaterialName,
+    int RequiredQuantity,
+    int AvailableQuantity,
+    int ShortageQuantity);
+
+public record ProductionOrderAvailabilityResponse(
+    Guid ProductionOrderId,
+    string ProductionCode,
+    bool CanComplete,
+    List<ProductionOrderAvailabilityItemResponse> Items);
+
 /// <summary>Kết quả hủy lệnh chờ trừ kho theo OrderId (đồng bộ từ OrderService).</summary>
 public record CancelStockQueuesForOrderResponse(
     Guid OrderId,

@@ -9,6 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
 import PosPaymentConfirmModal from "../components/PosPaymentConfirmModal.jsx";
 import BackorderConfirmModal from "../components/BackorderConfirmModal.jsx";
+import SellFirstConfirmModal from "../components/SellFirstConfirmModal.jsx";
 import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
 import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
@@ -42,6 +43,7 @@ import {
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
+import { previewPosStockHandling } from '../services/posStockPreviewApi.js'
 import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
@@ -335,6 +337,8 @@ function PosPage() {
   const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
   const [isPaymentConfirmOpen, setIsPaymentConfirmOpen] = useState(false)
   const [backorderPrompt, setBackorderPrompt] = useState(null)
+  const [acceptedBackorder, setAcceptedBackorder] = useState(null)
+  const [sellFirstPreview, setSellFirstPreview] = useState(null)
   const [showEndOfDayModal, setShowEndOfDayModal] = useState(false)
   const [customerOpenDebts, setCustomerOpenDebts] = useState([])
   const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
@@ -1727,6 +1731,7 @@ function PosPage() {
     orderTotal,
     changeAmount = displayChange,
     backorderResult = null,
+    depositAmount = null,
   }) => {
     const receiptTotal = orderTotal ?? total
     const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
@@ -1762,10 +1767,11 @@ function PosPage() {
       grossSubtotal,
       totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
       total: receiptTotal,
-      amountPaid: isRecordedPayment ? recordedPaymentAmount : receiptTotal,
-      customerPaid: isRecordedPayment ? amountPaid : receiptTotal,
+      depositAmount,
+      amountPaid: depositAmount ?? (isRecordedPayment ? recordedPaymentAmount : receiptTotal),
+      customerPaid: depositAmount ?? (isRecordedPayment ? amountPaid : receiptTotal),
       change: isRecordedPayment ? changeAmount : 0,
-      debtAmount: isRecordedPayment ? debtAmount : 0,
+      debtAmount: depositAmount != null ? Math.max(0, receiptTotal - depositAmount) : (isRecordedPayment ? debtAmount : 0),
       isDebtSale: method === 'CASH' && isDebtSale,
       isPartialCashPayment: isRecordedPayment && isPartialPayment,
       isBackorder: Boolean(backorderResult?.backorderAcceptedAt),
@@ -1913,6 +1919,7 @@ function PosPage() {
                 invoiceCode: result.invoiceCode,
                 changeAmount: changeAfterDebt,
                 backorderResult: result,
+                depositAmount,
             }),
         ];
 
@@ -2056,6 +2063,7 @@ function PosPage() {
                 orderCode: result.orderCode,
                 method: "TRANSFER",
                 backorderResult: result,
+                depositAmount,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -2182,6 +2190,7 @@ function PosPage() {
                 orderCode: result.orderCode,
                 method: "TRANSFER",
                 backorderResult: result,
+                depositAmount,
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -2270,7 +2279,38 @@ function PosPage() {
             ),
         );
 
+    const previewSellFirstBeforePayment = async () => {
+        if (cartItems.length === 0) return false;
+        const preview = await previewPosStockHandling(cartItems.map((item) => ({
+            skuId: item.productId,
+            skuSnapshotName: item.name || item.productName || item.sku,
+            skuSnapshotCode: item.sku,
+            quantity: item.qty,
+        })));
+        if (preview.backorderRequired) {
+            const lines = preview.lines || [];
+            setBackorderPrompt({
+                fromStockPreview: true,
+                message: preview.backorderMessage || 'Sản phẩm tạm thời chưa đủ nguyên liệu/Bao bì để đáp ứng đơn hàng.',
+                lines,
+                availableQuantity: 0,
+                backorderQuantity: lines.reduce((sum, line) => sum + Number(line.pendingBomQuantity || 0), 0),
+                estimatedReadyFrom: null,
+            });
+            return true;
+        }
+        const requiresCustomerWaiting = preview.lines.some((line) =>
+            line.warehouseDeductedQuantity > 0 || line.pendingBomQuantity > 0,
+        );
+        if (requiresCustomerWaiting) {
+            setSellFirstPreview(preview);
+            return true;
+        }
+        return false;
+    };
+
     const handlePayment = async () => {
+        setAcceptedBackorder(null);
         if (isRestoredCatalogValidating) {
             showError("Đang xác thực lại sản phẩm trong giỏ đã lưu. Vui lòng chờ trong giây lát.");
             return;
@@ -2362,7 +2402,12 @@ function PosPage() {
             return;
         }
 
-        setIsPaymentConfirmOpen(true);
+        try {
+            if (await previewSellFirstBeforePayment()) return;
+            setIsPaymentConfirmOpen(true);
+        } catch (error) {
+            showError(error.message || 'Không thể kiểm tra tồn Kho trước khi thanh toán.');
+        }
     };
 
     const resumePendingQrPayment = () => {
@@ -2396,8 +2441,18 @@ function PosPage() {
         }
         setIsSubmitting(true);
         try {
-            await submitCheckoutAttempt(debtSettlement);
+            await submitCheckoutAttempt(
+                debtSettlement,
+                Boolean(acceptedBackorder),
+                acceptedBackorder?.fulfillmentPreference,
+                acceptedBackorder?.pickupDate,
+                acceptedBackorder?.pickupNote,
+                acceptedBackorder?.pickupContactName,
+                acceptedBackorder?.pickupContactPhone,
+                acceptedBackorder?.depositAmount,
+            );
             setIsPaymentConfirmOpen(false);
+            setAcceptedBackorder(null);
         } catch (error) {
             if (error?.body?.requiresBackorderConfirmation) {
                 setIsPaymentConfirmOpen(false);
@@ -2424,6 +2479,19 @@ function PosPage() {
         pickupContactPhone,
         depositAmount,
     }) => {
+        if (backorderPrompt?.fromStockPreview) {
+            setAcceptedBackorder({
+                fulfillmentPreference,
+                pickupDate,
+                pickupNote,
+                pickupContactName,
+                pickupContactPhone,
+                depositAmount,
+            });
+            setBackorderPrompt(null);
+            setIsPaymentConfirmOpen(true);
+            return;
+        }
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         setIsSubmitting(true);
         try {
@@ -2464,6 +2532,7 @@ function PosPage() {
 
     const handleBackorderDecline = () => {
         setBackorderPrompt(null);
+        setAcceptedBackorder(null);
         setIsPaymentConfirmOpen(false);
     };
 
@@ -3515,6 +3584,7 @@ function PosPage() {
         total={total}
         selectedCustomer={selectedCustomer}
         paymentMethodLabel={selectedPaymentMethodLabel}
+        backorderDepositAmount={acceptedBackorder?.depositAmount ?? null}
         appliedPromotion={appliedPromotion}
         appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
@@ -3536,6 +3606,14 @@ function PosPage() {
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
           onCustomerSelected={selectCustomer}
+        />
+      ) : null}
+
+      {sellFirstPreview ? (
+        <SellFirstConfirmModal
+          preview={sellFirstPreview}
+          onAccept={() => { setSellFirstPreview(null); setIsPaymentConfirmOpen(true) }}
+          onDecline={() => setSellFirstPreview(null)}
         />
       ) : null}
 

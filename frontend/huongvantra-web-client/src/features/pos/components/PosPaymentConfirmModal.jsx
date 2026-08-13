@@ -40,9 +40,12 @@ export default function PosPaymentConfirmModal({
   appliedPromotionScopeText = '',
   orderNote = '',
   customBundles = [],
+  backorderDepositAmount = null,
 }) {
   if (!isOpen) return null
 
+  const deposit = backorderDepositAmount == null ? null : Number(backorderDepositAmount)
+  const remainingAfterDeposit = deposit == null ? 0 : Math.max(0, Number(total) - deposit)
   const note = orderNote?.trim()
   const customerName = selectedCustomer?.fullName || selectedCustomer?.customerSnapshotName || 'Khách lẻ'
   const customerMeta = [selectedCustomer?.phone, selectedCustomer?.customerCode].filter(Boolean).join(' · ')
@@ -214,7 +217,15 @@ export default function PosPaymentConfirmModal({
                     <SummaryRow label="Tổng giảm" value={`-${formatMoney(totalDiscount)} đ`} tone="discount" />
                   ) : null}
                   <div className="border-t border-[#f0eee6] pt-3">
-                    <SummaryRow label="Cần thanh toán" value={`${formatMoney(total)} đ`} tone="total" />
+                    {deposit != null ? (
+                      <>
+                        <SummaryRow label="Tổng giá trị đơn" value={`${formatMoney(total)} đ`} />
+                        <SummaryRow label="Tiền cọc thu hôm nay" value={`${formatMoney(deposit)} đ`} tone="total" />
+                        <SummaryRow label="Còn lại thu khi nhận hàng" value={`${formatMoney(remainingAfterDeposit)} đ`} />
+                      </>
+                    ) : (
+                      <SummaryRow label="Cần thanh toán" value={`${formatMoney(total)} đ`} tone="total" />
+                    )}
                   </div>
                 </div>
               </section>
@@ -237,7 +248,7 @@ export default function PosPaymentConfirmModal({
             disabled={isSubmitting}
             className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
           >
-            {isSubmitting ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
+            {isSubmitting ? 'Đang xử lý...' : deposit != null ? `Xác nhận nhận cọc ${formatMoney(deposit)} đ` : 'Xác nhận thanh toán'}
           </button>
         </footer>
       </div>

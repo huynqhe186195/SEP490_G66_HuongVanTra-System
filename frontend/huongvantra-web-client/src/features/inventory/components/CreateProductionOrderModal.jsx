@@ -7,6 +7,7 @@ import { fetchProductById, fetchProducts } from '../../products/services/product
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
 import { createProductionOrder } from '../services/productionOrderApi.js'
+import { fetchSkuStocks } from '../services/inventoryStockApi.js'
 
 const STEPS = ['Sản phẩm kệ đầu ra', 'Nguyên liệu / Bao bì cần xuất', 'Xác nhận']
 
@@ -203,6 +204,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   const [bomLines, setBomLines] = useState([])
   const [loadingBom, setLoadingBom] = useState(false)
   const [bomError, setBomError] = useState('')
+  const [warehouseStockBySkuId, setWarehouseStockBySkuId] = useState(new Map())
+  const [loadingWarehouseStocks, setLoadingWarehouseStocks] = useState(false)
 
   // Step 2
   const [saving, setSaving] = useState(false)
@@ -218,6 +221,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       setOutputRows([createOutputRow()])
       setBomLines([])
       setBomError('')
+      setWarehouseStockBySkuId(new Map())
       setNote('')
       setCurrentUser(null)
       setExpectedCreatedAt('')
@@ -283,6 +287,28 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     (sum, line) => sum + (Number(line.requiredQuantity) || 0),
     0,
   )
+  const requiredQuantityBySkuId = bomLines.reduce((result, line) => {
+    if (!line.skuId) return result
+    const key = String(line.skuId)
+    result.set(key, (result.get(key) ?? 0) + (Number(line.requiredQuantity) || 0))
+    return result
+  }, new Map())
+  const insufficientBomLines = bomLines.filter((line) => {
+    if (!line.skuId) return false
+    const available = Number(warehouseStockBySkuId.get(String(line.skuId)) ?? 0)
+    return available < (requiredQuantityBySkuId.get(String(line.skuId)) ?? 0)
+  })
+  const isBomStockSufficient = bomLines.length > 0
+    && !loadingWarehouseStocks
+    && bomLines.every((line) => line.skuId)
+    && insufficientBomLines.length === 0
+  const productionAvailabilityByOutputKey = new Map(selectedOutputs.map((output) => {
+    const blockingLines = bomLines.filter((line) =>
+      (line.outputKeys ?? []).includes(output.key)
+      && (!line.skuId || Number(warehouseStockBySkuId.get(String(line.skuId)) ?? 0) < Number(line.outputRequirements?.[output.key] ?? 0)),
+    )
+    return [output.key, { canProduce: blockingLines.length === 0, blockingLines }]
+  }))
   const creatorName = getCreatorName(authSession, currentUser)
   const creatorRole = getCreatorRole(authSession, currentUser)
   const expectedCreatedAtLabel = formatVietnamDateTime(expectedCreatedAt || new Date().toISOString())
@@ -293,18 +319,21 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     )
     setBomLines([])
     setBomError('')
+    setWarehouseStockBySkuId(new Map())
   }
 
   function addOutputRow() {
     setOutputRows((prev) => [...prev, createOutputRow()])
     setBomLines([])
     setBomError('')
+    setWarehouseStockBySkuId(new Map())
   }
 
   function removeOutputRow(key) {
     setOutputRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.key !== key)))
     setBomLines([])
     setBomError('')
+    setWarehouseStockBySkuId(new Map())
   }
 
   function validateOutputRows() {
@@ -393,6 +422,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             skuId: componentVariantId || '',
             skuCode: componentSkuCode,
             snapshotName: componentName,
+            outputKeys: [],
+            outputRequirements: {},
             skuOptions: componentVariantId
               ? [{
                 id: componentVariantId,
@@ -402,6 +433,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               : [],
           }
           current.requiredQuantity += bomQty * output.quantityNumber
+          if (!current.outputKeys.includes(output.key)) current.outputKeys.push(output.key)
+          current.outputRequirements[output.key] = (current.outputRequirements[output.key] ?? 0) + (bomQty * output.quantityNumber)
           aggregated.set(key, current)
         }
       }
@@ -432,6 +465,13 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       )
 
       setBomLines(enriched)
+      setLoadingWarehouseStocks(true)
+      try {
+        const stocks = await fetchSkuStocks()
+        setWarehouseStockBySkuId(new Map(stocks.map((stock) => [String(stock.skuId), stock.warehouseQuantityOnHand])))
+      } finally {
+        setLoadingWarehouseStocks(false)
+      }
     } catch (err) {
       setBomLines([])
       setBomError(err.message)
@@ -469,6 +509,14 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     const missing = bomLines.find((line) => !line.skuId)
     if (missing) {
       showError(`Chọn SKU cho nguyên liệu / bao bì "${missing.materialName}".`)
+      return false
+    }
+    if (loadingWarehouseStocks) {
+      showError('Đang kiểm tra tồn Kho nguyên liệu/Bao bì.')
+      return false
+    }
+    if (insufficientBomLines.length > 0) {
+      showError('Không đủ tồn Kho nguyên liệu/Bao bì để tạo lệnh sản xuất.')
       return false
     }
     return true
@@ -631,12 +679,19 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                             <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
                             <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
+                            <th className="px-4 py-2 text-center font-semibold">Trạng thái</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {selectedOutputs.map((output) => (
+                          {selectedOutputs.map((output) => {
+                            const outputAvailability = productionAvailabilityByOutputKey.get(output.key)
+                            return (
                             <tr key={output.key}>
                               <td className="px-4 py-2">
+                                <span className="hidden">
+                                  <span className="material-symbols-outlined text-[14px]">{outputAvailability?.canProduce ? 'check_circle' : 'cancel'}</span>
+                                  {outputAvailability?.canProduce ? 'Đủ nguyên liệu/Bao bì' : 'Thiếu nguyên liệu/Bao bì'}
+                                </span>
                                 <p className="font-medium text-slate-800">{output.sku?.productName || '—'}</p>
                                 <p className="mt-0.5 font-mono text-[11px] text-slate-500">
                                   {output.sku?.skuCode || '—'}
@@ -648,8 +703,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               <td className="px-4 py-2 text-slate-700">
                                 {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
                               </td>
+                              <td className="px-4 py-2 text-center">
+                                <span
+                                  title={outputAvailability?.canProduce ? 'Đủ nguyên liệu/Bao bì' : 'Thiếu nguyên liệu/Bao bì'}
+                                  className={outputAvailability?.canProduce ? 'text-emerald-600' : 'text-red-600'}
+                                >
+                                  <span className="material-symbols-outlined text-[22px]">{outputAvailability?.canProduce ? 'check_circle' : 'cancel'}</span>
+                                </span>
+                              </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -695,12 +759,35 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               </td>
                               <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                 {formatQuantity(line.requiredQuantity)}
+                                <p className={`mt-1 text-[11px] font-medium ${!line.skuId ? 'text-slate-400' : Number(warehouseStockBySkuId.get(String(line.skuId)) ?? 0) < (requiredQuantityBySkuId.get(String(line.skuId)) ?? 0) ? 'text-red-600' : 'text-emerald-700'}`}>
+                                  {line.skuId
+                                    ? `Kho: ${formatQuantity(warehouseStockBySkuId.get(String(line.skuId)) ?? 0)}`
+                                    : 'Kho: chưa chọn SKU'}
+                                </p>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                  <div className={`rounded-xl border px-4 py-3 text-sm ${loadingWarehouseStocks ? 'border-slate-200 bg-slate-50 text-slate-600' : insufficientBomLines.length > 0 ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+                    {loadingWarehouseStocks ? (
+                      <p>Đang kiểm tra tồn Kho nguyên liệu/Bao bì...</p>
+                    ) : insufficientBomLines.length > 0 ? (
+                      <>
+                        <p className="font-semibold">Tồn Kho không đủ. Vui lòng bổ sung nguyên liệu/Bao bì trước khi tiếp tục.</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                          {insufficientBomLines.map((line) => {
+                            const required = requiredQuantityBySkuId.get(String(line.skuId)) ?? 0
+                            const available = Number(warehouseStockBySkuId.get(String(line.skuId)) ?? 0)
+                            return <li key={line.key ?? line.materialId}>{line.materialName}: cần {formatQuantity(required)}, trong Kho {formatQuantity(available)}, thiếu {formatQuantity(required - available)}</li>
+                          })}
+                        </ul>
+                      </>
+                    ) : (
+                      <p className="font-semibold">Tồn Kho đủ cho toàn bộ nguyên liệu/Bao bì của lệnh sản xuất.</p>
+                    )}
                   </div>
                   <label className="block space-y-1.5 rounded-xl border border-slate-100 bg-white p-4">
                     <span className="text-xs font-semibold text-[#717971]">Ghi chú (tuỳ chọn)</span>
@@ -906,7 +993,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             <button
               type="button"
               onClick={handleNextStep1}
-              disabled={loadingBom}
+              disabled={loadingBom || loadingWarehouseStocks || !isBomStockSufficient}
               className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
               Tiếp theo

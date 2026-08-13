@@ -14,7 +14,8 @@ services:
   # ── Frontend: thay build nginx bằng Vite dev server ────────────────────────
   web-client:
     build: null                          # hủy Dockerfile production (nginx build)
-    image: node:20-alpine
+    # Alpine image local was missing npm; use the official Debian variant for Vite dev.
+    image: node:20-bookworm-slim
     container_name: hvt-web-client-dev
     working_dir: /app
     volumes:

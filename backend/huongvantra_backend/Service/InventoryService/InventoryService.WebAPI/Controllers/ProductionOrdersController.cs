@@ -80,6 +80,14 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:guid}/availability")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    public async Task<IActionResult> Availability(Guid id, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin")) return Forbid();
+        return Ok(await _logic.PreviewProductionOrderAvailabilityAsync(id, ct));
+    }
+
     [HttpPost("{id:guid}/cancel")]
     [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewProductionOrderRequest? request, CancellationToken ct)

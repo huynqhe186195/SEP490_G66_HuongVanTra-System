@@ -16,11 +16,13 @@ import {
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
+import ProductionCompleteConfirmModal from '../components/ProductionCompleteConfirmModal.jsx'
 import { ProductionOrderDocument, SlipActionButtons, SlipPrintStyles } from '../components/InventorySlipDocument.jsx'
 import {
   cancelProductionOrder,
   completeProductionOrder,
   fetchProductionOrders,
+  previewProductionOrderAvailability,
   PRODUCTION_STATUS_CLASS,
   PRODUCTION_STATUS_LABEL,
 } from '../services/productionOrderApi.js'
@@ -158,6 +160,8 @@ function ProductionOrdersPage() {
   const printRef = useRef(null)
   const [actingId, setActingId] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
+  const [availability, setAvailability] = useState(null)
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
 
   const statusChipOptions = useMemo(
     () => applyStatusCounts(STATUS_TABS, statusCounts),
@@ -223,9 +227,20 @@ function ProductionOrdersPage() {
     loadOrders()
   }
 
-  function openConfirm(event, type, order) {
+  async function openConfirm(event, type, order) {
     event.stopPropagation()
     setConfirmAction({ type, order })
+    setAvailability(null)
+    if (type !== 'complete') return
+    setIsCheckingAvailability(true)
+    try {
+      setAvailability(await previewProductionOrderAvailability(order.id))
+    } catch (err) {
+      showError(err.message)
+      setConfirmAction(null)
+    } finally {
+      setIsCheckingAvailability(false)
+    }
   }
 
   function renderActionButton(order, type, label, variant = 'secondary') {
@@ -482,7 +497,16 @@ function ProductionOrdersPage() {
       </div>
 
       {/* Confirm dialog */}
-      {confirmAction && (
+      {confirmAction?.type === 'complete' && (
+        <ProductionCompleteConfirmModal
+          order={confirmAction.order}
+          availability={availability}
+          isChecking={isCheckingAvailability}
+          onConfirm={() => handleAction('complete', confirmAction.order)}
+          onClose={() => { setConfirmAction(null); setAvailability(null) }}
+        />
+      )}
+      {confirmAction && confirmAction.type !== 'complete' && (
         <ConfirmDialog
           message={getConfirmActionMessage(confirmAction)}
           requiresReason={confirmAction.type === 'cancel'}

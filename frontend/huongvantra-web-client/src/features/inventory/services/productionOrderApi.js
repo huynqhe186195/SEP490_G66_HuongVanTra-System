@@ -138,6 +138,19 @@ export async function completeProductionOrder(id) {
   return mapProductionOrder(data)
 }
 
+export async function previewProductionOrderAvailability(id) {
+  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/availability`, { method: 'GET' })
+  const items = (data.items ?? data.Items ?? []).map((item) => ({
+    materialSkuId: item.materialSkuId ?? item.MaterialSkuId,
+    materialSkuCode: item.materialSkuCode ?? item.MaterialSkuCode ?? '',
+    materialName: item.materialName ?? item.MaterialName ?? '',
+    requiredQuantity: Number(item.requiredQuantity ?? item.RequiredQuantity ?? 0),
+    availableQuantity: Number(item.availableQuantity ?? item.AvailableQuantity ?? 0),
+    shortageQuantity: Number(item.shortageQuantity ?? item.ShortageQuantity ?? 0),
+  }))
+  return { canComplete: Boolean(data.canComplete ?? data.CanComplete), items }
+}
+
 export async function cancelProductionOrder(id, reason) {
   const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/cancel`, {
     method: 'POST',

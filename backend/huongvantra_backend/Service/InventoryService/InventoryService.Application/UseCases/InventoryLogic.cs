@@ -8340,6 +8340,26 @@ public class InventoryLogic(
         return normalized;
     }
 
+    public async Task<ProductionOrderAvailabilityResponse> PreviewProductionOrderAvailabilityAsync(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Production order was not found.");
+        var items = new List<ProductionOrderAvailabilityItemResponse>();
+        foreach (var line in order.Lines.OrderBy(line => line.MaterialSkuCode))
+        {
+            var available = Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(line.MaterialSkuId, LocationWarehouse, ct));
+            var required = Math.Max(0, line.PlannedQuantity);
+            items.Add(new ProductionOrderAvailabilityItemResponse(
+                line.MaterialSkuId, line.MaterialSkuCode, line.MaterialSnapshotName,
+                required, available, Math.Max(0, required - available)));
+        }
+
+        return new ProductionOrderAvailabilityResponse(
+            order.Id, order.ProductionCode, items.All(item => item.ShortageQuantity == 0), items);
+    }
+
     public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
         Guid id,
         Guid userId,
