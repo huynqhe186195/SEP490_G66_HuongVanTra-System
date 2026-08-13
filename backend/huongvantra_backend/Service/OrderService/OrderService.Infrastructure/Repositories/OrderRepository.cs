@@ -13,15 +13,11 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
     private const string ExchangeOrderCodePrefix = "HVT-DOI-";
 
     public async Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        await _db.Orders
-            .Include(o => o.OrderDetails)
-            .Include(o => o.Payments)
+        await IncludeOrderGraph(_db.Orders)
             .FirstOrDefaultAsync(o => o.Id == id, ct);
 
     public async Task<Order?> GetByCodeAsync(string orderCode, CancellationToken ct = default) =>
-        await _db.Orders
-            .Include(o => o.OrderDetails)
-            .Include(o => o.Payments)
+        await IncludeOrderGraph(_db.Orders)
             .FirstOrDefaultAsync(o => o.OrderCode == orderCode, ct);
 
     public async Task<(List<Order> Items, int TotalCount)> GetPagedAsync(
@@ -271,10 +267,15 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             .ToListAsync(ct);
 
     public async Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default) =>
-        await _db.Orders
+        await IncludeOrderGraph(_db.Orders)
+            .FirstOrDefaultAsync(o => o.IdempotencyKey == key, ct);
+
+    private static IQueryable<Order> IncludeOrderGraph(IQueryable<Order> query) =>
+        query
             .Include(o => o.OrderDetails)
             .Include(o => o.Payments)
-            .FirstOrDefaultAsync(o => o.IdempotencyKey == key, ct);
+            .Include(o => o.CustomBundles)
+                .ThenInclude(b => b.Ingredients);
 
     /// <summary>
     /// B2/B5: CurrentDebt bên CustomerService chỉ tăng khi đơn Completed. Giữa lúc lập nhiều đơn

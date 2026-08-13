@@ -39,6 +39,25 @@ public class ProductSkuOrderCatalogTests
     }
 
     [Fact]
+    public async Task OrderCatalog_IncludesNonSellableCustomMaterial()
+    {
+        await using var db = CreateDbContext();
+        var product = CreateProduct(isActive: true, ProductType.NGUYEN_LIEU);
+        var sku = CreateVariant(product, "CUSTOM-NL", isActive: true, isSellable: false, canUseInCustom: true);
+        db.Products.Add(product);
+        db.ProductVariants.Add(sku);
+        await db.SaveChangesAsync();
+
+        var logic = new ProductSkuLogic(new ProductRepository(db), db);
+        var result = await logic.GetOrderCatalogBySkuIdsAsync([sku.Id]);
+
+        var profile = Assert.Single(result);
+        Assert.Equal(sku.Id, profile.SkuId);
+        Assert.True(profile.CanUseInCustom);
+        Assert.Equal(ProductType.NGUYEN_LIEU.ToString(), profile.ProductType);
+    }
+
+    [Fact]
     public async Task OrderCatalog_ExcludesInactiveSku()
     {
         await AssertSkuExcludedAsync(productIsActive: true, skuIsActive: false, skuIsSellable: true);
@@ -82,13 +101,13 @@ public class ProductSkuOrderCatalogTests
         return new ProductDbContext(options);
     }
 
-    private static Product CreateProduct(bool isActive) =>
+    private static Product CreateProduct(bool isActive, ProductType productType = ProductType.THANH_PHAM) =>
         new()
         {
             Id = Guid.NewGuid(),
             CategoryId = 9701,
             Name = "Order catalog test product",
-            ProductType = ProductType.NGUYEN_LIEU,
+            ProductType = productType,
             InventoryUnit = InventoryUnit.Gram,
             BaseUnit = "g",
             IsActive = isActive,
@@ -99,7 +118,8 @@ public class ProductSkuOrderCatalogTests
         Product product,
         string suffix,
         bool isActive,
-        bool isSellable) =>
+        bool isSellable,
+        bool canUseInCustom = false) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -109,6 +129,7 @@ public class ProductSkuOrderCatalogTests
             VariantName = suffix,
             IsActive = isActive,
             IsSellable = isSellable,
+            CanUseInCustom = canUseInCustom,
             CreatedAt = DateTime.UtcNow,
         };
 }

@@ -55,7 +55,17 @@ function OrderProductsSection({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {orderLines.map(({ line, display }) => (
+            {orderLines.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={constrained ? 5 : 6}
+                  className={`text-center text-slate-500 ${constrained ? 'px-2 py-6 text-xs' : 'px-4 py-8 text-sm'}`}
+                >
+                  Không có dòng sản phẩm hoặc gói custom trên đơn này.
+                </td>
+              </tr>
+            ) : (
+              orderLines.map(({ line, display }) => (
               <tr key={line.id}>
                 <td className={constrained ? 'py-1.5 pl-2 pr-3' : 'py-3 pr-4'}>
                   <ProductImage
@@ -132,7 +142,8 @@ function OrderProductsSection({
                   {formatVnd(line.subTotal)}
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

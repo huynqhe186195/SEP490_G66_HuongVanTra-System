@@ -207,13 +207,21 @@ public class ProductSkuLogic(
         if (targetIds.Count == 0)
             return [];
 
+        // Sellable thành phẩm (bán thẳng) + NL/BAO_BI CanUseInCustom (gói custom POS).
+        // Nguyên liệu thường IsSellable=false — nếu lọc cứng IsSellable thì CreateOrder
+        // không resolve được InventoryUnit và báo «tải lại danh mục».
         return await _db.ProductVariants
             .Include(v => v.Product)
             .Where(v =>
                 targetIds.Contains(v.Id) &&
                 v.IsActive &&
-                v.IsSellable &&
-                v.Product.IsActive)
+                v.Product.IsActive &&
+                (
+                    v.IsSellable
+                    || (v.CanUseInCustom
+                        && (v.Product.ProductType == ProductType.NGUYEN_LIEU
+                            || v.Product.ProductType == ProductType.BAO_BI))
+                ))
             .Select(v => new ProductSkuOrderCatalogResponse(
                 v.Id,
                 v.Product.CategoryId,
@@ -222,7 +230,8 @@ public class ProductSkuLogic(
                 v.IsPurchasable,
                 v.CanBeBomComponent,
                 v.CanUseInCustom,
-                v.CanHaveBom))
+                v.CanHaveBom,
+                v.CostPrice))
             .ToListAsync(ct);
     }
 

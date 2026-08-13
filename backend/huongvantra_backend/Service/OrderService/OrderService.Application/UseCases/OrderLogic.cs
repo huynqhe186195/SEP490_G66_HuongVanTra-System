@@ -318,6 +318,9 @@ public class OrderLogic(
             var profile = skuProfiles[ingredient.MaterialSkuId];
             if (ingredient.Quantity <= 0)
                 throw new OrderValidationException("Số lượng component Custom phải lớn hơn 0.");
+            if (ingredient.UnitPrice <= 0)
+                throw new OrderValidationException(
+                    $"Nguyên liệu custom «{ingredient.MaterialSnapshotName?.Trim() ?? ingredient.MaterialSkuCode ?? ingredient.MaterialSkuId.ToString()}» phải có đơn giá lớn hơn 0.");
             if (!profile.CanUseInCustom
                 || !string.Equals(profile.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
                    && !string.Equals(profile.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase))
@@ -776,6 +779,10 @@ public class OrderLogic(
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
+        }
+        else
+        {
+            MarkCustomOnlyInventorySyncedIfApplicable(order);
         }
 
         await RecordActivityAsync(
@@ -2127,6 +2134,10 @@ public class OrderLogic(
                 actorName,
                 ct);
         }
+        else
+        {
+            MarkCustomOnlyInventorySyncedIfApplicable(order);
+        }
 
         // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
         if (!ShouldSuppressLegacyOrderPlacedEvent(order, stockHandling))
@@ -2687,6 +2698,22 @@ public class OrderLogic(
         && (order.OrderDetails?.Count ?? 0) > 0;
 
     /// <summary>
+    /// Đơn chỉ có gói custom: không trừ thành phẩm Kệ qua PreparePosStockDeduction.
+    /// Nguyên liệu trừ lúc đóng gói (PackCustomBundle). Tránh kẹt PendingDeduction / badge «Chờ trừ tồn quầy».
+    /// </summary>
+    private static void MarkCustomOnlyInventorySyncedIfApplicable(Order order)
+    {
+        if (order.InventorySyncStatus != InventorySyncStatus.PendingDeduction)
+            return;
+        if ((order.OrderDetails?.Count ?? 0) > 0)
+            return;
+        if (!(order.CustomBundles?.Any(b => (b.Ingredients?.Count ?? 0) > 0) ?? false))
+            return;
+
+        order.InventorySyncStatus = InventorySyncStatus.Synced;
+    }
+
+    /// <summary>
     /// COD sell-first: đồng bộ prepare lúc tạo đơn (reserve-only), map Waiting* giống POS.
     /// </summary>
     private static bool ShouldHandleCodStockSynchronously(Order order) =>
@@ -2740,7 +2767,11 @@ public class OrderLogic(
     /// </summary>
     private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order, InventoryStockHandlingResponse? stockHandling) =>
         order.OrderChannel == OrderChannel.POS
-        || (order.OrderChannel == OrderChannel.COD && stockHandling is not null);
+        || (order.OrderChannel == OrderChannel.COD && stockHandling is not null)
+        // COD chỉ custom (không dòng TP): không publish OrderPlaced rỗng — NL trừ lúc đóng gói.
+        || (order.OrderChannel == OrderChannel.COD
+            && (order.OrderDetails?.Count ?? 0) == 0
+            && (order.CustomBundles?.Any(b => (b.Ingredients?.Count ?? 0) > 0) ?? false));
 
     private async Task<InventoryStockHandlingResponse> PreparePosStockHandlingAsync(
         Order order,

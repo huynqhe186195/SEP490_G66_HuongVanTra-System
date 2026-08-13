@@ -1,4 +1,5 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { mapCustomBundle } from './customBundleApi.js'
 
 function normalizeEnum(value) {
   return String(value || '').trim()
@@ -175,6 +176,9 @@ export function mapOrderDetail(item) {
     pickupCode: item.pickupCode ?? item.PickupCode ?? '',
     depositAmount: Number(item.depositAmount ?? item.DepositAmount ?? 0),
     remainingAmountDue: Number(item.remainingAmountDue ?? item.RemainingAmountDue ?? 0),
+    customBundles: Array.isArray(item.customBundles ?? item.CustomBundles)
+      ? (item.customBundles ?? item.CustomBundles).map(mapCustomBundle).filter(Boolean)
+      : [],
   }
 }
 

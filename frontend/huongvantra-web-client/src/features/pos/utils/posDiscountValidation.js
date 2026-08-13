@@ -131,6 +131,16 @@ export function validateZeroTotalCheckout({
     }
   }
 
+  const zeroPriceCustomIngredient = (customBundles || []).some((bundle) =>
+    (bundle.ingredients || []).some((ing) => Number(ing.unitPrice) <= 0),
+  )
+  if (zeroPriceCustomIngredient) {
+    return {
+      ok: false,
+      error: 'Gói custom phải có đơn giá nguyên liệu lớn hơn 0. Cập nhật giá bán SKU nguyên liệu hoặc nhập giá trên POS.',
+    }
+  }
+
   if (Number(finalAmount) > 0) return { ok: true }
 
   const isVipGiftOrder =

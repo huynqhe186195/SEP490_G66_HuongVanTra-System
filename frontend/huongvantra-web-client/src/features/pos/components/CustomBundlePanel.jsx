@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { showError, showInfo } from '../../../app/toast.js'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { fetchStoreSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
 
@@ -6,29 +7,53 @@ function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'
 }
 
+function parseMoneyInput(val) {
+  const cleaned = String(val ?? '').replace(/[^\d]/g, '')
+  if (cleaned === '') return ''
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? n : ''
+}
+
 async function fetchMaterials(search = '') {
-  const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true' })
-  if (search.trim()) query.set('search', search.trim())
-  const [data, stocks] = await Promise.all([
-    apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
-    fetchStoreSkuStocks().catch(() => []),
+  const stockPromise = fetchStoreSkuStocks().catch(() => [])
+  const types = ['NGUYEN_LIEU', 'BAO_BI']
+  const [stocks, ...pages] = await Promise.all([
+    stockPromise,
+    ...types.map((productType) => {
+      const query = new URLSearchParams({
+        pageSize: '100',
+        page: '1',
+        isActive: 'true',
+        productType,
+      })
+      if (search.trim()) query.set('search', search.trim())
+      return apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' })
+    }),
   ])
   const stockBySkuId = buildWarehouseStockBySkuIdMap(stocks)
-  const paged = toPagedResult(data)
-  return (paged.items ?? []).map((item) => {
-    const skuId = item.id ?? item.Id ?? item.skuId ?? item.SkuId
-    return {
-      skuId,
-      skuCode: item.skuCode ?? item.SkuCode ?? item.code ?? item.Code ?? '',
-      name: item.productName ?? item.ProductName ?? item.name ?? item.Name ?? '',
-      unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
-      packagingType: item.packagingType ?? item.PackagingType ?? '',
-      description: item.description ?? item.Description ?? '',
-      productType: item.productType ?? item.ProductType ?? '',
-      canUseInCustom: item.canUseInCustom ?? item.CanUseInCustom ?? false,
-      stockOnHand: Number(stockBySkuId.get(skuId) ?? 0),
+  const byId = new Map()
+  for (const data of pages) {
+    const paged = toPagedResult(data)
+    for (const item of paged.items ?? []) {
+      const skuId = item.id ?? item.Id ?? item.skuId ?? item.SkuId
+      if (!skuId || byId.has(skuId)) continue
+      const productType = String(item.productType ?? item.ProductType ?? '').toUpperCase()
+      const canUseInCustom = Boolean(item.canUseInCustom ?? item.CanUseInCustom)
+      if (!['NGUYEN_LIEU', 'BAO_BI'].includes(productType) || !canUseInCustom) continue
+      byId.set(skuId, {
+        skuId,
+        skuCode: item.skuCode ?? item.SkuCode ?? item.code ?? item.Code ?? '',
+        name: item.productName ?? item.ProductName ?? item.name ?? item.Name ?? '',
+        unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
+        packagingType: item.packagingType ?? item.PackagingType ?? '',
+        description: item.description ?? item.Description ?? '',
+        productType,
+        canUseInCustom,
+        stockOnHand: Number(stockBySkuId.get(skuId) ?? 0),
+      })
     }
-  }).filter((item) => ['NGUYEN_LIEU', 'BAO_BI'].includes(String(item.productType).toUpperCase()) && item.canUseInCustom === true)
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'vi'))
 }
 
 function DetailModal({ material, onClose }) {
@@ -88,6 +113,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [qtyMap, setQtyMap] = useState({})
+  const [priceMap, setPriceMap] = useState({})
   const [selected, setSelected] = useState({})
   const [label, setLabel] = useState('')
   const [detailMaterial, setDetailMaterial] = useState(null)
@@ -116,6 +142,14 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     debounceRef.current = setTimeout(() => loadMaterials(val), 350)
   }
 
+  const priceOf = (material) => {
+    const override = priceMap[material.skuId]
+    if (override === '' || override === undefined || override === null) {
+      return Number(material.unitPrice) || 0
+    }
+    return Number(override) || 0
+  }
+
   const toggleRow = (skuId) => {
     setSelected((prev) => {
       const next = { ...prev }
@@ -124,6 +158,10 @@ export default function CustomBundlePanel({ bundles, onChange }) {
       } else {
         next[skuId] = true
         if (!qtyMap[skuId]) setQtyMap((q) => ({ ...q, [skuId]: 1 }))
+        const material = materials.find((m) => m.skuId === skuId)
+        if (material && priceMap[skuId] === undefined) {
+          setPriceMap((p) => ({ ...p, [skuId]: Number(material.unitPrice) || 0 }))
+        }
       }
       return next
     })
@@ -143,6 +181,11 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     setQtyMap((prev) => ({ ...prev, [skuId]: Number(val) }))
   }
 
+  const setPrice = (skuId, val) => {
+    const parsed = parseMoneyInput(val)
+    setPriceMap((prev) => ({ ...prev, [skuId]: parsed }))
+  }
+
   const commitQty = (skuId) => {
     const material = materials.find((m) => m.skuId === skuId)
     if (!material) return
@@ -153,9 +196,8 @@ export default function CustomBundlePanel({ bundles, onChange }) {
 
       // Kiểm tra tồn kho: không cho phép đặt số lượng > stockOnHand
       if (validated > material.stockOnHand) {
-        toast.error(
+        showError(
           `${material.name}: chỉ còn ${material.stockOnHand} trong kho, không đủ ${validated}`,
-          { duration: 4000 }
         )
         return { ...prev, [skuId]: Math.max(1, material.stockOnHand) }
       }
@@ -166,7 +208,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
 
   const selectedMaterials = materials.filter((m) => selected[m.skuId])
   const bundleTotal = selectedMaterials.reduce(
-    (s, m) => s + m.unitPrice * qtyOf(m.skuId),
+    (s, m) => s + priceOf(m) * qtyOf(m.skuId),
     0,
   )
 
@@ -183,8 +225,24 @@ export default function CustomBundlePanel({ bundles, onChange }) {
 
     if (insufficientItems.length > 0) {
       const names = insufficientItems.map((m) => `${m.name} (cần ${qtyOf(m.skuId)}, còn ${m.stockOnHand})`).join(', ')
-      toast.error(`Không đủ tồn kho: ${names}`, { duration: 5000 })
+      showError(`Không đủ tồn kho: ${names}`)
       return
+    }
+
+    const zeroPriceItems = selectedMaterials.filter((m) => priceOf(m) <= 0)
+    if (zeroPriceItems.length > 0) {
+      showError(
+        `Nguyên liệu phải có giá bán > 0: ${zeroPriceItems.map((m) => m.name).join(', ')}. Nhập giá trên POS hoặc cập nhật giá bán SKU.`,
+      )
+      return
+    }
+
+    const hasPackaging = selectedMaterials.some((m) => m.productType === 'BAO_BI')
+    if (!hasPackaging) {
+      // Soft hint — không chặn: roadmap cho phép chỉ NL; bao bì nên thêm khi giao/đóng gói.
+      showInfo(
+        'Gợi ý: gói chưa có bao bì (túi/hộp/tem). Với COD/đóng gói xuất kho nên thêm BAO_BI.',
+      )
     }
 
     const newBundle = {
@@ -192,19 +250,21 @@ export default function CustomBundlePanel({ bundles, onChange }) {
       note: null,
       ingredients: selectedMaterials.map((m) => {
         const quantity = qtyOf(m.skuId)
+        const unitPrice = priceOf(m)
         return {
           materialSkuId: m.skuId,
           materialSkuCode: m.skuCode,
           materialSnapshotName: m.name,
           quantity,
-          unitPrice: m.unitPrice,
-          subTotal: m.unitPrice * quantity,
+          unitPrice,
+          subTotal: unitPrice * quantity,
         }
       }),
     }
     onChange([newBundle])
     setSelected({})
     setQtyMap({})
+    setPriceMap({})
     setLabel('')
   }
 
@@ -212,6 +272,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     onChange([])
     setSelected({})
     setQtyMap({})
+    setPriceMap({})
     setLabel('')
   }
 
@@ -284,7 +345,14 @@ export default function CustomBundlePanel({ bundles, onChange }) {
           {loading ? (
             <p className="py-6 text-center text-xs text-[#717971]">Đang tải...</p>
           ) : materials.length === 0 ? (
-            <p className="py-6 text-center text-xs text-[#717971]">Không tìm thấy nguyên liệu.</p>
+            <div className="space-y-1 py-6 text-center text-xs text-[#717971]">
+              <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : 'Chưa có nguyên liệu được phép dùng trong Custom.'}</p>
+              {!search.trim() ? (
+                <p className="text-[11px] text-[#9aa39a]">
+                  Trên SKU loại Nguyên liệu / Bao bì, bật «Dùng trong custom» rồi đồng bộ cửa hàng.
+                </p>
+              ) : null}
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-[#c1c9c0]">
               <table className="w-full text-sm">
@@ -303,6 +371,14 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                   {materials.map((m) => {
                     const isSelected = Boolean(selected[m.skuId])
                     const qtyValue = qtyMap[m.skuId] ?? 1
+                    const unitPrice = priceOf(m)
+                    const priceInputValue =
+                      priceMap[m.skuId] === ''
+                        ? ''
+                        : priceMap[m.skuId] !== undefined
+                          ? priceMap[m.skuId]
+                          : m.unitPrice
+                    const missingCatalogPrice = Number(m.unitPrice) <= 0
                     return (
                       <tr
                         key={m.skuId}
@@ -327,13 +403,38 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                         <td className="px-3 py-2.5">
                           <p className="font-medium text-[#1b1c17]">{m.name}</p>
                           <p className="font-mono text-[11px] text-[#717971]">{m.skuCode}</p>
+                          {missingCatalogPrice ? (
+                            <p className="text-[11px] text-amber-700">SKU chưa có giá bán — nhập giá khi chọn</p>
+                          ) : null}
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <span className={m.stockOnHand <= 0 ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
                             {m.stockOnHand.toLocaleString('vi-VN')}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-[#717971]">{fmt(m.unitPrice)}</td>
+                        <td
+                          className="px-3 py-2.5 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {isSelected ? (
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={priceInputValue}
+                              onChange={(e) => setPrice(m.skuId, e.target.value)}
+                              className={`w-24 rounded border px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-[#356647] ${
+                                unitPrice <= 0
+                                  ? 'border-amber-400 bg-amber-50 text-amber-900'
+                                  : 'border-[#c1c9c0] text-[#1b1c17]'
+                              }`}
+                              title="Đơn giá bán (đ)"
+                            />
+                          ) : (
+                            <span className={missingCatalogPrice ? 'text-amber-700' : 'text-[#717971]'}>
+                              {fmt(m.unitPrice)}
+                            </span>
+                          )}
+                        </td>
                         <td
                           className="w-24 px-3 py-2.5 text-center"
                           onClick={(e) => e.stopPropagation()}
@@ -352,7 +453,9 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                         </td>
                         <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
                           {isSelected ? (
-                            <span className="text-[#356647]">{fmt(m.unitPrice * qtyOf(m.skuId))}</span>
+                            <span className={unitPrice <= 0 ? 'text-amber-700' : 'text-[#356647]'}>
+                              {fmt(unitPrice * qtyOf(m.skuId))}
+                            </span>
                           ) : (
                             <span className="text-[#c1c9c0]">—</span>
                           )}

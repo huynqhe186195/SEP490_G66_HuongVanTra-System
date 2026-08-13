@@ -80,17 +80,18 @@ function mapPaymentMethod(method) {
 }
 
 function getPaymentAllocations(payload) {
-  return Array.isArray(payload?.payments) ? payload.payments : []
+  const rows = payload?.payments ?? payload?.Payments
+  return Array.isArray(rows) ? rows : []
 }
 
 function findPaymentAllocation(payload, predicate) {
   return getPaymentAllocations(payload).find((payment) =>
-    predicate(String(payment?.paymentMethod || '').toUpperCase()))
+    predicate(String(payment?.paymentMethod || payment?.PaymentMethod || '').toUpperCase()))
 }
 
 function getPaymentAllocationAmount(payload, predicate) {
   const allocation = findPaymentAllocation(payload, predicate)
-  return Math.max(0, Number(allocation?.amount ?? 0))
+  return Math.max(0, Number(allocation?.amount ?? allocation?.Amount ?? 0))
 }
 
 function findTransferPayment(payments) {
@@ -115,19 +116,23 @@ function resolveOrderPaymentStatus(payments) {
 }
 
 function mapPosLineItem(item) {
+  const productId = item.productId ?? item.ProductId ?? item.skuId ?? item.SkuId
+  const skuCode = item.sku ?? item.Sku ?? item.skuSnapshotCode ?? item.SkuSnapshotCode ?? ''
+  // Guid SKU id — không dùng mã SKU (vd. HVT-...) làm productId.
+  const looksLikeGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(productId || ''))
   return {
-    productId: item.productId ?? item.skuId,
-    sku: item.sku ?? item.skuSnapshotCode ?? '',
-    productName: item.productName ?? '',
-    packagingType: item.packagingType ?? '',
-    name: item.name ?? item.skuSnapshotName ?? '',
-    quantity: Number(item.quantity ?? item.qty ?? 1),
-    inventoryUnit: item.inventoryUnit ?? '',
-    priceUnit: item.priceUnit ?? '',
-    unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-    isGift: Boolean(item.isGift),
-    categoryName: item.categoryName ?? item.CategoryName ?? '',
-    costPrice: Number(item.costPrice ?? 0),
+    productId: looksLikeGuid ? productId : null,
+    sku: skuCode,
+    productName: item.productName ?? item.ProductName ?? '',
+    packagingType: item.packagingType ?? item.PackagingType ?? '',
+    name: item.name ?? item.Name ?? item.skuSnapshotName ?? item.SkuSnapshotName ?? '',
+    quantity: Number(item.quantity ?? item.Quantity ?? item.qty ?? item.Qty ?? 1),
+    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    priceUnit: item.priceUnit ?? item.PriceUnit ?? '',
+    unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? item.price ?? item.Price ?? 0),
+    isGift: Boolean(item.isGift ?? item.IsGift),
+    categoryName: item.categoryName ?? item.CategoryName ?? item.categorySnapshotName ?? item.CategorySnapshotName ?? '',
+    costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
   }
 }
 
@@ -135,7 +140,11 @@ function buildOrderRequestFromPosPayload(
   payload,
   { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
 ) {
-  const lines = (payload.items ?? []).map(mapPosLineItem)
+  const rawItems = payload.items ?? payload.Items ?? []
+  const lines = rawItems.map(mapPosLineItem).filter((line) => line.productId)
+  if (rawItems.length > 0 && lines.length === 0) {
+    throw new Error('Giỏ hàng thiếu mã SKU hợp lệ (Guid). Thêm lại sản phẩm rồi thanh toán.')
+  }
   const transferPayment = findPaymentAllocation(
     payload,
     (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
@@ -143,30 +152,42 @@ function buildOrderRequestFromPosPayload(
   const cashPayment = findPaymentAllocation(payload, (method) => method === 'CASH')
   const codPayment = findPaymentAllocation(payload, (method) => method === 'COD')
   const legacyPayment = transferPayment ?? cashPayment ?? codPayment
+  const rawPayments = payload.payments ?? payload.Payments ?? []
 
   return buildCreateOrderBody({
-    customerId: payload.customerId,
-    customerSnapshotName: payload.customerSnapshotName?.trim() || null,
-    orderChannel,
+    customerId: payload.customerId ?? payload.CustomerId,
+    customerSnapshotName: (payload.customerSnapshotName ?? payload.CustomerSnapshotName)?.trim() || null,
+    orderChannel: orderChannel ?? payload.orderChannel ?? payload.OrderChannel,
     shippingAddress,
-    note: payload.note?.trim() || null,
-    discountAmount: Number(payload.manualDiscount ?? 0),
-    promotionId: payload.promotionId,
-    promotionCode: payload.promotionCode,
+    note: (payload.note ?? payload.Note)?.trim() || null,
+    discountAmount: Number(
+      payload.manualDiscount
+      ?? payload.ManualDiscount
+      ?? payload.discountAmount
+      ?? payload.DiscountAmount
+      ?? 0,
+    ),
+    promotionId: payload.promotionId ?? payload.PromotionId,
+    promotionCode: payload.promotionCode ?? payload.PromotionCode,
     paidAmount: paidAmount ?? 0,
     transferQrAmount: transferQrAmount ?? 0,
-    paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
-    acceptBackorder: Boolean(payload.acceptBackorder),
-    fulfillmentPreference: payload.fulfillmentPreference || 'PartialDelivery',
-    pickupDate: payload.pickupDate || null,
-    pickupNote: payload.pickupNote || null,
-    pickupContactName: payload.pickupContactName || null,
-    pickupContactPhone: payload.pickupContactPhone || null,
-    depositAmount: payload.depositAmount ?? null,
-    payments: (payload.payments ?? []).map((allocation) => ({
-      paymentMethod: mapPaymentMethod(allocation.paymentMethod),
-      amount: Number(allocation.amount ?? 0),
-      debtSettlementJson: allocation.debtSettlementJson ?? null,
+    paymentMethod: paymentMethod ?? mapPaymentMethod(
+      legacyPayment?.paymentMethod ?? legacyPayment?.PaymentMethod,
+    ),
+    acceptBackorder: Boolean(payload.acceptBackorder ?? payload.AcceptBackorder),
+    fulfillmentPreference:
+      payload.fulfillmentPreference
+      || payload.FulfillmentPreference
+      || 'PartialDelivery',
+    pickupDate: payload.pickupDate ?? payload.PickupDate ?? null,
+    pickupNote: payload.pickupNote ?? payload.PickupNote ?? null,
+    pickupContactName: payload.pickupContactName ?? payload.PickupContactName ?? null,
+    pickupContactPhone: payload.pickupContactPhone ?? payload.PickupContactPhone ?? null,
+    depositAmount: payload.depositAmount ?? payload.DepositAmount ?? null,
+    payments: rawPayments.map((allocation) => ({
+      paymentMethod: mapPaymentMethod(allocation.paymentMethod ?? allocation.PaymentMethod),
+      amount: Number(allocation.amount ?? allocation.Amount ?? 0),
+      debtSettlementJson: allocation.debtSettlementJson ?? allocation.DebtSettlementJson ?? null,
     })),
     codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
@@ -183,7 +204,7 @@ function buildOrderRequestFromPosPayload(
       unitPrice: line.isGift ? 0 : line.unitPrice,
       isGift: Boolean(line.isGift),
     })),
-    customBundles: payload.customBundles ?? [],
+    customBundles: payload.customBundles ?? payload.CustomBundles ?? [],
   })
 }
 
