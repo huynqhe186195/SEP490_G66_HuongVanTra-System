@@ -24,4 +24,20 @@ public class CostBasisReconciliationController(
         var result = await reconciliationService.ReconcileAsync(skuId, bearerToken, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Áp lại phiếu nhập đang treo vì gate catalog-seed cũ (không cần Inventory HTTP).
+    /// </summary>
+    [HttpPost("retry-pending")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
+    public async Task<IActionResult> RetryPending(CancellationToken ct = default)
+    {
+        var result = await reconciliationService.RetryPendingReconciliationAsync(ct);
+        return Ok(new
+        {
+            skuCount = result.SkuCount,
+            reappliedCount = result.ReappliedCount,
+            deferredCount = result.DeferredCount
+        });
+    }
 }

@@ -5,6 +5,7 @@ using OrderService.Application.DTOs.Requests;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
 using OrderService.Application.Tests.TestSupport;
+using OrderService.Application.Services;
 using OrderService.Application.UseCases;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
@@ -39,6 +40,210 @@ public sealed class MentorBackorderTests
         repository.Verify(
             item => item.SaveChangesAsync(It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task CustomOnly_MaterialsShortage_RequiresBackorderWithoutSaving()
+    {
+        var materialSkuId = Guid.Parse("cccccccc-3333-4333-8333-cccccccccccc");
+        var repository = new Mock<IOrderRepository>();
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(client => client.PrepareCustomMaterialsAsync(
+                It.Is<InventoryCustomMaterialsRequest>(request => request.PreviewOnly),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InventoryCustomMaterialsRequest request, CancellationToken _) =>
+                new InventoryStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode,
+                    "BackorderRequired",
+                    false,
+                    "Sản phẩm tạm hết hàng, dự kiến có sau 3-5 ngày.",
+                    [],
+                    [new InventoryStockHandlingLineResponse(materialSkuId, "NL-X", "NL test", 2, 0, 2)],
+                    BackorderRequired: true,
+                    BackorderMessage: "Sản phẩm tạm hết hàng, dự kiến có sau 3-5 ngày."));
+
+        var logic = CreateLogicWithCustomMaterial(repository, inventory, materialSkuId);
+
+        await Assert.ThrowsAsync<BackorderConfirmationRequiredException>(() =>
+            logic.CreateAsync(CreateCustomOnlyRequest(materialSkuId), ManagerAccess()));
+
+        repository.Verify(
+            item => item.AddAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CustomOnly_AcceptBackorder_SavesWaitingMaterials()
+    {
+        var materialSkuId = Guid.Parse("cccccccc-3333-4333-8333-cccccccccccc");
+        Order? persisted = null;
+        var repository = new Mock<IOrderRepository>();
+        repository
+            .Setup(item => item.AddAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()))
+            .Callback<Order, CancellationToken>((order, _) => persisted = order)
+            .Returns(Task.CompletedTask);
+        repository
+            .Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(client => client.PrepareCustomMaterialsAsync(
+                It.IsAny<InventoryCustomMaterialsRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InventoryCustomMaterialsRequest request, CancellationToken _) =>
+                new InventoryStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode,
+                    request.AcceptBackorder ? "BackorderAccepted" : "BackorderRequired",
+                    false,
+                    request.AcceptBackorder
+                        ? "Đã ghi nhận đơn chờ nguyên liệu custom."
+                        : "Sản phẩm tạm hết hàng, dự kiến có sau 3-5 ngày.",
+                    [],
+                    [new InventoryStockHandlingLineResponse(materialSkuId, "NL-X", "NL test", 2, 0, 2)],
+                    BackorderRequired: !request.AcceptBackorder,
+                    BackorderMessage: request.AcceptBackorder
+                        ? null
+                        : "Sản phẩm tạm hết hàng, dự kiến có sau 3-5 ngày."));
+
+        var logic = CreateLogicWithCustomMaterial(repository, inventory, materialSkuId);
+        var request = CreateCustomOnlyRequest(materialSkuId) with
+        {
+            AcceptBackorder = true,
+            DepositAmount = 50_000,
+            PickupDate = DateTime.UtcNow.Date.AddDays(3),
+            FulfillmentPreference = FulfillmentPreference.CompleteDelivery
+        };
+
+        var result = await logic.CreateAsync(request, ManagerAccess());
+
+        Assert.NotNull(persisted);
+        Assert.Equal(OrderStatus.WaitingMaterials, persisted!.OrderStatus);
+        Assert.Equal(OrderStatus.WaitingMaterials.ToString(), result.OrderStatus);
+        Assert.NotNull(persisted.BackorderAcceptedAt);
+        inventory.Verify(
+            client => client.PrepareCustomMaterialsAsync(
+                It.Is<InventoryCustomMaterialsRequest>(r => r.AcceptBackorder && !r.PreviewOnly),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PackCustomBundle_AllPacked_AdvancesWaitingMaterialsToReadyToDeliver()
+    {
+        var materialSkuId = Guid.Parse("cccccccc-3333-4333-8333-cccccccccccc");
+        var orderId = Guid.NewGuid();
+        var bundleId = Guid.NewGuid();
+        var order = new Order
+        {
+            Id = orderId,
+            OrderCode = "HVT-PACK-001",
+            OrderChannel = OrderChannel.POS,
+            OrderKind = OrderKind.Sale,
+            OrderStatus = OrderStatus.WaitingMaterials,
+            InventorySyncStatus = InventorySyncStatus.Synced,
+            FinalAmount = 100_000,
+            DepositAmount = 50_000,
+            BackorderAcceptedAt = DateTime.UtcNow,
+            ShippingAddress = null,
+            OrderDetails = [],
+            CustomBundles =
+            [
+                new CustomBundle
+                {
+                    Id = bundleId,
+                    OrderId = orderId,
+                    Label = "Gói test",
+                    PackingStatus = PackingStatus.Pending,
+                    TotalPrice = 100_000,
+                    Ingredients =
+                    [
+                        new CustomBundleIngredient
+                        {
+                            Id = Guid.NewGuid(),
+                            MaterialSkuId = materialSkuId,
+                            MaterialSkuCode = "NL-X",
+                            MaterialSnapshotName = "NL test",
+                            Quantity = 2,
+                            UnitPrice = 50_000,
+                            SubTotal = 100_000
+                        }
+                    ]
+                }
+            ]
+        };
+        order.CustomBundles.First().Order = order;
+
+        var orderRepo = new Mock<IOrderRepository>();
+        orderRepo.Setup(r => r.GetByIdAsync(orderId, It.IsAny<CancellationToken>())).ReturnsAsync(order);
+        orderRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var bundleRepo = new Mock<ICustomBundleRepository>();
+        bundleRepo
+            .Setup(r => r.GetByIdAsync(bundleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order.CustomBundles.First());
+        bundleRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(c => c.DeductMaterialsAsync(
+                It.IsAny<IEnumerable<(Guid, string?, string?, int)>>(),
+                It.IsAny<string?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var productCatalog = new Mock<IProductCatalogClient>();
+        productCatalog
+            .Setup(client => client.GetSkuProfilesAsync(
+                It.IsAny<IEnumerable<Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new ProductSkuCatalogProfile(
+                    materialSkuId, null, "Piece", "NGUYEN_LIEU",
+                    true, true, true, false, 0m)
+            ]);
+
+        var activityRepo = new Mock<IOrderActivityRepository>();
+        activityRepo
+            .Setup(r => r.AddAsync(It.IsAny<OrderActivity>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+        var logic = new OrderLogic(
+            orderRepo.Object,
+            new Mock<IReturnOrderRepository>().Object,
+            new Mock<IPaymentRepository>().Object,
+            new Mock<IOrderCodeGenerator>().Object,
+            new Mock<IOrderEventPublisher>().Object,
+            activityRepo.Object,
+            new PromotionLogic(
+                new Mock<IPromotionRepository>().Object,
+                new Mock<ICustomerCatalogClient>().Object),
+            productCatalog.Object,
+            new Mock<ICustomerCatalogClient>().Object,
+            new Mock<IContractCatalogClient>().Object,
+            inventory.Object,
+            bundleRepo.Object,
+            new Mock<IEmailService>().Object,
+            PosShiftTestDoubles.CashSessionLogic(shiftGuard),
+            shiftGuard,
+            new PaymentIdempotencyService(
+                Mock.Of<IPaymentIdempotencyRepository>(),
+                Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
+            Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
+
+        var result = await logic.PackCustomBundleAsync(bundleId);
+
+        Assert.Equal(PackingStatus.Packed.ToString(), result.PackingStatus);
+        Assert.Equal(OrderStatus.ReadyToDeliver, order.OrderStatus);
+        orderRepo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -540,6 +745,55 @@ public sealed class MentorBackorderTests
         return CreateLogic(repository, inventory, new Mock<IPaymentRepository>());
     }
 
+    private static OrderLogic CreateLogicWithCustomMaterial(
+        Mock<IOrderRepository> repository,
+        Mock<IInventoryCatalogClient> inventory,
+        Guid materialSkuId)
+    {
+        var productCatalog = new Mock<IProductCatalogClient>();
+        productCatalog
+            .Setup(client => client.GetSkuProfilesAsync(
+                It.IsAny<IEnumerable<Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new ProductSkuCatalogProfile(
+                    materialSkuId, null, "Piece", "NGUYEN_LIEU",
+                    true, true, true, false, 0m)
+            ]);
+
+        var codeGenerator = new Mock<IOrderCodeGenerator>();
+        codeGenerator
+            .Setup(item => item.GenerateAsync(It.IsAny<OrderKind>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("CUSTOM-BO-0001");
+
+        var promotionLogic = new PromotionLogic(
+            new Mock<IPromotionRepository>().Object,
+            new Mock<ICustomerCatalogClient>().Object);
+        var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+
+        return new OrderLogic(
+            repository.Object,
+            new Mock<IReturnOrderRepository>().Object,
+            new Mock<IPaymentRepository>().Object,
+            codeGenerator.Object,
+            new Mock<IOrderEventPublisher>().Object,
+            new Mock<IOrderActivityRepository>().Object,
+            promotionLogic,
+            productCatalog.Object,
+            new Mock<ICustomerCatalogClient>().Object,
+            new Mock<IContractCatalogClient>().Object,
+            inventory.Object,
+            new Mock<ICustomBundleRepository>().Object,
+            new Mock<IEmailService>().Object,
+            PosShiftTestDoubles.CashSessionLogic(shiftGuard),
+            shiftGuard,
+            new PaymentIdempotencyService(
+                Mock.Of<IPaymentIdempotencyRepository>(),
+                Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
+            Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
+    }
+
     private static OrderLogic CreateLogic(
         Mock<IOrderRepository> repository,
         Mock<IInventoryCatalogClient> inventory,
@@ -582,6 +836,9 @@ public sealed class MentorBackorderTests
             new Mock<IEmailService>().Object,
             PosShiftTestDoubles.CashSessionLogic(shiftGuard),
             shiftGuard,
+            new PaymentIdempotencyService(
+                Mock.Of<IPaymentIdempotencyRepository>(),
+                Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
             Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
     }
@@ -625,6 +882,35 @@ public sealed class MentorBackorderTests
             PaymentMethod: PaymentMethod.Cash,
             PaidAmount: 100_000,
             // POS-06 (KB4): đơn backorder bắt buộc có người nhận để đối chiếu khi khách quay lại.
+            PickupContactName: "Nguyễn Văn A",
+            PickupContactPhone: "0900000000");
+
+    private static CreateOrderRequest CreateCustomOnlyRequest(Guid materialSkuId) =>
+        new(
+            CustomerId: null,
+            CustomerSnapshotName: "Khách lẻ",
+            EmployeeId: null,
+            OrderChannel: OrderChannel.POS,
+            ShippingAddress: null,
+            Note: null,
+            DiscountAmount: 0,
+            Items: [],
+            PaymentMethod: PaymentMethod.Cash,
+            PaidAmount: 100_000,
+            CustomBundles:
+            [
+                new CreateCustomBundleRequest(
+                    "Gói custom test",
+                    null,
+                    [
+                        new CreateCustomBundleIngredientRequest(
+                            materialSkuId,
+                            "NL-X",
+                            "NL test",
+                            Quantity: 2,
+                            UnitPrice: 50_000)
+                    ])
+            ],
             PickupContactName: "Nguyễn Văn A",
             PickupContactPhone: "0900000000");
 

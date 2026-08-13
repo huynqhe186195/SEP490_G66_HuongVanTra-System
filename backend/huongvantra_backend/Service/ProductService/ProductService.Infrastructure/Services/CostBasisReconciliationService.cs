@@ -32,6 +32,13 @@ public interface ICostBasisReconciliationService
         Guid? skuId,
         string? bearerToken,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Áp lại các receipt group đang treo reconciliation_required sau khi nới gate
+    /// catalog-seed (không gọi Inventory HTTP).
+    /// </summary>
+    Task<(int SkuCount, int ReappliedCount, int DeferredCount)> RetryPendingReconciliationAsync(
+        CancellationToken ct = default);
 }
 
 public sealed class CostBasisReconciliationService(
@@ -190,5 +197,52 @@ public sealed class CostBasisReconciliationService(
             AuthoritativeSource,
             reevaluated,
             deferred);
+    }
+
+    public async Task<(int SkuCount, int ReappliedCount, int DeferredCount)> RetryPendingReconciliationAsync(
+        CancellationToken ct = default)
+    {
+        var skuIds = await store.GetSkuIdsWithPendingReconciliationAsync(ct);
+        var reapplied = 0;
+        var deferred = 0;
+        var emptyCovered = new HashSet<Guid>();
+
+        foreach (var skuId in skuIds)
+        {
+            var receiptIds = await store.GetPendingReconciliationReceiptIdsAsync(skuId, ct);
+            foreach (var receiptId in receiptIds)
+            {
+                try
+                {
+                    var outcome = await costConsumer.ReevaluateReconciliationRequiredGroupAsync(
+                        skuId,
+                        receiptId,
+                        emptyCovered,
+                        ct);
+                    if (outcome is SupplierReceiptApprovedCostRecordedConsumer.ReceiptGroupReevaluationOutcome.Reapplied
+                        or SupplierReceiptApprovedCostRecordedConsumer.ReceiptGroupReevaluationOutcome.SettledByReconciliation)
+                        reapplied++;
+                    else if (outcome is SupplierReceiptApprovedCostRecordedConsumer.ReceiptGroupReevaluationOutcome.Deferred)
+                        deferred++;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "Retry pending cost reconciliation failed. SkuId {SkuId}, ReceiptId {ReceiptId}.",
+                        skuId,
+                        receiptId);
+                    deferred++;
+                }
+            }
+        }
+
+        logger.LogInformation(
+            "Retry pending cost reconciliation finished. SkuCount={SkuCount} Reapplied={Reapplied} Deferred={Deferred}",
+            skuIds.Count,
+            reapplied,
+            deferred);
+
+        return (skuIds.Count, reapplied, deferred);
     }
 }

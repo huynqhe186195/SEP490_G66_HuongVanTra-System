@@ -341,6 +341,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             variant.VariantName = input.VariantName;
             variant.OptionValuesJson = input.OptionValuesJson;
             variant.CostPrice = input.CostPrice;
+            // Giá vốn khai báo trên catalog chưa có lũy kế nhập → đánh dấu basis đã sẵn
+            // để phiếu nhập NCC đầu tiên được cộng WAC (không kẹt reconciliation_required).
+            if (variant.CostBasisReconciledAt is null
+                && variant.TotalApprovedInboundQuantity <= 0
+                && variant.TotalApprovedInboundValue <= 0)
+            {
+                variant.CostBasisReconciledAt = DateTime.UtcNow;
+            }
             variant.RetailPrice = input.RetailPrice;
             variant.MinStock = input.MinStock;
             variant.MaxStock = input.MaxStock;

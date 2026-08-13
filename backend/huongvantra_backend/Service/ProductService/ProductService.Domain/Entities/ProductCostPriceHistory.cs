@@ -15,6 +15,10 @@ public sealed class ProductCostPriceHistory
     public decimal IncomingQuantity { get; set; }
     /// <summary>IncomingQuantity * IncomingUnitCost.</summary>
     public decimal IncomingValue { get; set; }
+    /// <summary>
+    /// Tồn (Kho + Kệ) trước dòng phiếu — từ Inventory event. 0 = không có / event cũ.
+    /// </summary>
+    public decimal QuantityOnHandBefore { get; set; }
     public decimal TotalQuantityBefore { get; set; }
     public decimal TotalQuantityAfter { get; set; }
     public decimal TotalValueBefore { get; set; }

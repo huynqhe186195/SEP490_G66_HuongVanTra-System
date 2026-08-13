@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OrderService.Application.Interfaces;
 using OrderService.Domain.Exceptions;
 
 namespace OrderService.WebAPI.Middlewares;
@@ -34,7 +35,10 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
             DuplicateOrderCodeException e       => (StatusCodes.Status409Conflict,    e.Message, null),
             DuplicateOrderIdempotencyKeyException e => (StatusCodes.Status409Conflict, e.Message, null),
             OrderDependencyUnavailableException e => (StatusCodes.Status503ServiceUnavailable, e.Message, null),
-            _                                   => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
+            InventoryStockHandlingException e => (StatusCodes.Status400BadRequest, e.Message, null),
+            _ => (StatusCodes.Status500InternalServerError,
+                "Hệ thống gặp lỗi khi xử lý yêu cầu. Vui lòng thử lại hoặc liên hệ quản trị viên.",
+                null)
         };
 
         context.Response.ContentType = "application/json";

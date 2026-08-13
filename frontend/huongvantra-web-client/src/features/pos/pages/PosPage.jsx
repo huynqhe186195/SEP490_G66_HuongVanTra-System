@@ -3533,6 +3533,7 @@ function PosPage() {
           orderTotal={total}
           isSubmitting={isSubmitting}
           skipDeposit={isTakeaway}
+          forceCompleteDelivery={(customBundles || []).some((b) => (b.ingredients || []).length > 0)}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
           onCustomerSelected={selectCustomer}

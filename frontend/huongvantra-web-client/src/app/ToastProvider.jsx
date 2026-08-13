@@ -3,9 +3,9 @@ import { CLEAR_TOASTS_EVENT } from './toast.js'
 
 function Toast({ id, message, type, onClose }) {
   return (
-    <div className={`max-w-sm w-full shadow-lg rounded p-3 mb-2 text-white ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-gray-800'}`}>
+    <div className={`max-w-md w-full shadow-lg rounded p-3 mb-2 text-white ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-gray-800'}`}>
       <div className="flex items-start justify-between">
-        <div className="text-sm">{message}</div>
+        <div className="text-sm whitespace-pre-line leading-relaxed">{message}</div>
         <button aria-label="close" onClick={() => onClose(id)} className="ml-3 font-bold">×</button>
       </div>
     </div>

@@ -4,6 +4,7 @@ using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
+using OrderService.Application.Services;
 using OrderService.Application.UseCases;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
@@ -199,6 +200,9 @@ public class OrderZeroTotalTests
                 new Mock<IEmailService>().Object,
                 posCashSessionLogic,
                 shiftGuard,
+                new PaymentIdempotencyService(
+                    Mock.Of<IPaymentIdempotencyRepository>(),
+                    Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
                 Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
         }
 

@@ -47,6 +47,12 @@ public interface ISupplierReceiptCostStore
         Guid skuId,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// SkuId đang có ít nhất một receipt group treo reconciliation_required.
+    /// Dùng để startup/retry áp lại sau khi nới gate catalog-seed.
+    /// </summary>
+    Task<List<Guid>> GetSkuIdsWithPendingReconciliationAsync(CancellationToken cancellationToken);
+
     void AddHistory(ProductCostPriceHistory history);
 
     Task SaveChangesAsync(CancellationToken cancellationToken);
@@ -172,6 +178,17 @@ public sealed class SupplierReceiptCostStore(ProductDbContext db) : ISupplierRec
             .Select(group => group.SourceReceiptId)
             .ToList();
     }
+
+    public async Task<List<Guid>> GetSkuIdsWithPendingReconciliationAsync(
+        CancellationToken cancellationToken) =>
+        await db.ProductCostPriceHistories
+            .AsNoTracking()
+            .Where(history =>
+                !history.WasApplied
+                && history.ProcessingResult == "reconciliation_required")
+            .Select(history => history.SkuId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
 
     public void AddHistory(ProductCostPriceHistory history) =>
         db.ProductCostPriceHistories.Add(history);

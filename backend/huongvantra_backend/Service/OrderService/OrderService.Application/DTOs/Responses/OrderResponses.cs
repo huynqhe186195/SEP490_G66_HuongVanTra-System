@@ -232,7 +232,11 @@ public record CustomBundleResponse(
     decimal TotalPrice,
     string PackingStatus,
     DateTime? PackedAt,
-    List<CustomBundleIngredientResponse> Ingredients);
+    List<CustomBundleIngredientResponse> Ingredients,
+    string? OrderCode = null,
+    string? CustomerName = null,
+    string? OrderStatus = null,
+    DateTime? CreatedAt = null);
 
 public record ReceiptReprintLogResponse(
     Guid Id,

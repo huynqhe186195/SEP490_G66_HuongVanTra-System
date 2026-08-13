@@ -59,7 +59,8 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
         {
             InventoryNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             InventoryValidationException e => (StatusCodes.Status400BadRequest, e.Message),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
+            _ => (StatusCodes.Status500InternalServerError,
+                "Hệ thống gặp lỗi khi xử lý yêu cầu kho. Vui lòng thử lại hoặc liên hệ quản trị viên.")
         };
 
         context.Response.StatusCode = statusCode;

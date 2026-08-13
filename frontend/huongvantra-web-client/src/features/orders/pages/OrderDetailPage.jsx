@@ -311,9 +311,20 @@ function OrderDetailPage() {
   async function handleConfirmCancel() {
     if (!canApplyChanges || !order) return
     setConfirmCancelOpen(false)
+    const wasShipping = String(order.orderStatus || '').trim() === 'Shipping'
+    const goCodCancelled = fromCod || isCodChannelOrder(order)
     try {
       setIsSaving(true)
       await cancelOrder(order.id)
+      if (goCodCancelled) {
+      showSuccess(
+          wasShipping
+            ? 'Đã hủy. Hàng chờ tại Kiểm tra hàng trả (Bán lại → về Kệ).'
+            : 'Đã hủy đơn. Xem lại tại Quản lý đơn COD → tab Đã hủy.',
+        )
+        navigate('/orders/cod?tab=cancelled', { replace: true })
+        return
+      }
       showSuccess('Đã hủy đơn hàng.')
       await loadOrder()
       setTimelineRefreshKey((key) => key + 1)
@@ -563,7 +574,7 @@ function OrderDetailPage() {
         Processing: 'Bước 1/3 — Đơn đang xử lý. Chờ kho soạn và xác nhận xuất hàng.',
         Shipping: 'Bước 2/3 — Kho đã xuất hàng. Chờ kế toán xác nhận khách đã nhận để ghi công nợ.',
         Completed: 'Bước 3/3 — Khách đã nhận hàng, công nợ đã ghi theo điều khoản hợp đồng.',
-        Cancelled: 'Đơn đã hủy — hàng giữ chỗ đã được nhả về tồn kệ.',
+        Cancelled: 'Đơn đã hủy. Nếu hủy sau khi đang giao, tồn Kệ không tự hoàn — xử lý qua trả hàng / kiểm tra hàng trả.',
       }[String(order.orderStatus || '').trim()] || ''
     : ''
 
@@ -576,7 +587,9 @@ function OrderDetailPage() {
             className="text-sm font-semibold text-[#538463] hover:underline"
             to={
               fromCod || isCodChannelOrder(order)
-                ? '/orders/cod'
+                ? String(order.orderStatus || '').trim() === 'Cancelled'
+                  ? '/orders/cod?tab=cancelled'
+                  : '/orders/cod'
                 : fromExchange || isExchangeOrder(order)
                   ? '/orders/exchange'
                   : '/orders'
@@ -584,7 +597,9 @@ function OrderDetailPage() {
           >
             ←{' '}
             {fromCod || isCodChannelOrder(order)
-              ? 'Quản lý đơn COD'
+              ? String(order.orderStatus || '').trim() === 'Cancelled'
+                ? 'Đơn COD đã hủy'
+                : 'Quản lý đơn COD'
               : fromExchange || isExchangeOrder(order)
                 ? 'Trả / đổi hàng'
                 : 'Danh sách đơn'}
@@ -714,7 +729,9 @@ function OrderDetailPage() {
                     className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[18px]">payments</span>
-                    Thu {formatVnd(remainingAtPickup)} còn lại &amp; giao hàng
+                    {normalizedStatus === 'Completed'
+                      ? `Thu ${formatVnd(remainingAtPickup)} còn lại`
+                      : `Thu ${formatVnd(remainingAtPickup)} còn lại & giao hàng`}
                   </button>
                 ) : (
                   <button
@@ -871,6 +888,7 @@ function OrderDetailPage() {
                   <dt>Hình thức nhận</dt>
                   <dd className="text-right font-semibold">
                     {order.fulfillmentPreference === 'CompleteDelivery'
+                      || (order.customBundles || []).some((b) => (b.ingredients || []).length > 0)
                       ? 'Nhận một lần khi đủ hàng'
                       : 'Nhận trước phần hàng sẵn'}
                   </dd>

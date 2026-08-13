@@ -15,6 +15,7 @@ public sealed class ProductCostPriceHistoryConfiguration : IEntityTypeConfigurat
         builder.Property(history => history.IncomingUnitCost).HasColumnType("decimal(18,2)");
         builder.Property(history => history.IncomingQuantity).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
         builder.Property(history => history.IncomingValue).HasColumnType("decimal(20,4)").HasDefaultValue(0m);
+        builder.Property(history => history.QuantityOnHandBefore).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
         builder.Property(history => history.TotalQuantityBefore).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
         builder.Property(history => history.TotalQuantityAfter).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
         builder.Property(history => history.TotalValueBefore).HasColumnType("decimal(20,4)").HasDefaultValue(0m);

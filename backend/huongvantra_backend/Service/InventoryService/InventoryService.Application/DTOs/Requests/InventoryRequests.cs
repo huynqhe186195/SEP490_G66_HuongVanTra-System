@@ -163,6 +163,19 @@ public record DeductMaterialsRequest(
     string? ReferenceCode = null,
     string? Note = null);
 
+/// <summary>
+/// Kiểm tra tồn Kho NL/bao bì cho gói custom lúc tạo đơn POS/COD (sell-first).
+/// Không trừ tồn — trừ khi đóng gói (DeductMaterials).
+/// </summary>
+public record PrepareCustomMaterialsRequest(
+    Guid OrderId,
+    string OrderCode,
+    List<PreparePosStockDeductionItemRequest> Items,
+    bool AcceptBackorder = false,
+    bool PreviewOnly = false,
+    int BackorderMinLeadDays = 3,
+    int BackorderMaxLeadDays = 5);
+
 public record CreatorSnapshot(
     Guid CreatedById,
     string? CreatedByName,
