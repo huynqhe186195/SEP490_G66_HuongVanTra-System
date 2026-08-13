@@ -112,7 +112,9 @@ public record ReturnOrderResponse(
     decimal NetCustomerPays,
     decimal RefundAmount,
     Guid? ExchangeOrderId,
-    string? ExchangeOrderCode
+    string? ExchangeOrderCode,
+    string AcceptanceStatus = "Accepted",
+    DateTime? AcceptedAt = null
 );
 
 public record ReturnOrderLineResponse(
@@ -142,7 +144,16 @@ public record ReturnOrderDetailResponse(
     string? ExchangeOrderCode,
     string? Note,
     DateTime CreatedAt,
-    List<ReturnOrderLineResponse> Items);
+    List<ReturnOrderLineResponse> Items,
+    string AcceptanceStatus = "Accepted",
+    DateTime? AcceptedAt = null,
+    DateTime? RejectedAt = null,
+    string? RejectionReason = null,
+    bool AcceptedBySystem = false,
+    bool ManagerOverride = false,
+    string? PolicyCode = null,
+    int? PolicyVersion = null,
+    IReadOnlyList<string>? EvidenceImageUrls = null);
 
 public record ReturnOrderSummaryResponse(
     Guid Id,
@@ -158,7 +169,9 @@ public record ReturnOrderSummaryResponse(
     Guid? ExchangeOrderId,
     string? ExchangeOrderCode,
     DateTime CreatedAt,
-    string? Note = null);
+    string? Note = null,
+    string AcceptanceStatus = "Accepted",
+    DateTime? AcceptedAt = null);
 
 public record PaymentResponse(
     Guid Id,

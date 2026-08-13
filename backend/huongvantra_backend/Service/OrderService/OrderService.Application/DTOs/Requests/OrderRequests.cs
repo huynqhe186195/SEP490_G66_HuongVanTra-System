@@ -111,7 +111,16 @@ public record ReturnOrderRequest(
     string? ExchangeFulfillment = null,
     decimal ExchangeManualDiscount = 0,
     List<string>? Reasons = null,
-    string? OtherReason = null);
+    string? OtherReason = null,
+    List<ReturnChecklistAnswerRequest>? ChecklistAnswers = null,
+    List<string>? EvidenceImageUrls = null,
+    bool ManagerOverride = false);
+
+public record RejectReturnRequest(string? Reason = null);
+
+public record ReturnChecklistAnswerRequest(
+    string Id,
+    bool Checked);
 
 public record CreateCustomBundleRequest(
     string? Label,

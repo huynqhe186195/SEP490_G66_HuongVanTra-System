@@ -22,13 +22,13 @@ function mapReturnInspection(row) {
   }
 }
 
-export const RETURN_DISPOSITIONS = ['RestockApproved', 'Quarantined', 'Disposed']
+export const RETURN_DISPOSITIONS = ['RestockApproved', 'Disposed']
 
 export function getDispositionLabel(disposition) {
   const key = String(disposition || '').toLowerCase()
   if (key === 'pending') return 'Chờ kiểm tra'
-  if (key === 'restockapproved') return 'Duyệt nhập lại'
-  if (key === 'quarantined') return 'Kiểm dịch'
+  if (key === 'restockapproved') return 'Bán lại'
+  if (key === 'quarantined') return 'Kiểm dịch (cũ)'
   if (key === 'disposed') return 'Tiêu hủy'
   return disposition || '—'
 }

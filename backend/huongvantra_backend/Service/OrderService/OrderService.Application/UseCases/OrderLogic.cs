@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
@@ -34,10 +35,12 @@ public class OrderLogic(
     StaffShiftGuard _shiftGuard,
     PaymentIdempotencyService _idempotencyService,
     IOptions<SepayOptions> sepayOptions,
-    IOptions<BackorderOptions>? backorderOptions = null)
+    IOptions<BackorderOptions>? backorderOptions = null,
+    ReturnPolicyLogic? returnPolicyLogic = null)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
     private readonly BackorderOptions _backorder = backorderOptions?.Value ?? new BackorderOptions();
+    private readonly ReturnPolicyLogic? _returnPolicyLogic = returnPolicyLogic;
     private const int MaxActivities = 100;
     private const int OverdueDepositCancelDays = 7;
 
@@ -2246,6 +2249,7 @@ public class OrderLogic(
         var returnNote = BuildReturnNote(req);
 
         var detailById = (order.OrderDetails ?? []).ToDictionary(d => d.Id);
+        var pendingByDetail = await _returnOrderRepo.GetPendingReturnQuantitiesByOrderIdAsync(order.Id, ct);
         var returnLines = new List<(OrderDetail Detail, int Quantity)>();
 
         foreach (var input in returnInputs)
@@ -2253,7 +2257,8 @@ public class OrderLogic(
             if (!detailById.TryGetValue(input.OrderDetailId, out var detail))
                 throw new OrderValidationException($"Dòng hàng không thuộc đơn {order.OrderCode}.");
 
-            var remaining = detail.Quantity - detail.ReturnedQuantity;
+            var pendingQty = pendingByDetail.GetValueOrDefault(detail.Id);
+            var remaining = detail.Quantity - detail.ReturnedQuantity - pendingQty;
             if (input.ReturnQuantity > remaining)
                 throw new OrderValidationException(
                     $"Số lượng trả vượt quá còn lại ({remaining}) cho {detail.SkuSnapshotName}.");
@@ -2293,6 +2298,13 @@ public class OrderLogic(
         if (netCustomerPays > 0 && !payExtraDeferred && customerPaid + 0.01m < netCustomerPays)
             throw new OrderValidationException($"Khách cần trả thêm {FormatVnd(netCustomerPays)}.");
 
+        // Phase 2/3: Fail policy → không tạo Request.
+        ReturnPolicyAcceptanceResult? policyAcceptance = null;
+        if (_returnPolicyLogic is not null)
+        {
+            policyAcceptance = await _returnPolicyLogic.EvaluateAcceptanceAsync(order, req, access, ct);
+        }
+
         var returnId = Guid.NewGuid();
         var returnCode = await _returnOrderRepo.GenerateReturnCodeAsync(ct);
         var now = DateTime.UtcNow;
@@ -2314,6 +2326,29 @@ public class OrderLogic(
             Note = returnNote,
             CreatedAt = now,
             UpdatedAt = now,
+            AcceptanceStatus = ReturnAcceptanceStatus.Pending,
+            ExchangeManualDiscount = manualExchangeDiscount,
+            ExchangeDraftJson = exchangeItems.Count > 0
+                ? JsonSerializer.Serialize(exchangeItems)
+                : null,
+            PolicyId = policyAcceptance?.Policy.Id,
+            PolicyCode = policyAcceptance?.Policy.Code,
+            PolicyVersion = policyAcceptance?.Policy.Version,
+            ChecklistAnswersJson = policyAcceptance?.ChecklistAnswersJson,
+            PolicyEvaluationNote = policyAcceptance?.EvaluationNote,
+            AcceptedBySystem = policyAcceptance is not null && !policyAcceptance.ManagerOverrideApplied,
+            ManagerOverride = policyAcceptance?.ManagerOverrideApplied ?? false,
+            PolicyAcceptedAt = policyAcceptance is not null ? now : null,
+            EvidenceImages = (policyAcceptance?.EvidenceImageUrls ?? [])
+                .Select((url, index) => new ReturnOrderEvidenceImage
+                {
+                    Id = Guid.NewGuid(),
+                    ReturnOrderId = returnId,
+                    ImageUrl = url,
+                    SortOrder = index,
+                    CreatedAt = now,
+                })
+                .ToList(),
             Details = returnLines.Select(x =>
             {
                 var effectiveUnit = Math.Round(x.Detail.UnitPrice * paidRatio, 0, MidpointRounding.AwayFromZero);
@@ -2335,113 +2370,24 @@ public class OrderLogic(
             }).ToList()
         };
 
-        foreach (var (detail, qty) in returnLines)
-        {
-            detail.ReturnedQuantity += qty;
-            detail.UpdatedAt = now;
-        }
-
+        // Phase 4: Request chưa tăng ReturnedQuantity / chưa hoàn tiền / chưa OrderReturned.
         await _returnOrderRepo.AddAsync(returnOrder, ct);
-
-        var returnDescription = refundAmount > 0
-            ? $"Trả hàng {returnCode}: hoàn {FormatVnd(refundAmount)} qua {GetPaymentMethodLabel(refundMethod)}."
-            : exchangeAmount > 0
-                ? $"Trả hàng {returnCode}: đổi/mua thêm, khách trả thêm {FormatVnd(netCustomerPays)}."
-                : $"Trả hàng {returnCode}: hoàn {FormatVnd(returnAmount)}.";
-
         await RecordActivityAsync(
             order.Id,
-            OrderActivityType.Returned,
-            returnDescription,
+            OrderActivityType.Updated,
+            $"Yêu cầu trả hàng {returnCode}: chờ Accept (chưa hoàn tiền, chưa tạo kiểm định kho).",
             actorId,
             actorName,
             ct);
-
-        // G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
-        // Lưu ý: sự kiện KHÔNG tự động cộng lại tồn bán được; việc phục hồi tồn do
-        // luồng kiểm định trả hàng (Phase J) quyết định.
-        await _eventPublisher.PublishOrderReturnedAsync(
-            returnId,
-            returnCode,
-            order.Id,
-            order.OrderCode,
-            order.CustomerId,
-            returnAmount,
-            order.FinalAmount,
-            refundAmount,
-            returnLines.Select(x => (
-                x.Detail.SkuId,
-                x.Detail.SkuSnapshotName,
-                x.Detail.SkuSnapshotCode,
-                x.Quantity)),
-            ct);
-
         await _returnOrderRepo.SaveChangesAsync(ct);
 
-        if (refundAmount > 0 && refundMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
-            await _posCashSessionLogic.RecordCashRefundAsync(refundAmount, ct);
+        var autoAccept = _returnPolicyLogic is null
+            || policyAcceptance is null
+            || policyAcceptance.Policy.AutoAcceptOnPolicyPass
+            || policyAcceptance.ManagerOverrideApplied;
 
-        string? exchangeOrderCode = null;
-        Guid? exchangeOrderId = null;
-
-        if (exchangeItems.Count > 0)
-        {
-            var returnCredit = Math.Min(returnAmount, exchangeAmount);
-            var exchangeDiscount = Math.Min(
-                exchangeAmount,
-                returnCredit + membershipDiscount + manualExchangeDiscount);
-            var exchangeChannel = order.OrderChannel;
-            var exchangePaymentMethod = refundMethod;
-            var isExchangeTransferQr = netCustomerPays > 0
-                && exchangePaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
-            var exchangePaidAmount = isExchangeTransferQr ? 0m : customerPaid;
-            var exchangeTransferQrAmount = isExchangeTransferQr ? netCustomerPays : 0m;
-
-            var exchangeOrder = await CreateAsync(
-                new CreateOrderRequest(
-                    order.CustomerId,
-                    order.CustomerSnapshotName,
-                    actorId,
-                    exchangeChannel,
-                    order.ShippingAddress,
-                    $"Đổi hàng từ {order.OrderCode} ({returnCode})",
-                    exchangeDiscount,
-                    exchangeItems.Select(i => new CreateOrderDetailRequest(
-                        i.SkuId,
-                        i.SkuSnapshotName.Trim(),
-                        i.SkuSnapshotCode?.Trim(),
-                        i.CategorySnapshotName,
-                        i.Quantity,
-                        i.CostPrice,
-                        i.UnitPrice)).ToList(),
-                    exchangePaymentMethod,
-                    exchangePaidAmount,
-                    exchangeTransferQrAmount,
-                    null,
-                    null,
-                    null,
-                    OrderKind.Exchange),
-                access,
-                actorId,
-                actorName,
-                null,
-                ct);
-
-            exchangeOrderId = exchangeOrder.Id;
-            exchangeOrderCode = exchangeOrder.OrderCode;
-
-            var persistedExchange = await _orderRepo.GetByIdAsync(exchangeOrder.Id, ct);
-            if (persistedExchange != null && persistedExchange.OrderKind != OrderKind.Exchange)
-            {
-                persistedExchange.OrderKind = OrderKind.Exchange;
-                persistedExchange.UpdatedAt = DateTime.UtcNow;
-                await _orderRepo.SaveChangesAsync(ct);
-            }
-
-            returnOrder.ExchangeOrderId = exchangeOrderId;
-            returnOrder.UpdatedAt = DateTime.UtcNow;
-            await _returnOrderRepo.SaveChangesAsync(ct);
-        }
+        if (autoAccept)
+            return await AcceptReturnAsync(returnId, access, actorId, actorName, ct, systemAutoAccept: true);
 
         return new ReturnOrderResponse(
             returnId,
@@ -2452,8 +2398,298 @@ public class OrderLogic(
             exchangeAmount,
             netCustomerPays,
             refundAmount,
+            null,
+            null,
+            ReturnAcceptanceStatus.Pending.ToString(),
+            null);
+    }
+
+    /// <summary>
+    /// Phase 4: Accept → tăng ReturnedQuantity, hoàn tiền, publish OrderReturned (→ ReturnInspection).
+    /// Idempotent nếu đã Accepted.
+    /// </summary>
+    public async Task<ReturnOrderResponse> AcceptReturnAsync(
+        Guid returnId,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default,
+        bool systemAutoAccept = false)
+    {
+        var returnOrder = await _returnOrderRepo.GetTrackedByIdAsync(returnId, ct)
+            ?? throw new ReturnOrderNotFoundException(returnId);
+
+        if (returnOrder.AcceptanceStatus == ReturnAcceptanceStatus.Accepted)
+        {
+            var exchangeCode = returnOrder.ExchangeOrderId.HasValue
+                ? await _returnOrderRepo.GetExchangeOrderCodeAsync(returnOrder.ExchangeOrderId.Value, ct)
+                : null;
+            return new ReturnOrderResponse(
+                returnOrder.Id,
+                returnOrder.ReturnCode,
+                returnOrder.SourceOrderId,
+                returnOrder.SourceOrderCode,
+                returnOrder.ReturnAmount,
+                returnOrder.ExchangeAmount,
+                returnOrder.NetCustomerPays,
+                returnOrder.RefundAmount,
+                returnOrder.ExchangeOrderId,
+                exchangeCode,
+                ReturnAcceptanceStatus.Accepted.ToString(),
+                returnOrder.AcceptedAt);
+        }
+
+        if (returnOrder.AcceptanceStatus == ReturnAcceptanceStatus.Rejected)
+            throw new OrderValidationException("Phiếu trả đã bị từ chối, không thể Accept.");
+
+        var order = await _orderRepo.GetByIdAsync(returnOrder.SourceOrderId, ct)
+            ?? throw new OrderNotFoundException(returnOrder.SourceOrderId);
+        EnsureCanModify(order, access);
+
+        // Manual Accept từ API: chỉ Manager/Admin. System auto-accept bỏ qua check này.
+        if (!systemAutoAccept && !access.CanViewAllOrders)
+            throw new OrderValidationException("Chỉ Quản lý / Admin mới Accept phiếu trả đang chờ duyệt.");
+
+        if (!systemAutoAccept)
+            await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
+        var detailById = (order.OrderDetails ?? []).ToDictionary(d => d.Id);
+        var now = DateTime.UtcNow;
+
+        foreach (var line in returnOrder.Details ?? [])
+        {
+            if (!detailById.TryGetValue(line.SourceOrderDetailId, out var detail))
+                throw new OrderValidationException(
+                    $"Dòng hàng gốc không còn trên đơn {order.OrderCode}.");
+
+            var remaining = detail.Quantity - detail.ReturnedQuantity;
+            if (line.ReturnQuantity > remaining)
+                throw new OrderValidationException(
+                    $"Số lượng trả vượt quá còn lại ({remaining}) cho {detail.SkuSnapshotName}.");
+
+            detail.ReturnedQuantity += line.ReturnQuantity;
+            detail.UpdatedAt = now;
+        }
+
+        returnOrder.AcceptanceStatus = ReturnAcceptanceStatus.Accepted;
+        returnOrder.AcceptedAt = now;
+        returnOrder.UpdatedAt = now;
+
+        var returnDescription = returnOrder.RefundAmount > 0
+            ? $"Accept trả hàng {returnOrder.ReturnCode}: hoàn {FormatVnd(returnOrder.RefundAmount)} qua {GetPaymentMethodLabel(returnOrder.RefundMethod)}."
+            : returnOrder.ExchangeAmount > 0
+                ? $"Accept trả hàng {returnOrder.ReturnCode}: đổi/mua thêm, khách trả thêm {FormatVnd(returnOrder.NetCustomerPays)}."
+                : $"Accept trả hàng {returnOrder.ReturnCode}: hoàn {FormatVnd(returnOrder.ReturnAmount)}.";
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Returned,
+            returnDescription,
+            actorId,
+            actorName,
+            ct);
+
+        await _eventPublisher.PublishOrderReturnedAsync(
+            returnOrder.Id,
+            returnOrder.ReturnCode,
+            order.Id,
+            order.OrderCode,
+            order.CustomerId,
+            returnOrder.ReturnAmount,
+            order.FinalAmount,
+            returnOrder.RefundAmount,
+            (returnOrder.Details ?? []).Select(d => (
+                d.SkuId,
+                d.SkuSnapshotName,
+                d.SkuSnapshotCode,
+                d.ReturnQuantity)),
+            ct);
+
+        await _returnOrderRepo.SaveChangesAsync(ct);
+
+        if (returnOrder.RefundAmount > 0
+            && returnOrder.RefundMethod == PaymentMethod.Cash
+            && order.OrderChannel == OrderChannel.POS)
+            await _posCashSessionLogic.RecordCashRefundAsync(returnOrder.RefundAmount, ct);
+
+        string? exchangeOrderCode = null;
+        Guid? exchangeOrderId = returnOrder.ExchangeOrderId;
+
+        if (!exchangeOrderId.HasValue
+            && !string.IsNullOrWhiteSpace(returnOrder.ExchangeDraftJson))
+        {
+            List<ReturnExchangeItemRequest>? exchangeItems;
+            try
+            {
+                exchangeItems = JsonSerializer.Deserialize<List<ReturnExchangeItemRequest>>(
+                    returnOrder.ExchangeDraftJson);
+            }
+            catch (JsonException)
+            {
+                throw new OrderValidationException("Draft hàng đổi không hợp lệ trên phiếu trả.");
+            }
+
+            exchangeItems = (exchangeItems ?? []).Where(i => i.Quantity > 0).ToList();
+            if (exchangeItems.Count > 0)
+            {
+                var membershipDiscount = await GetMembershipTierDiscountAsync(
+                    order.CustomerId, returnOrder.ExchangeAmount, ct);
+                var manualExchangeDiscount = Math.Max(0, returnOrder.ExchangeManualDiscount);
+                var returnCredit = Math.Min(returnOrder.ReturnAmount, returnOrder.ExchangeAmount);
+                var exchangeDiscount = Math.Min(
+                    returnOrder.ExchangeAmount,
+                    returnCredit + membershipDiscount + manualExchangeDiscount);
+                var exchangePaymentMethod = returnOrder.RefundMethod;
+                var isExchangeTransferQr = returnOrder.NetCustomerPays > 0
+                    && exchangePaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
+                var exchangePaidAmount = isExchangeTransferQr ? 0m : returnOrder.CustomerPaidAmount;
+                var exchangeTransferQrAmount = isExchangeTransferQr ? returnOrder.NetCustomerPays : 0m;
+
+                var exchangeOrder = await CreateAsync(
+                    new CreateOrderRequest(
+                        order.CustomerId,
+                        order.CustomerSnapshotName,
+                        actorId,
+                        order.OrderChannel,
+                        order.ShippingAddress,
+                        $"Đổi hàng từ {order.OrderCode} ({returnOrder.ReturnCode})",
+                        exchangeDiscount,
+                        exchangeItems.Select(i => new CreateOrderDetailRequest(
+                            i.SkuId,
+                            i.SkuSnapshotName.Trim(),
+                            i.SkuSnapshotCode?.Trim(),
+                            i.CategorySnapshotName,
+                            i.Quantity,
+                            i.CostPrice,
+                            i.UnitPrice)).ToList(),
+                        exchangePaymentMethod,
+                        exchangePaidAmount,
+                        exchangeTransferQrAmount,
+                        null,
+                        null,
+                        null,
+                        OrderKind.Exchange),
+                    access,
+                    actorId,
+                    actorName,
+                    null,
+                    ct);
+
+                exchangeOrderId = exchangeOrder.Id;
+                exchangeOrderCode = exchangeOrder.OrderCode;
+
+                var persistedExchange = await _orderRepo.GetByIdAsync(exchangeOrder.Id, ct);
+                if (persistedExchange != null && persistedExchange.OrderKind != OrderKind.Exchange)
+                {
+                    persistedExchange.OrderKind = OrderKind.Exchange;
+                    persistedExchange.UpdatedAt = DateTime.UtcNow;
+                    await _orderRepo.SaveChangesAsync(ct);
+                }
+
+                // Reload tracked return (CreateAsync may have flushed context).
+                var tracked = await _returnOrderRepo.GetTrackedByIdAsync(returnOrder.Id, ct)
+                    ?? throw new ReturnOrderNotFoundException(returnOrder.Id);
+                tracked.ExchangeOrderId = exchangeOrderId;
+                tracked.ExchangeDraftJson = null;
+                tracked.UpdatedAt = DateTime.UtcNow;
+                await _returnOrderRepo.SaveChangesAsync(ct);
+                returnOrder = tracked;
+            }
+        }
+        else if (exchangeOrderId.HasValue)
+        {
+            exchangeOrderCode = await _returnOrderRepo.GetExchangeOrderCodeAsync(exchangeOrderId.Value, ct);
+        }
+
+        return new ReturnOrderResponse(
+            returnOrder.Id,
+            returnOrder.ReturnCode,
+            returnOrder.SourceOrderId,
+            returnOrder.SourceOrderCode,
+            returnOrder.ReturnAmount,
+            returnOrder.ExchangeAmount,
+            returnOrder.NetCustomerPays,
+            returnOrder.RefundAmount,
             exchangeOrderId,
-            exchangeOrderCode);
+            exchangeOrderCode,
+            ReturnAcceptanceStatus.Accepted.ToString(),
+            returnOrder.AcceptedAt);
+    }
+
+    public async Task<ReturnOrderResponse> RejectReturnAsync(
+        Guid returnId,
+        RejectReturnRequest req,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        if (!access.CanViewAllOrders)
+            throw new OrderValidationException("Chỉ Quản lý / Admin mới từ chối phiếu trả.");
+
+        var returnOrder = await _returnOrderRepo.GetTrackedByIdAsync(returnId, ct)
+            ?? throw new ReturnOrderNotFoundException(returnId);
+
+        if (returnOrder.AcceptanceStatus == ReturnAcceptanceStatus.Rejected)
+        {
+            return new ReturnOrderResponse(
+                returnOrder.Id,
+                returnOrder.ReturnCode,
+                returnOrder.SourceOrderId,
+                returnOrder.SourceOrderCode,
+                returnOrder.ReturnAmount,
+                returnOrder.ExchangeAmount,
+                returnOrder.NetCustomerPays,
+                returnOrder.RefundAmount,
+                returnOrder.ExchangeOrderId,
+                null,
+                ReturnAcceptanceStatus.Rejected.ToString(),
+                returnOrder.AcceptedAt);
+        }
+
+        if (returnOrder.AcceptanceStatus == ReturnAcceptanceStatus.Accepted)
+            throw new OrderValidationException("Phiếu trả đã Accept, không thể từ chối.");
+
+        var order = await _orderRepo.GetByIdAsync(returnOrder.SourceOrderId, ct)
+            ?? throw new OrderNotFoundException(returnOrder.SourceOrderId);
+        EnsureCanView(order, access);
+
+        var now = DateTime.UtcNow;
+        var reason = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
+        if (reason is { Length: > 500 })
+            reason = reason[..500];
+
+        returnOrder.AcceptanceStatus = ReturnAcceptanceStatus.Rejected;
+        returnOrder.RejectedAt = now;
+        returnOrder.RejectionReason = reason;
+        returnOrder.UpdatedAt = now;
+        returnOrder.ExchangeDraftJson = null;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Updated,
+            string.IsNullOrWhiteSpace(reason)
+                ? $"Từ chối yêu cầu trả hàng {returnOrder.ReturnCode}."
+                : $"Từ chối yêu cầu trả hàng {returnOrder.ReturnCode}: {reason}",
+            actorId,
+            actorName,
+            ct);
+
+        await _returnOrderRepo.SaveChangesAsync(ct);
+
+        return new ReturnOrderResponse(
+            returnOrder.Id,
+            returnOrder.ReturnCode,
+            returnOrder.SourceOrderId,
+            returnOrder.SourceOrderCode,
+            returnOrder.ReturnAmount,
+            returnOrder.ExchangeAmount,
+            returnOrder.NetCustomerPays,
+            returnOrder.RefundAmount,
+            null,
+            null,
+            ReturnAcceptanceStatus.Rejected.ToString(),
+            null);
     }
 
     public async Task MarkInventorySyncedAsync(Guid orderId, CancellationToken ct = default)
@@ -3039,7 +3275,9 @@ public class OrderLogic(
         item.ExchangeOrderId,
         exchangeCode,
         item.CreatedAt,
-        item.Note);
+        item.Note,
+        item.AcceptanceStatus.ToString(),
+        item.AcceptedAt);
 
     private static ReturnOrderDetailResponse MapReturnDetail(
         ReturnOrder item, OrderChannel sourceChannel, string? exchangeCode) => new(
@@ -3067,7 +3305,19 @@ public class OrderLogic(
             d.SkuSnapshotCode,
             d.ReturnQuantity,
             d.UnitPrice,
-            d.SubTotal)).ToList());
+            d.SubTotal)).ToList(),
+        item.AcceptanceStatus.ToString(),
+        item.AcceptedAt,
+        item.RejectedAt,
+        item.RejectionReason,
+        item.AcceptedBySystem,
+        item.ManagerOverride,
+        item.PolicyCode,
+        item.PolicyVersion,
+        (item.EvidenceImages ?? [])
+            .OrderBy(i => i.SortOrder)
+            .Select(i => i.ImageUrl)
+            .ToList());
 
     private static OrderActivityResponse MapActivity(OrderActivity activity) => new(
         activity.Id,

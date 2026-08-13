@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
+import ListFilterToolbar, {
+  listFilterControlClass,
+  listFilterSelectClass,
+} from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -704,7 +707,7 @@ function StockTransfersPage() {
         />
         <select
           aria-label="Lọc theo loại phiếu"
-          className={listFilterControlClass}
+          className={`${listFilterSelectClass} min-w-[9.5rem]`}
           value={transferType}
           onChange={(event) => { setTransferType(event.target.value); setPage(1) }}
         >
@@ -728,7 +731,7 @@ function StockTransfersPage() {
         />
         <select
           aria-label="Sắp xếp"
-          className={listFilterControlClass}
+          className={`${listFilterSelectClass} min-w-[9.5rem]`}
           value={sort}
           onChange={(event) => { setSort(event.target.value); setPage(1) }}
         >

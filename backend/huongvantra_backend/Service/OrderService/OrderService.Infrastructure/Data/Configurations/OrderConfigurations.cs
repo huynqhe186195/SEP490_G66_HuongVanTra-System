@@ -195,11 +195,22 @@ public class ReturnOrderConfiguration : IEntityTypeConfiguration<ReturnOrder>
         builder.Property(e => e.CustomerPaidAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.RefundMethod).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.AcceptanceStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.HasIndex(e => e.AcceptanceStatus);
+        builder.Property(e => e.RejectionReason).HasMaxLength(500);
+        builder.Property(e => e.ExchangeDraftJson);
+        builder.Property(e => e.ExchangeManualDiscount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.PolicyCode).HasMaxLength(50);
+        builder.Property(e => e.ChecklistAnswersJson);
+        builder.Property(e => e.PolicyEvaluationNote);
+        builder.Property(e => e.AcceptedBySystem).IsRequired();
+        builder.Property(e => e.ManagerOverride).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 
         builder.HasOne(e => e.SourceOrder).WithMany(o => o.ReturnOrders).HasForeignKey(e => e.SourceOrderId);
         builder.HasMany(e => e.Details).WithOne(d => d.ReturnOrder).HasForeignKey(d => d.ReturnOrderId);
+        builder.HasMany(e => e.EvidenceImages).WithOne(i => i.ReturnOrder).HasForeignKey(i => i.ReturnOrderId);
     }
 }
 

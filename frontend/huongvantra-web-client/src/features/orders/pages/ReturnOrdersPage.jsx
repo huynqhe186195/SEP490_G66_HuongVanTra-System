@@ -95,6 +95,7 @@ function ReturnOrdersPage() {
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">Mã phiếu</th>
+                <th className="px-4 py-3">Trạng thái</th>
                 <th className="px-4 py-3">Hóa đơn gốc</th>
                 <th className="px-4 py-3">Khách hàng</th>
                 <th className="px-4 py-3">Tiền trả</th>
@@ -107,23 +108,36 @@ function ReturnOrdersPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
                     Đang tải...
                   </td>
                 </tr>
               ) : returns.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
                     Chưa có phiếu trả hàng.
                   </td>
                 </tr>
               ) : (
-                returns.map((item) => (
+                returns.map((item) => {
+                  const status = String(item.acceptanceStatus || 'Accepted').toUpperCase()
+                  const statusUi =
+                    status === 'PENDING'
+                      ? { text: 'Chờ Accept', className: 'bg-amber-100 text-amber-800' }
+                      : status === 'REJECTED'
+                        ? { text: 'Từ chối', className: 'bg-rose-100 text-rose-800' }
+                        : { text: 'Đã Accept', className: 'bg-emerald-100 text-emerald-800' }
+                  return (
                   <tr key={item.id} className="hover:bg-[#f6f4ec]/60">
                     <td className="px-4 py-3">
                       <Link to={`/orders/returns/${item.id}`} className="font-semibold text-[#356647] hover:underline">
                         {item.returnCode}
                       </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusUi.className}`}>
+                        {statusUi.text}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <Link to={`/orders/${item.sourceOrderId}`} className="font-mono text-slate-700 hover:underline">
@@ -158,7 +172,8 @@ function ReturnOrdersPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatVietnamDateTime(item.createdAt)}</td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>

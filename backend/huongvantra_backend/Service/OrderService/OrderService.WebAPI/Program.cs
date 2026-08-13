@@ -49,6 +49,7 @@ builder.Services.AddScoped<IOrderReceiptPrintLogRepository, OrderReceiptPrintLog
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
+builder.Services.AddScoped<IReturnPolicyRepository, ReturnPolicyRepository>();
 builder.Services.AddScoped<ICustomBundleRepository, CustomBundleRepository>();
 builder.Services.AddScoped<IOrderOutboxWriter, OrderOutboxWriter>();
 // G4: request path ghi integration event vào Outbox (atomic với business transaction),
@@ -117,6 +118,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<OrderService.Application.Authorization.StaffShiftGuard>();
 builder.Services.AddScoped<PosCashSessionLogic>();
 builder.Services.AddScoped<OrderLogic>();
+builder.Services.AddScoped<ReturnPolicyLogic>();
 builder.Services.AddScoped<ReceiptReprintLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();

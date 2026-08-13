@@ -2301,8 +2301,10 @@ public class InventoryLogic(
         CancellationToken ct = default)
     {
         if (!Enum.TryParse<ReturnInspectionDisposition>(request.Disposition, ignoreCase: true, out var disposition)
-            || disposition == ReturnInspectionDisposition.Pending)
-            throw new InventoryValidationException($"Disposition không hợp lệ: '{request.Disposition}'. Dùng RestockApproved, Quarantined, hoặc Disposed.");
+            || disposition == ReturnInspectionDisposition.Pending
+            || disposition == ReturnInspectionDisposition.Quarantined)
+            throw new InventoryValidationException(
+                $"Disposition không hợp lệ: '{request.Disposition}'. Chỉ hỗ trợ RestockApproved (bán lại) hoặc Disposed (tiêu hủy).");
 
         return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
@@ -7281,8 +7283,11 @@ public class InventoryLogic(
         return string.Join(" - ", parts);
     }
 
+    /// <summary>
+    /// Mã lô nội bộ ngắn: SR- + 8 hex từ Id dòng phiếu (vd. SR-9053F957).
+    /// </summary>
     private static string BuildSupplierReceiptInternalBatchCode(SupplierReceiptItem item) =>
-        $"SR-{item.Id:N}".ToUpperInvariant();
+        $"SR-{item.Id.ToString("N")[..8]}".ToUpperInvariant();
 
     private static bool IsPositiveInteger(decimal value) =>
         value > 0 && value == decimal.Truncate(value);
@@ -8668,10 +8673,13 @@ public class InventoryLogic(
         return outputLines;
     }
 
+    /// <summary>
+    /// Mã lô SX ngắn: SX-yyMMdd-II-XXXXXX (vd. SX-260813-01-36597A).
+    /// </summary>
     private static string BuildProductionFinishedLotCode(DateTime now, ProductionOrder order, int outputIndex)
     {
         var orderSuffix = order.Id.ToString("N")[..6].ToUpperInvariant();
-        return $"SX-{now:yyyyMMddHHmmss}-{outputIndex + 1:D2}-{orderSuffix}";
+        return $"SX-{now:yyMMdd}-{outputIndex + 1:D2}-{orderSuffix}";
     }
 
     public async Task<ProductionOrderResponse> CancelProductionOrderAsync(

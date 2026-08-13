@@ -629,7 +629,7 @@ public class SupplierReceiptApprovalWorkflowTests
         db.WarehouseBatches.Add(new WarehouseBatch
         {
             Id = Guid.NewGuid(),
-            BatchCode = $"SR-{secondLineId:N}".ToUpperInvariant(),
+            BatchCode = $"SR-{secondLineId.ToString("N")[..8]}".ToUpperInvariant(),
             LotCode = "CONFLICT-LOT",
             Location = "Warehouse",
             Status = "active",

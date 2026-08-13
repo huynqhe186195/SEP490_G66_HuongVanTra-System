@@ -70,6 +70,13 @@ export const navigationItems = [
   },
   { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'] },
   {
+    label: 'Kiểm tra hàng trả',
+    path: '/inventory/return-inspections',
+    module: 'inventory_returns',
+    icon: 'rule',
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
+  {
     label: 'Chờ đóng gói / trừ Kho',
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
@@ -288,6 +295,14 @@ const INVENTORY_SIDEBAR_GROUPS = [
     ],
   },
   {
+    key: '__grp_customer_orders',
+    label: 'Đơn hàng',
+    icon: 'receipt_long',
+    entries: [
+      { path: '/inventory/return-inspections', label: 'Kiểm tra hàng trả' },
+    ],
+  },
+  {
     key: '__grp_inventory_inbound',
     label: 'Nhập hàng & Nhà cung cấp',
     icon: 'storefront',
@@ -456,6 +471,9 @@ function groupAdminManagerSidebar(items, isAdmin) {
   }
   const exchange = takeNavLeaf(byPath, consumed, '/orders/exchange', 'Trả / đổi hàng')
   if (exchange) orderChildren.push(exchange)
+
+  const returnInspect = takeNavLeaf(byPath, consumed, '/inventory/return-inspections', 'Kiểm tra hàng trả')
+  if (returnInspect) orderChildren.push(returnInspect)
 
   if (!isAdmin) {
     const waiting = takeNavLeaf(byPath, consumed, '/orders/stock-deduct', 'Chờ đóng gói / trừ Kho')
@@ -976,6 +994,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'supplier_receipts', prefix: '/inventory/supplier-products' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
   { module: 'inventory_returns', prefix: '/inventory/return-inspections' },
+  { module: 'orders', prefix: '/inventory/return-inspections' },
+  { module: 'inventory', prefix: '/inventory/return-inspections' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },
   { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },
   { module: 'production_orders', prefix: '/inventory/production-orders' },
