@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
+import ListFilterToolbar, { listFilterSelectClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -30,7 +30,50 @@ const TYPE_FILTER_OPTIONS = [
 
 function getBatchSourceLabel(sourceType) {
   if (sourceType === 'production_finished_goods') return 'Lô SX'
+  if (sourceType === 'supplier_receipt') return 'Phiếu NCC'
+  if (String(sourceType || '').startsWith('return')) return 'Trả hàng'
+  if (sourceType === 'shelf_replenishment') return 'Bổ sung kệ'
   return 'Nguồn'
+}
+
+function getBatchProductSummary(batch) {
+  const names = []
+  const seen = new Set()
+  for (const item of batch?.items ?? []) {
+    const name = String(item?.productSnapshotName || item?.productName || item?.skuCode || '').trim()
+    if (!name) continue
+    const key = name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    names.push(name)
+  }
+  if (names.length === 0) return '—'
+  if (names.length === 1) return names[0]
+  return `${names[0]} (+${names.length - 1})`
+}
+
+function formatBatchLocation(location) {
+  const value = String(location || '').trim().toLowerCase()
+  if (value === 'warehouse' || value === 'kho') return 'Kho'
+  if (value === 'shelf' || value === 'kệ' || value === 'ke') return 'Kệ hàng'
+  if (value === 'quarantine') return 'Kiểm dịch'
+  return location || '—'
+}
+
+function formatUnitCost(value) {
+  if (value == null || value === '') return '—'
+  return `${Number(value).toLocaleString('vi-VN')} ₫`
+}
+
+function BatchDetailField({ label, value, mono = false }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white px-3.5 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className={`mt-1 break-all text-sm font-semibold text-slate-800 ${mono ? 'font-mono' : ''}`}>
+        {value || '—'}
+      </p>
+    </div>
+  )
 }
 
 function isProductionBatch(batch) {
@@ -161,7 +204,7 @@ function InventoryBatchesPage() {
         compact
         title="Lô hàng nhập"
         titleInfo="Theo dõi tồn theo từng lô — mỗi lô có thể chứa nhiều mã hàng."
-        searchPlaceholder="Tìm mã lô nội bộ, mã lô NCC, mã hàng, nhà cung cấp..."
+        searchPlaceholder="Tìm mã lô, sản phẩm, mã hàng, nhà cung cấp..."
         searchValue={searchInput}
         onSearchChange={(value) => {
           setSearchInput(value)
@@ -197,7 +240,7 @@ function InventoryBatchesPage() {
         />
         <select
           aria-label="Lọc theo loại lô"
-          className={listFilterControlClass}
+          className={listFilterSelectClass}
           value={typeFilter}
           onChange={(event) => {
             setTypeFilter(event.target.value)
@@ -210,7 +253,7 @@ function InventoryBatchesPage() {
         </select>
         <select
           aria-label="Sắp xếp theo thời gian"
-          className={listFilterControlClass}
+          className={`${listFilterSelectClass} min-w-[9.5rem]`}
           value={timeSort}
           onChange={(event) => {
             setTimeSort(event.target.value)
@@ -229,12 +272,11 @@ function InventoryBatchesPage() {
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-6 py-3">Mã lô nội bộ</th>
+                <th className="px-4 py-3">Sản phẩm</th>
                 <th className="px-4 py-3">Trạng thái</th>
                 <th className="px-4 py-3">HSD</th>
                 <th className="px-4 py-3">Loại lô</th>
                 <th className="px-4 py-3">Tổng còn</th>
-                <th className="px-4 py-3">Mã lô NCC</th>
-                <th className="px-4 py-3">Dòng SKU</th>
                 <th className="px-4 py-3">Ngày nhập</th>
                 <th className="px-4 py-3">NCC</th>
               </tr>
@@ -242,11 +284,11 @@ function InventoryBatchesPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-slate-500">Đang tải...</td>
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">Đang tải...</td>
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-slate-500">
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">
                     {searchInput.trim() || stockFilter || typeFilter ? (
                       <>Không tìm thấy lô khớp bộ lọc.</>
                     ) : (
@@ -266,20 +308,22 @@ function InventoryBatchesPage() {
                   return (
                     <Fragment key={batch.id}>
                       <tr
-                        className="cursor-pointer hover:bg-slate-50/80"
+                        className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${isOpen ? 'bg-[#f4f7f4]' : ''}`}
                         onClick={() => setExpandedId(isOpen ? null : batch.id)}
                       >
                         <td className="px-6 py-4 font-mono font-semibold text-[#356647]">
                           {batch.batchCode}
-                          <span className="ml-2 text-xs font-normal text-slate-400">
+                          <span className={`ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-normal ${
+                            isOpen ? 'bg-[#356647] text-white' : 'bg-slate-100 text-slate-500'
+                          }`}
+                          >
                             {isOpen ? '▾' : '▸'}
                           </span>
-                          {batch.sourceReferenceCode ? (
-                            <div className="mt-1 text-xs font-normal text-slate-500">
-                              {getBatchSourceLabel(batch.sourceType)}:{' '}
-                              <span className="font-mono">{batch.sourceReferenceCode}</span>
-                            </div>
-                          ) : null}
+                        </td>
+                        <td className="max-w-[220px] px-4 py-4 text-slate-700">
+                          <span className="line-clamp-2" title={getBatchProductSummary(batch)}>
+                            {getBatchProductSummary(batch)}
+                          </span>
                         </td>
                         <td className="px-4 py-4">
                           <span
@@ -303,8 +347,6 @@ function InventoryBatchesPage() {
                         <td className="px-4 py-4 font-semibold text-slate-800">
                           {formatStockQuantity(batch.totalQuantityOnHand)}
                         </td>
-                        <td className="px-4 py-4 font-mono text-slate-700">{batch.lotCode || '—'}</td>
-                        <td className="px-4 py-4 text-slate-700">{batch.skuLineCount} SKU</td>
                         <td className="whitespace-nowrap px-4 py-4 text-slate-600">
                           {batch.createdAt ? formatVietnamDateTime(batch.createdAt) : '—'}
                         </td>
@@ -312,35 +354,101 @@ function InventoryBatchesPage() {
                       </tr>
                       {isOpen ? (
                         <tr key={`${batch.id}-detail`}>
-                          <td colSpan={9} className="bg-[#fbf9f1]/40 px-6 py-4">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-left text-xs font-bold uppercase text-slate-500">
-                                  <th className="pb-2 pr-4">Sản Phẩm</th>
-                                  <th className="pb-2 pr-4">Còn / Nhập</th>
-                                  <th className="pb-2">Giá vốn</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100/80">
-                                {batch.items.map((item) => (
-                                  <tr key={item.id}>
-                                    <td className="py-2 pr-4 text-slate-700">
-                                      <p className="font-mono font-semibold text-[#356647]">{item.skuCode}</p>
-                                      <p className="text-xs text-slate-600">{item.productSnapshotName || '—'}</p>
-                                    </td>
-                                    <td className="py-2 pr-4 font-semibold">
-                                      {formatStockQuantity(item.quantityOnHand)}
-                                      <span className="text-xs font-normal text-slate-500">
-                                        {' '}/ {formatStockQuantity(item.initialQuantity)}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 text-slate-600">
-                                      {item.unitCost != null ? `${Number(item.unitCost).toLocaleString('vi-VN')} ₫` : '—'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <td colSpan={8} className="bg-[#eef3ef] px-4 py-4 sm:px-6">
+                            <div className="space-y-3 rounded-2xl border border-[#d7e3da] bg-white p-4 shadow-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800">Chi tiết lô {batch.batchCode}</p>
+                                  <p className="mt-0.5 text-xs text-slate-500">
+                                    {getBatchTypeLabel(batch)} · {(batch.items?.length || 0)} dòng hàng
+                                  </p>
+                                </div>
+                                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  hasStock ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                                }`}
+                                >
+                                  {hasStock ? `Còn ${formatStockQuantity(batch.totalQuantityOnHand)}` : 'Đã hết'}
+                                </span>
+                              </div>
+
+                              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                <BatchDetailField label="Mã lô NCC" value={batch.lotCode} mono />
+                                <BatchDetailField
+                                  label={getBatchSourceLabel(batch.sourceType)}
+                                  value={batch.sourceReferenceCode}
+                                  mono
+                                />
+                                <BatchDetailField label="Vị trí" value={formatBatchLocation(batch.location)} />
+                                <BatchDetailField
+                                  label="HSD"
+                                  value={batch.expiresAt ? formatVietnamDateTime(batch.expiresAt) : '—'}
+                                />
+                              </div>
+
+                              {batch.note?.trim() ? (
+                                <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-3.5 py-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700/80">Ghi chú</p>
+                                  <p className="mt-1 text-sm text-slate-800">{batch.note.trim()}</p>
+                                </div>
+                              ) : null}
+
+                              <div className="overflow-hidden rounded-xl border border-slate-100">
+                                <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Sản phẩm trong lô
+                                  </p>
+                                </div>
+                                {batch.items.length === 0 ? (
+                                  <p className="px-4 py-4 text-sm text-slate-500">Không có dòng hàng.</p>
+                                ) : (
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-full text-left text-sm">
+                                      <thead className="bg-white text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                        <tr>
+                                          <th className="px-4 py-2.5">Sản phẩm</th>
+                                          <th className="px-4 py-2.5 text-right">Còn lại</th>
+                                          <th className="px-4 py-2.5 text-right">Nhập ban đầu</th>
+                                          <th className="px-4 py-2.5 text-right">Giá vốn</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {batch.items.map((item) => {
+                                          const remaining = Number(item.quantityOnHand || 0)
+                                          return (
+                                            <tr key={item.id} className="bg-white">
+                                              <td className="px-4 py-3">
+                                                <p className="font-semibold text-slate-800">
+                                                  {item.productSnapshotName || '—'}
+                                                </p>
+                                                <p className="mt-0.5 font-mono text-xs text-[#356647]">
+                                                  {item.skuCode || '—'}
+                                                </p>
+                                              </td>
+                                              <td className="px-4 py-3 text-right">
+                                                <span className={`inline-flex rounded-lg px-2 py-1 text-sm font-bold ${
+                                                  remaining > 0
+                                                    ? 'bg-emerald-50 text-emerald-800'
+                                                    : 'bg-slate-100 text-slate-500'
+                                                }`}
+                                                >
+                                                  {formatStockQuantity(remaining)}
+                                                </span>
+                                              </td>
+                                              <td className="px-4 py-3 text-right font-medium text-slate-600">
+                                                {formatStockQuantity(item.initialQuantity)}
+                                              </td>
+                                              <td className="px-4 py-3 text-right font-medium text-slate-700">
+                                                {formatUnitCost(item.unitCost)}
+                                              </td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       ) : null}

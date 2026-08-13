@@ -3,12 +3,20 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import { fetchOrder, returnOrder } from '../../orders/services/ordersApi.js'
+import { fetchReturnPolicyForOrder } from '../../orders/services/returnPolicyApi.js'
 import { calcReturnLineAmount, calcMembershipDiscountAmount, getOrderPaidRatio, getReturnUnitPrice } from '../../orders/utils/returnPricing.js'
 import { fetchOrderTransferQrByOrderId, fetchPosCustomerContext, fetchPosProducts } from '../services/posApi.js'
 import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import { canViewAllOrders } from '../../auth/utils/permissions.js'
+import { uploadImage } from '../../products/services/cloudinaryApi.js'
 import ReturnOrderSidebar from '../components/ReturnOrderSidebar.jsx'
+import ReturnPolicyPanel from '../components/ReturnPolicyPanel.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+
+const MAX_EVIDENCE_IMAGES = 5
+const MAX_EVIDENCE_IMAGE_BYTES = 5 * 1024 * 1024
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -142,6 +150,14 @@ function ReturnOrderPage() {
   const [offerModalOpen, setOfferModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [policyContext, setPolicyContext] = useState(null)
+  const [isPolicyLoading, setIsPolicyLoading] = useState(false)
+  const [checklistAnswers, setChecklistAnswers] = useState({})
+  const [evidenceImageUrls, setEvidenceImageUrls] = useState([])
+  const [uploadingCount, setUploadingCount] = useState(0)
+  const [managerOverride, setManagerOverride] = useState(false)
+  const authSession = useAuthSession()
+  const canManagerOverride = canViewAllOrders(authSession)
 
   useEffect(() => {
     let mounted = true
@@ -154,6 +170,7 @@ function ReturnOrderPage() {
 
       try {
         setIsLoading(true)
+        setIsPolicyLoading(true)
         const detail = await fetchOrder(orderId)
         if (!mounted) return
         if (detail.orderStatus !== 'Completed') {
@@ -183,11 +200,23 @@ function ReturnOrderPage() {
         } else {
           setCustomerContext(null)
         }
+
+        fetchReturnPolicyForOrder(orderId)
+          .then((ctx) => {
+            if (mounted) setPolicyContext(ctx)
+          })
+          .catch(() => {
+            if (mounted) setPolicyContext(null)
+          })
+          .finally(() => {
+            if (mounted) setIsPolicyLoading(false)
+          })
       } catch (error) {
         if (mounted) {
           showError(error.message)
           navigate('/pos', { replace: true })
         }
+        if (mounted) setIsPolicyLoading(false)
       } finally {
         if (mounted) setIsLoading(false)
       }
@@ -198,6 +227,94 @@ function ReturnOrderPage() {
       mounted = false
     }
   }, [orderId, navigate])
+
+  const visibleReturnReasons = useMemo(() => {
+    const allowed = policyContext?.policy?.allowedReasonCodes
+    if (!Array.isArray(allowed) || allowed.length === 0) return RETURN_REASON_OPTIONS
+    const allowedSet = new Set(allowed.map((code) => String(code).toUpperCase()))
+    const filtered = RETURN_REASON_OPTIONS.filter((reason) => allowedSet.has(reason.id))
+    return filtered.length > 0 ? filtered : RETURN_REASON_OPTIONS
+  }, [policyContext])
+
+  useEffect(() => {
+    if (!policyContext?.policy?.allowedReasonCodes?.length) return
+    const allowedSet = new Set(
+      policyContext.policy.allowedReasonCodes.map((code) => String(code).toUpperCase()),
+    )
+    setSelectedReasons((prev) => prev.filter((id) => allowedSet.has(id)))
+  }, [policyContext])
+
+  useEffect(() => {
+    const checklist = policyContext?.policy?.checklist
+    if (!Array.isArray(checklist)) {
+      setChecklistAnswers({})
+      return
+    }
+    setChecklistAnswers((prev) => {
+      const next = {}
+      for (const item of checklist) {
+        if (!item?.id) continue
+        next[item.id] = Boolean(prev[item.id])
+      }
+      return next
+    })
+  }, [policyContext])
+
+  const toggleChecklistItem = (itemId) => {
+    setChecklistAnswers((prev) => ({
+      ...prev,
+      [itemId]: !prev[itemId],
+    }))
+  }
+
+  const handleEvidenceChange = async (event) => {
+    const picked = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (picked.length === 0) return
+
+    const remaining = MAX_EVIDENCE_IMAGES - evidenceImageUrls.length
+    if (remaining <= 0) {
+      showError(`Chỉ được đính kèm tối đa ${MAX_EVIDENCE_IMAGES} ảnh minh chứng.`)
+      return
+    }
+    if (picked.length > remaining) {
+      showError(`Chỉ còn chỗ cho ${remaining} ảnh, các ảnh dư sẽ bị bỏ qua.`)
+    }
+
+    const accepted = []
+    for (const file of picked.slice(0, remaining)) {
+      if (!file.type.startsWith('image/')) {
+        showError(`"${file.name}" phải là file ảnh.`)
+        continue
+      }
+      if (file.size > MAX_EVIDENCE_IMAGE_BYTES) {
+        showError(`"${file.name}": ảnh tối đa 5MB.`)
+        continue
+      }
+      accepted.push(file)
+    }
+    if (accepted.length === 0) return
+
+    setUploadingCount((current) => current + accepted.length)
+    for (const file of accepted) {
+      try {
+        const url = await uploadImage(file)
+        setEvidenceImageUrls((current) =>
+          current.includes(url) || current.length >= MAX_EVIDENCE_IMAGES
+            ? current
+            : [...current, url],
+        )
+      } catch (error) {
+        showError(error.message)
+      } finally {
+        setUploadingCount((current) => current - 1)
+      }
+    }
+  }
+
+  const removeEvidenceImage = (url) => {
+    setEvidenceImageUrls((current) => current.filter((item) => item !== url))
+  }
 
   const filteredReturnLines = useMemo(() => {
     const q = returnSearch.trim().toLowerCase()
@@ -410,6 +527,25 @@ function ReturnOrderPage() {
       return
     }
 
+    if (!policyContext?.policy) {
+      showError('Chưa tải được chính sách trả hàng. Không thể tạo phiếu trả.')
+      return
+    }
+
+    const policy = policyContext.policy
+    if (policyContext.customReturnBlocked && !(canManagerOverride && managerOverride)) {
+      showError('Đơn chỉ gồm gói custom không được trả theo chính sách.')
+      return
+    }
+    if (policyContext.channelAllowed === false && !(canManagerOverride && managerOverride)) {
+      showError('Kênh đơn này không được trả hàng theo chính sách.')
+      return
+    }
+    if (policyContext.isWithinReturnWindow === false && !(canManagerOverride && managerOverride)) {
+      showError('Đã quá hạn trả hàng theo chính sách.')
+      return
+    }
+
     if (selectedReasons.length === 0) {
       showError('Vui lòng chọn ít nhất một lý do trả/đổi hàng.')
       return
@@ -418,6 +554,30 @@ function ReturnOrderPage() {
     if (hasOtherReason && otherReason.trim().length < 10) {
       showError('Vui lòng nhập lý do khác ít nhất 10 ký tự.')
       return
+    }
+
+    const requiredChecks = (policy.checklist || []).filter((item) => item.required)
+    const missingRequired = requiredChecks.filter((item) => !checklistAnswers[item.id])
+    if (missingRequired.length > 0 && !(canManagerOverride && managerOverride)) {
+      showError(`Chưa xác nhận: ${missingRequired.map((item) => item.label).join(', ')}.`)
+      return
+    }
+
+    const minImages = Number(policy.minEvidenceImages) || 0
+    if (evidenceImageUrls.length < minImages && !(canManagerOverride && managerOverride)) {
+      showError(`Cần tối thiểu ${minImages} ảnh minh chứng.`)
+      return
+    }
+    if (uploadingCount > 0) {
+      showError('Vui lòng đợi ảnh tải lên xong.')
+      return
+    }
+
+    if (managerOverride && canManagerOverride) {
+      if (note.trim().length < 10) {
+        showError('Khi cho phép trả ngoại lệ, vui lòng ghi chú lý do ít nhất 10 ký tự.')
+        return
+      }
     }
 
     const payExtra = totals.customerOwes > 0
@@ -452,12 +612,27 @@ function ReturnOrderPage() {
         note: buildReturnNote(),
         reasons: selectedReasonIds,
         otherReason: hasOtherReason ? otherReason : null,
+        checklistAnswers: Object.entries(checklistAnswers).map(([id, checked]) => ({
+          id,
+          checked: Boolean(checked),
+        })),
+        evidenceImageUrls,
+        managerOverride: Boolean(canManagerOverride && managerOverride),
       })
 
       const refund = Number(result?.refundAmount || 0)
       const exchangeCode = result?.exchangeOrderCode
       const exchangeOrderId = result?.exchangeOrderId
+      const acceptanceStatus = String(result?.acceptanceStatus || 'Accepted').toUpperCase()
       const payExtra = totals.customerOwes > 0
+
+      if (acceptanceStatus === 'PENDING') {
+        showSuccess(
+          `Yêu cầu trả ${result.returnCode} đang chờ Accept. Chưa hoàn tiền / chưa tạo kiểm định kho.`,
+        )
+        navigate(`/orders/returns/${result.returnId}`)
+        return
+      }
 
       if (payExtra && paymentMethod === 'TRANSFER' && exchangeOrderId) {
         const qrAmount = Math.round(totals.customerOwes)
@@ -620,13 +795,30 @@ function ReturnOrderPage() {
             </CustomScrollArea>
           </section>
 
+          <section className="shrink-0 border-b border-slate-200 bg-white px-3 py-3">
+            <ReturnPolicyPanel
+              context={policyContext}
+              loading={isPolicyLoading}
+              checklistAnswers={checklistAnswers}
+              onToggleChecklist={toggleChecklistItem}
+              evidenceImageUrls={evidenceImageUrls}
+              onEvidenceChange={handleEvidenceChange}
+              onRemoveEvidence={removeEvidenceImage}
+              uploadingCount={uploadingCount}
+              maxEvidenceImages={MAX_EVIDENCE_IMAGES}
+              canManagerOverride={canManagerOverride}
+              managerOverride={managerOverride}
+              onManagerOverrideChange={setManagerOverride}
+            />
+          </section>
+
           <section className="shrink-0 border-t border-slate-200 bg-white px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Lý do trả/đổi hàng</p>
               <span className="text-[11px] text-slate-500">Bắt buộc</span>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {RETURN_REASON_OPTIONS.map((reason) => {
+              {visibleReturnReasons.map((reason) => {
                 const selected = selectedReasons.includes(reason.id)
                 return (
                   <button

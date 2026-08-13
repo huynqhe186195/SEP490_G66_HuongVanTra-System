@@ -22,4 +22,10 @@ public class Contract : BaseEntity
     public string? RejectionNote { get; set; }
     public DateTime? SubmittedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
+    public string? SignedAtLocation { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? DeliveryTerms { get; set; }
+    public string? ShippingResponsibility { get; set; }
+
+    public ICollection<ContractLineItem> LineItems { get; set; } = new List<ContractLineItem>();
 }

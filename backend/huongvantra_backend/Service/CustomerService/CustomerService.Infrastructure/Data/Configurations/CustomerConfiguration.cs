@@ -30,6 +30,13 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
                .HasConversion<string>()
                .HasMaxLength(20);
         builder.Property(c => c.Department).HasMaxLength(100);
+        builder.Property(c => c.RegisteredAddress).HasMaxLength(255);
+        builder.Property(c => c.LegalRepresentativeName).HasMaxLength(100);
+        builder.Property(c => c.LegalRepresentativePosition).HasMaxLength(100);
+        builder.Property(c => c.LegalRepresentativeIdNumber).HasMaxLength(50);
+        builder.Property(c => c.LegalRepresentativeIdIssuePlace).HasMaxLength(100);
+        builder.Property(c => c.BankAccountNumber).HasMaxLength(50);
+        builder.Property(c => c.BankName).HasMaxLength(150);
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.UpdatedAt).IsRequired();
         builder.Property(c => c.IsDeleted).HasDefaultValue(false);

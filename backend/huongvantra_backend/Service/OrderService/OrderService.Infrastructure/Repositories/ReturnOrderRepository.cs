@@ -34,6 +34,12 @@ public class ReturnOrderRepository(OrderDbContext _db) : IReturnOrderRepository
         await _db.ReturnOrders
             .AsNoTracking()
             .Include(r => r.Details)
+            .Include(r => r.EvidenceImages)
+            .FirstOrDefaultAsync(r => r.Id == id, ct);
+
+    public async Task<ReturnOrder?> GetTrackedByIdAsync(Guid id, CancellationToken ct = default) =>
+        await _db.ReturnOrders
+            .Include(r => r.Details)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
     public async Task<List<ReturnOrder>> GetBySourceOrderIdAsync(Guid sourceOrderId, CancellationToken ct = default) =>
@@ -43,6 +49,23 @@ public class ReturnOrderRepository(OrderDbContext _db) : IReturnOrderRepository
             .Where(r => r.SourceOrderId == sourceOrderId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
+
+    public async Task<Dictionary<Guid, int>> GetPendingReturnQuantitiesByOrderIdAsync(
+        Guid sourceOrderId,
+        CancellationToken ct = default)
+    {
+        var rows = await _db.ReturnOrderDetails
+            .AsNoTracking()
+            .Where(d => d.ReturnOrder!.SourceOrderId == sourceOrderId
+                        && d.ReturnOrder.AcceptanceStatus == ReturnAcceptanceStatus.Pending
+                        && !d.IsDeleted
+                        && !d.ReturnOrder.IsDeleted)
+            .GroupBy(d => d.SourceOrderDetailId)
+            .Select(g => new { SourceOrderDetailId = g.Key, Qty = g.Sum(x => x.ReturnQuantity) })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(x => x.SourceOrderDetailId, x => x.Qty);
+    }
 
     public async Task<(List<(ReturnOrder Item, OrderChannel SourceChannel)> Items, int Total)> GetPagedAsync(
         string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,

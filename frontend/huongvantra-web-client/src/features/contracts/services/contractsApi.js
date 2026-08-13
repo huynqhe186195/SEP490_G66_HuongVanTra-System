@@ -1,4 +1,20 @@
-import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, downloadBlob, toPagedResult } from '../../../lib/apiClient.js'
+
+export function mapLineItem(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    lineNumber: item.lineNumber ?? item.LineNumber ?? 0,
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    productName: item.productName ?? item.ProductName ?? '',
+    unit: item.unit ?? item.Unit ?? null,
+    quantity: Number(item.quantity ?? item.Quantity ?? 0),
+    unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? 0),
+    lineAmount: Number(item.lineAmount ?? item.LineAmount ?? 0),
+    note: item.note ?? item.Note ?? null,
+  }
+}
 
 export function mapContract(item) {
   if (!item || typeof item !== 'object') return null
@@ -23,6 +39,13 @@ export function mapContract(item) {
     reviewedAt: item.reviewedAt ?? item.ReviewedAt ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     updatedAt: item.updatedAt ?? item.UpdatedAt,
+    signedAtLocation: item.signedAtLocation ?? item.SignedAtLocation ?? null,
+    paymentMethod: item.paymentMethod ?? item.PaymentMethod ?? null,
+    deliveryTerms: item.deliveryTerms ?? item.DeliveryTerms ?? null,
+    shippingResponsibility: item.shippingResponsibility ?? item.ShippingResponsibility ?? null,
+    lineItems: Array.isArray(item.lineItems ?? item.LineItems)
+      ? (item.lineItems ?? item.LineItems).map(mapLineItem).filter(Boolean)
+      : [],
   }
 }
 
@@ -86,4 +109,26 @@ export async function reviewContract(id, approved, rejectionNote) {
     body: JSON.stringify({ approved, rejectionNote: rejectionNote ?? null }),
   })
   return mapContract(data)
+}
+
+export async function exportContractDocx(id) {
+  const blob = await apiRequestAuth(`/api/contracts/${id}/export-docx`, { responseType: 'blob' })
+  downloadBlob(blob, `HopDong_${id}.docx`)
+}
+
+export async function exportContractPdf(id) {
+  const blob = await apiRequestAuth(`/api/contracts/${id}/export-pdf`, { responseType: 'blob' })
+  downloadBlob(blob, `HopDong_${id}.pdf`)
+}
+
+export async function importContractFromDocx(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const data = await apiRequestAuth('/api/contracts/import', {
+    method: 'POST',
+    body: formData,
+    headers: {},
+  })
+  return data
 }

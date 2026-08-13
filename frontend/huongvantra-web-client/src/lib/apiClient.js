@@ -221,6 +221,17 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
   return response.text()
 }
 
+export function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export function toPagedResult(data) {
   if (!data || typeof data !== 'object') {
     return { items: [], page: 1, pageSize: 20, totalCount: 0 }

@@ -1562,7 +1562,7 @@ function PosPage() {
         return `-${percent}%`;
     };
 
-    const hasCartItems = cartItems.length > 0 || customBundles.length > 0;
+    const hasCartItems = cartItems.length > 0 || (customBundles || []).some(b => (b.ingredients || []).length > 0);
     const hasUnavailableItems = cartItems.some((item) => item.isUnavailable);
     const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
@@ -1682,24 +1682,41 @@ function PosPage() {
       customerSnapshotName: selectedCustomer
         ? formatCustomerOrderSnapshot(selectedCustomer)
         : 'Khách lẻ',
+      orderChannel: isTakeaway ? 'COD' : 'POS',
       promotionId: appliedPromotion?.id ?? null,
       promotionCode: appliedPromotion?.promoCode ?? null,
       manualDiscount,
       note: orderNote,
+      // productId = Guid biến thể SKU; sku = mã hiển thị (SkuCode).
       items: cartItems.map((item) => ({
         productId: item.productId,
         sku: item.sku,
+        productName: item.productName,
+        packagingType: item.packagingType,
         name: item.name,
         quantity: item.qty,
         unitPrice: item.isGift ? 0 : item.price,
         costPrice: item.costPrice ?? 0,
-        categoryName: item.categoryName ?? null,
+        categoryId: item.categoryId || null,
+        categoryName: item.categoryName || null,
         inventoryUnit: item.inventoryUnit,
         priceUnit: item.priceUnit,
-        isGift: item.isGift ? 1 : 0,
+        isGift: Boolean(item.isGift),
       })),
       payments: paymentAllocations,
-      customBundles,
+      customBundles: (customBundles || [])
+        .filter((bundle) => (bundle.ingredients || []).length > 0)
+        .map((bundle) => ({
+          label: bundle.label || null,
+          note: bundle.note || null,
+          ingredients: (bundle.ingredients || []).map((ing) => ({
+            materialSkuId: ing.materialSkuId,
+            materialSkuCode: ing.materialSkuCode,
+            materialSnapshotName: ing.materialSnapshotName,
+            quantity: ing.quantity,
+            unitPrice: ing.unitPrice,
+          })),
+        })),
     }
   }
 
@@ -1855,7 +1872,8 @@ function PosPage() {
     payload.pickupContactName = pickupContactName
     payload.pickupContactPhone = pickupContactPhone
     payload.depositAmount = depositAmount
-    const result = await createOrder(payload, { idempotencyKey })
+    try {
+      const result = await createOrder(payload, { idempotencyKey })
 
     if (method === 'CASH' && collectedNow > 0) {
       await recordCashSale()
@@ -1901,7 +1919,10 @@ function PosPage() {
         resetCheckoutState();
         setCatalogReloadKey((key) => key + 1);
         await printReceiptSequence(receipts);
-    };
+    } catch (error) {
+      throw error
+    }
+  };
 
     const resetCheckoutState = () => {
         setWorkspaceByMode((current) => {
@@ -3497,6 +3518,7 @@ function PosPage() {
         appliedPromotion={appliedPromotion}
         appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
+        customBundles={customBundles}
       />
 
       {backorderPrompt ? (

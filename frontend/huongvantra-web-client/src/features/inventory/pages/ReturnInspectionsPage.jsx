@@ -20,16 +20,14 @@ import {
 
 const TABS = [
   { key: 'pending', label: 'Chờ kiểm tra', disposition: 'Pending' },
-  { key: 'restock', label: 'Duyệt nhập lại', disposition: 'RestockApproved' },
-  { key: 'quarantined', label: 'Kiểm dịch', disposition: 'Quarantined' },
+  { key: 'restock', label: 'Bán lại', disposition: 'RestockApproved' },
   { key: 'disposed', label: 'Tiêu hủy', disposition: 'Disposed' },
   { key: 'all', label: 'Tất cả', disposition: undefined },
 ]
 
 const DISPOSITION_HINTS = {
-  RestockApproved: 'Hàng đạt kiểm tra — tăng tồn Kệ Hàng để bán lại.',
-  Quarantined: 'Nghi ngờ lỗi — tạo lô kiểm dịch, KHÔNG tính vào tồn bán.',
-  Disposed: 'Không thể dùng — tiêu hủy, không thay đổi tồn.',
+  RestockApproved: 'Hàng đạt — nhập lại Kệ Hàng để bán lại.',
+  Disposed: 'Không dùng được — tiêu hủy, không tăng tồn.',
 }
 
 function InspectModal({ inspection, onClose, onDone }) {
@@ -138,26 +136,23 @@ function ReturnInspectionsPage() {
   const [snapshotCounts, setSnapshotCounts] = useState({
     pending: 0,
     restock: 0,
-    quarantined: 0,
     all: 0,
   })
 
   const loadSnapshotCounts = useCallback(async () => {
     try {
-      const [pending, restock, quarantined, all] = await Promise.all([
+      const [pending, restock, all] = await Promise.all([
         fetchReturnInspections({ disposition: 'Pending', page: 1, pageSize: 1 }),
         fetchReturnInspections({ disposition: 'RestockApproved', page: 1, pageSize: 1 }),
-        fetchReturnInspections({ disposition: 'Quarantined', page: 1, pageSize: 1 }),
         fetchReturnInspections({ page: 1, pageSize: 1 }),
       ])
       setSnapshotCounts({
         pending: pending.totalCount,
         restock: restock.totalCount,
-        quarantined: quarantined.totalCount,
         all: all.totalCount,
       })
     } catch {
-      setSnapshotCounts({ pending: 0, restock: 0, quarantined: 0, all: 0 })
+      setSnapshotCounts({ pending: 0, restock: 0, all: 0 })
     }
   }, [])
 
@@ -206,7 +201,7 @@ function ReturnInspectionsPage() {
       canInspect && {
         id: 'inspect-pending',
         title: 'Kiểm tra hàng trả chờ xử lý',
-        hint: 'Quyết định nhập lại / kiểm dịch / tiêu hủy',
+        hint: 'Quyết định bán lại hoặc tiêu hủy',
         icon: 'fact_check',
         iconBg: 'bg-amber-50',
         iconColor: 'text-amber-700',

@@ -122,6 +122,14 @@ public class CustomerLogic
             AssignedSaleId = assignedSaleId,
             Source = input.Source,
             Department = input.Department,
+            RegisteredAddress = input.RegisteredAddress,
+            LegalRepresentativeName = input.LegalRepresentativeName,
+            LegalRepresentativePosition = input.LegalRepresentativePosition,
+            LegalRepresentativeIdNumber = input.LegalRepresentativeIdNumber,
+            LegalRepresentativeIdIssuePlace = input.LegalRepresentativeIdIssuePlace,
+            LegalRepresentativeIdIssueDate = input.LegalRepresentativeIdIssueDate,
+            BankAccountNumber = input.BankAccountNumber,
+            BankName = input.BankName,
             TotalSpending = 0,
             CurrentDebt = 0,
             CreatedAt = DateTime.UtcNow,
@@ -165,6 +173,14 @@ public class CustomerLogic
         customer.TaxCode = input.TaxCode;
         customer.Source = input.Source;
         customer.Department = input.Department;
+        customer.RegisteredAddress = input.RegisteredAddress;
+        customer.LegalRepresentativeName = input.LegalRepresentativeName;
+        customer.LegalRepresentativePosition = input.LegalRepresentativePosition;
+        customer.LegalRepresentativeIdNumber = input.LegalRepresentativeIdNumber;
+        customer.LegalRepresentativeIdIssuePlace = input.LegalRepresentativeIdIssuePlace;
+        customer.LegalRepresentativeIdIssueDate = input.LegalRepresentativeIdIssueDate;
+        customer.BankAccountNumber = input.BankAccountNumber;
+        customer.BankName = input.BankName;
         customer.AssignedSaleId = access.CanViewAllCustomers
             ? input.AssignedSaleId
             : customer.AssignedSaleId ?? access.UserId;
@@ -2577,7 +2593,15 @@ public class CustomerLogic
             request.TierId,
             request.AssignedSaleId,
             request.Source,
-            request.Department);
+            request.Department,
+            request.RegisteredAddress,
+            request.LegalRepresentativeName,
+            request.LegalRepresentativePosition,
+            request.LegalRepresentativeIdNumber,
+            request.LegalRepresentativeIdIssuePlace,
+            request.LegalRepresentativeIdIssueDate,
+            request.BankAccountNumber,
+            request.BankName);
     }
 
     private static ValidatedCustomerInput ValidateCustomerRequest(UpdateCustomerRequest request)
@@ -2595,7 +2619,15 @@ public class CustomerLogic
             request.TierId,
             request.AssignedSaleId,
             request.Source,
-            request.Department);
+            request.Department,
+            request.RegisteredAddress,
+            request.LegalRepresentativeName,
+            request.LegalRepresentativePosition,
+            request.LegalRepresentativeIdNumber,
+            request.LegalRepresentativeIdIssuePlace,
+            request.LegalRepresentativeIdIssueDate,
+            request.BankAccountNumber,
+            request.BankName);
     }
 
     private static void ValidatePagination(int page, int pageSize, int maxPageSize = MaxPageSize)
@@ -2690,7 +2722,10 @@ public class CustomerLogic
     private static CustomerResponse MapToResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,
             c.TierId, c.Tier?.TierName, c.TotalSpending, c.CurrentDebt,
-            c.AssignedSaleId, c.Source, c.Department, c.CreatedAt, c.UpdatedAt);
+            c.AssignedSaleId, c.Source, c.Department, c.CreatedAt, c.UpdatedAt,
+            c.RegisteredAddress, c.LegalRepresentativeName, c.LegalRepresentativePosition,
+            c.LegalRepresentativeIdNumber, c.LegalRepresentativeIdIssuePlace,
+            c.LegalRepresentativeIdIssueDate, c.BankAccountNumber, c.BankName);
 
     private static CheckoutCustomerSearchResponse MapToCheckoutSearchResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.CustomerGroup,
@@ -2703,5 +2738,8 @@ public class CustomerLogic
             c.TotalSpending, c.CurrentDebt, c.AssignedSaleId, c.Source, c.Department,
             c.Addresses.Where(a => !a.IsDeleted).Select(a => new CustomerAddressResponse(a.Id, a.CustomerId, a.ReceiverName,
                 a.ReceiverPhone, a.AddressLine, a.Ward, a.District, a.Province, a.IsDefault)),
-            c.CreatedAt, c.UpdatedAt);
+            c.CreatedAt, c.UpdatedAt,
+            c.RegisteredAddress, c.LegalRepresentativeName, c.LegalRepresentativePosition,
+            c.LegalRepresentativeIdNumber, c.LegalRepresentativeIdIssuePlace,
+            c.LegalRepresentativeIdIssueDate, c.BankAccountNumber, c.BankName);
 }

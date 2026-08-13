@@ -1,4 +1,5 @@
 using DocumentService.Application.DTOs.Requests;
+using DocumentService.Application.Interfaces;
 using DocumentService.Application.UseCases;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -12,12 +13,23 @@ namespace DocumentService.WebAPI.Controllers;
 public class ContractsController : ControllerBase
 {
     private readonly ContractLogic _logic;
+    private readonly IContractDocumentGenerator _docxGen;
+    private readonly IContractDocumentGenerator _pdfGen;
 
-    public ContractsController(ContractLogic logic) => _logic = logic;
+    public ContractsController(
+        ContractLogic logic,
+        [FromKeyedServices("docx")] IContractDocumentGenerator docxGen,
+        [FromKeyedServices("pdf")] IContractDocumentGenerator pdfGen)
+    {
+        _logic = logic;
+        _docxGen = docxGen;
+        _pdfGen = pdfGen;
+    }
 
     private DocumentAccessContext AccessContext() => new(
         User.GetUserId(),
-        User.HasPermission(PermissionNames.ApproveContract));
+        User.HasPermission(PermissionNames.ApproveContract),
+        User.HasPermission(PermissionNames.ManageCorporateCustomer));
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
@@ -49,7 +61,24 @@ public class ContractsController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpGet("{id:guid}/export-docx")]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    public async Task<IActionResult> ExportDocx(Guid id, CancellationToken ct = default)
+    {
+        var (data, contentType, fileName) = await _logic.ExportAsync(id, "docx", AccessContext(), _docxGen, _pdfGen, ct);
+        return File(data, contentType, fileName);
+    }
+
+    [HttpGet("{id:guid}/export-pdf")]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    public async Task<IActionResult> ExportPdf(Guid id, CancellationToken ct = default)
+    {
+        var (data, contentType, fileName) = await _logic.ExportAsync(id, "pdf", AccessContext(), _docxGen, _pdfGen, ct);
+        return File(data, contentType, fileName);
+    }
+
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Create([FromBody] CreateContractRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, AccessContext(), ct);
@@ -57,6 +86,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateContractRequest request, CancellationToken ct = default)
     {
         var result = await _logic.UpdateAsync(id, request, AccessContext(), ct);
@@ -64,6 +94,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         await _logic.DeleteAsync(id, AccessContext(), ct);
@@ -71,6 +102,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.SubmitAsync(id, AccessContext(), ct);
@@ -84,4 +116,23 @@ public class ContractsController : ControllerBase
         var result = await _logic.ReviewAsync(id, request, AccessContext(), ct);
         return Ok(result);
     }
+
+    [HttpPost("import")]
+    [Authorize(Policy = PermissionNames.ManageCorporateCustomer)]
+    [RequestSizeLimit(10_000_000)]
+    public async Task<IActionResult> ImportFromDocx([FromForm] IFormFile? file, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Vui lòng chọn file Word hoặc PDF cần import." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext != ".docx" && ext != ".pdf")
+            return BadRequest(new { error = "Chỉ hỗ trợ file Word (.docx) hoặc PDF (.pdf)." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _logic.ImportFromDocxAsync(stream, file.FileName, AccessContext(), ct);
+
+        return Ok(result);
+    }
 }
+

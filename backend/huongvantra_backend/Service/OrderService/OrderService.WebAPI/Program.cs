@@ -2,6 +2,7 @@ using MassTransit;
 using HuongVanTra.Shared.Messages;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
+using OrderService.Application.Services;
 using OrderService.Application.UseCases;
 using OrderService.Infrastructure.Data;
 using OrderService.Infrastructure.Messaging;
@@ -20,6 +21,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        // Accept PascalCase from frontend (matching C# DTO properties)
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -37,6 +40,8 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
             errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IPaymentIdempotencyRepository, PaymentIdempotencyRepository>();
+builder.Services.AddScoped<PaymentIdempotencyService>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();
@@ -44,6 +49,7 @@ builder.Services.AddScoped<IOrderReceiptPrintLogRepository, OrderReceiptPrintLog
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
+builder.Services.AddScoped<IReturnPolicyRepository, ReturnPolicyRepository>();
 builder.Services.AddScoped<ICustomBundleRepository, CustomBundleRepository>();
 builder.Services.AddScoped<IOrderOutboxWriter, OrderOutboxWriter>();
 // G4: request path ghi integration event vào Outbox (atomic với business transaction),
@@ -112,6 +118,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<OrderService.Application.Authorization.StaffShiftGuard>();
 builder.Services.AddScoped<PosCashSessionLogic>();
 builder.Services.AddScoped<OrderLogic>();
+builder.Services.AddScoped<ReturnPolicyLogic>();
 builder.Services.AddScoped<ReceiptReprintLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();

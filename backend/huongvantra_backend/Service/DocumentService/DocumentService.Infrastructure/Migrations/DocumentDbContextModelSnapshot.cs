@@ -56,6 +56,10 @@ namespace DocumentService.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<string>("DeliveryTerms")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
                     b.Property<decimal?>("DiscountPercent")
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
@@ -73,6 +77,10 @@ namespace DocumentService.Infrastructure.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("varchar(4000)");
 
+                    b.Property<string>("PaymentMethod")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<int?>("PaymentTermDays")
                         .HasColumnType("int");
 
@@ -82,6 +90,14 @@ namespace DocumentService.Infrastructure.Migrations
 
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ShippingResponsibility")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("SignedAtLocation")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -107,6 +123,73 @@ namespace DocumentService.Infrastructure.Migrations
                     b.HasIndex("CustomerId", "Status");
 
                     b.ToTable("Contracts", (string)null);
+                });
+
+            modelBuilder.Entity("DocumentService.Domain.Entities.ContractLineItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("ContractId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("LineAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractId", "LineNumber");
+
+                    b.ToTable("ContractLineItems", (string)null);
+                });
+
+            modelBuilder.Entity("DocumentService.Domain.Entities.ContractLineItem", b =>
+                {
+                    b.HasOne("DocumentService.Domain.Entities.Contract", "Contract")
+                        .WithMany("LineItems")
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+                });
+
+            modelBuilder.Entity("DocumentService.Domain.Entities.Contract", b =>
+                {
+                    b.Navigation("LineItems");
                 });
 #pragma warning restore 612, 618
         }

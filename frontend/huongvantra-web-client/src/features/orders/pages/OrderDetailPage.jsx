@@ -266,12 +266,47 @@ function OrderDetailPage() {
   }
 
   const orderLines = useMemo(() => {
-    if (!order?.items?.length) return []
-    return order.items.map((line) => ({
+    const itemLines = (order?.items ?? []).map((line) => ({
       line,
       display: resolveOrderLineDisplay(line, catalogLookups),
     }))
-  }, [order?.items, catalogLookups])
+
+    const bundleLines = (order?.customBundles ?? []).flatMap((bundle) => {
+      const packingLabel =
+        String(bundle.packingStatus || '').toLowerCase() === 'packed'
+          ? 'Đã đóng gói'
+          : 'Chờ đóng gói'
+      const bundleTag = bundle.label?.trim()
+        ? `Gói custom — ${bundle.label.trim()}`
+        : 'Gói custom'
+
+      return (bundle.ingredients ?? []).map((ing, index) => ({
+        line: {
+          id: ing.id || `custom-${bundle.id}-${index}`,
+          skuId: ing.materialSkuId,
+          skuSnapshotName: ing.materialSnapshotName,
+          skuSnapshotCode: ing.materialSkuCode,
+          quantity: ing.quantity,
+          returnedQuantity: 0,
+          unitPrice: ing.unitPrice,
+          subTotal: ing.subTotal,
+          isGift: false,
+        },
+        display: {
+          productName: ing.materialSnapshotName || 'Nguyên liệu custom',
+          skuCode: ing.materialSkuCode || '',
+          categoryName: bundleTag,
+          packagingType: `${bundleTag} · ${packingLabel}`,
+          imageUrl: null,
+          origin: null,
+          flavorProfile: null,
+          weightLabel: null,
+        },
+      }))
+    })
+
+    return [...itemLines, ...bundleLines]
+  }, [order?.items, order?.customBundles, catalogLookups])
 
   async function handleConfirmCancel() {
     if (!canApplyChanges || !order) return

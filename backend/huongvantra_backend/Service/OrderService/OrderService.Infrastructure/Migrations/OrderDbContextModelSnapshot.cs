@@ -138,6 +138,9 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("ContractCodeSnapshot")
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
@@ -150,9 +153,6 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.Property<int?>("ContractPaymentTermDaysSnapshot")
                         .HasColumnType("int");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -309,6 +309,11 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<string>("RefundedByName")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp(6)");
 
                     b.Property<string>("ShippingAddress")
                         .HasMaxLength(255)
@@ -640,6 +645,55 @@ namespace OrderService.Infrastructure.Migrations
                     b.ToTable("Payments", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.PaymentIdempotency", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ResultJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("PaymentId");
+
+                    b.HasIndex("OrderId", "ActionType");
+
+                    b.ToTable("PaymentIdempotencies", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.PosCashSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -704,12 +758,12 @@ namespace OrderService.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<DateTime?>("ShiftEndsAtUtc")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("ShiftLabel")
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
-
-                    b.Property<DateTime?>("ShiftEndsAtUtc")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<Guid?>("ShiftSlotId")
                         .HasColumnType("char(36)");
@@ -1077,6 +1131,25 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.PaymentIdempotency", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OrderService.Domain.Entities.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.PromotionCustomerTierScope", b =>

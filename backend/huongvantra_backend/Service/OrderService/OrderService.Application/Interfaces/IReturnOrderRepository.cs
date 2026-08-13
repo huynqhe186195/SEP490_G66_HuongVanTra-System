@@ -7,7 +7,11 @@ public interface IReturnOrderRepository
 {
     Task<string> GenerateReturnCodeAsync(CancellationToken ct = default);
     Task<ReturnOrder?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<ReturnOrder?> GetTrackedByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<ReturnOrder>> GetBySourceOrderIdAsync(Guid sourceOrderId, CancellationToken ct = default);
+    Task<Dictionary<Guid, int>> GetPendingReturnQuantitiesByOrderIdAsync(
+        Guid sourceOrderId,
+        CancellationToken ct = default);
     Task<(List<(ReturnOrder Item, OrderChannel SourceChannel)> Items, int Total)> GetPagedAsync(
         string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,
         int page, int pageSize, CancellationToken ct = default);

@@ -45,6 +45,14 @@ export function mapCustomer(item) {
     taxCode: item.taxCode ?? item.TaxCode ?? '',
     tier: item.tier ?? item.Tier ?? null,
     address: item.address ?? item.Address ?? '',
+    legalRepresentativeName: item.legalRepresentativeName ?? item.LegalRepresentativeName ?? '',
+    legalRepresentativePosition: item.legalRepresentativePosition ?? item.LegalRepresentativePosition ?? '',
+    legalRepresentativeIdNumber: item.legalRepresentativeIdNumber ?? item.LegalRepresentativeIdNumber ?? '',
+    legalRepresentativeIdIssuePlace: item.legalRepresentativeIdIssuePlace ?? item.LegalRepresentativeIdIssuePlace ?? '',
+    legalRepresentativeIdIssueDate: item.legalRepresentativeIdIssueDate ?? item.LegalRepresentativeIdIssueDate ?? '',
+    bankAccountNumber: item.bankAccountNumber ?? item.BankAccountNumber ?? '',
+    bankName: item.bankName ?? item.BankName ?? '',
+    registeredAddress: item.registeredAddress ?? item.RegisteredAddress ?? '',
   }
 }
 
@@ -297,6 +305,19 @@ export async function fetchCustomerByPhone(phone, options = {}) {
   return mapCustomerDetail(data)
 }
 
+export async function searchCustomersForCheckout(params = {}) {
+  const query = new URLSearchParams()
+  if (params.search) query.set('search', params.search)
+  if (params.customerType) query.set('customerType', params.customerType)
+  if (params.exactPhone) query.set('exactPhone', 'true')
+  query.set('page', String(params.page || 1))
+  query.set('pageSize', String(params.pageSize || 20))
+
+  const data = await apiRequestAuth(`/api/customers/checkout-search?${query.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return paged.items.map(mapCustomer).filter(Boolean)
+}
+
 export function createCustomerForOrder(payload) {
   return apiRequestAuth('/api/customers/pos-quick', {
     method: 'POST',
@@ -341,6 +362,14 @@ export function buildCreateCustomerBody(payload) {
     assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
+    legalRepresentativeName: payload.legalRepresentativeName || null,
+    legalRepresentativePosition: payload.legalRepresentativePosition || null,
+    legalRepresentativeIdNumber: payload.legalRepresentativeIdNumber || null,
+    legalRepresentativeIdIssuePlace: payload.legalRepresentativeIdIssuePlace || null,
+    legalRepresentativeIdIssueDate: payload.legalRepresentativeIdIssueDate || null,
+    bankAccountNumber: payload.bankAccountNumber || null,
+    bankName: payload.bankName || null,
+    registeredAddress: payload.registeredAddress || null,
   }
 }
 
@@ -358,6 +387,14 @@ export function buildUpdateCustomerBody(payload) {
     assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
+    legalRepresentativeName: payload.legalRepresentativeName || null,
+    legalRepresentativePosition: payload.legalRepresentativePosition || null,
+    legalRepresentativeIdNumber: payload.legalRepresentativeIdNumber || null,
+    legalRepresentativeIdIssuePlace: payload.legalRepresentativeIdIssuePlace || null,
+    legalRepresentativeIdIssueDate: payload.legalRepresentativeIdIssueDate || null,
+    bankAccountNumber: payload.bankAccountNumber || null,
+    bankName: payload.bankName || null,
+    registeredAddress: payload.registeredAddress || null,
   }
 }
 

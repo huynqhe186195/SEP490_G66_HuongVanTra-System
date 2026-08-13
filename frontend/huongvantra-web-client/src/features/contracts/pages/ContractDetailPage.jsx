@@ -10,6 +10,8 @@ import { canApproveContracts } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   deleteContract,
+  exportContractDocx,
+  exportContractPdf,
   fetchContractById,
   reviewContract,
   submitContract,
@@ -132,6 +134,19 @@ function ContractDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isActionBusy, setIsActionBusy] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  async function handleExport(format) {
+    setIsExporting(true)
+    try {
+      if (format === 'docx') await exportContractDocx(id)
+      else await exportContractPdf(id)
+    } catch (err) {
+      showError(err?.message ?? 'Không thể xuất file hợp đồng.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   async function load() {
     setIsLoading(true)
@@ -250,8 +265,26 @@ function ContractDetailPage() {
         title={contract.contractCode}
         description={contract.title}
         rightContent={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={contract.status} />
+            <button
+              onClick={() => handleExport('docx')}
+              disabled={isExporting || isActionBusy}
+              title="Tải file Word (.docx)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e5de] px-3 py-2 text-sm font-medium text-[#1a1a1a] hover:bg-[#f9f7f2] disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">description</span>
+              {isExporting ? 'Đang xuất...' : 'Tải Word'}
+            </button>
+            <button
+              onClick={() => handleExport('pdf')}
+              disabled={isExporting || isActionBusy}
+              title="Tải file PDF"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8e5de] px-3 py-2 text-sm font-medium text-[#1a1a1a] hover:bg-[#f9f7f2] disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+              {isExporting ? 'Đang xuất...' : 'Tải PDF'}
+            </button>
             {showEditActions && (
               <>
                 <Link
@@ -354,7 +387,7 @@ function ContractDetailPage() {
             <InfoRow label="Hạn mức công nợ" value={formatVnd(contract.creditLimit)} />
             <InfoRow
               label="Kỳ hạn thanh toán"
-              value={contract.paymentTermDays != null ? `NET ${contract.paymentTermDays}` : null}
+              value={contract.paymentTermDays != null ? `NET ${contract.paymentTermDays} (Trong vòng ${contract.paymentTermDays} ngày)` : null}
             />
           </div>
 
@@ -363,6 +396,63 @@ function ContractDetailPage() {
             <div className="rounded-xl border border-[#f0eee6] bg-white p-6">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#717971]">Điều khoản / Ghi chú</h2>
               <p className="whitespace-pre-wrap text-sm text-[#1a1a1a]">{contract.notes}</p>
+            </div>
+          )}
+
+          {/* Contract document fields */}
+          {(contract.signedAtLocation || contract.paymentMethod || contract.deliveryTerms || contract.shippingResponsibility) && (
+            <div className="rounded-xl border border-[#f0eee6] bg-white p-6">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#717971]">Thông tin hợp đồng (xuất file)</h2>
+              {contract.signedAtLocation && <InfoRow label="Địa điểm ký kết" value={contract.signedAtLocation} />}
+              {contract.paymentMethod && <InfoRow label="Hình thức thanh toán" value={contract.paymentMethod} />}
+              {contract.deliveryTerms && <InfoRow label="Điều khoản giao hàng" value={<span className="whitespace-pre-wrap">{contract.deliveryTerms}</span>} />}
+              {contract.shippingResponsibility && <InfoRow label="Bên chịu vận chuyển" value={contract.shippingResponsibility} />}
+            </div>
+          )}
+
+          {/* Line items */}
+          {contract.lineItems && contract.lineItems.length > 0 && (
+            <div className="rounded-xl border border-[#f0eee6] bg-white p-6">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#717971]">Danh sách hàng hóa</h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-[#f9f7f2]">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-[#717971]">STT</th>
+                      <th className="px-3 py-2 text-left font-medium text-[#717971]">Tên hàng</th>
+                      <th className="px-3 py-2 text-left font-medium text-[#717971]">Mã SKU</th>
+                      <th className="px-3 py-2 text-left font-medium text-[#717971]">Đơn vị</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#717971]">Số lượng</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#717971]">Đơn giá</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#717971]">Thành tiền</th>
+                      <th className="px-3 py-2 text-left font-medium text-[#717971]">Ghi chú</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0eee6]">
+                    {contract.lineItems.map((l) => (
+                      <tr key={l.id} className="hover:bg-[#fafaf7]">
+                        <td className="px-3 py-2 text-[#717971]">{l.lineNumber}</td>
+                        <td className="px-3 py-2 font-medium text-[#1a1a1a]">{l.productName}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-[#717971]">{l.skuCode}</td>
+                        <td className="px-3 py-2 text-[#717971]">{l.unit || '—'}</td>
+                        <td className="px-3 py-2 text-right">{Number(l.quantity).toLocaleString('vi-VN')}</td>
+                        <td className="px-3 py-2 text-right">{formatVnd(l.unitPrice)}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatVnd(l.lineAmount)}</td>
+                        <td className="px-3 py-2 text-[#717971]">{l.note || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-[#f9f7f2]">
+                    <tr>
+                      <td colSpan={6} className="px-3 py-2 text-right text-sm font-semibold text-[#1a1a1a]">Tổng cộng:</td>
+                      <td className="px-3 py-2 text-right text-sm font-semibold text-[#1a1a1a]">
+                        {formatVnd(contract.lineItems.reduce((s, l) => s + Number(l.lineAmount), 0))}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </div>

@@ -27,6 +27,14 @@ namespace CustomerService.Infrastructure.Migrations
                     b.Property<Guid?>("AssignedSaleId")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("BankAccountNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("BankName")
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -63,10 +71,33 @@ namespace CustomerService.Infrastructure.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
 
+                    b.Property<DateOnly?>("LegalRepresentativeIdIssueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalRepresentativeIdIssuePlace")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("LegalRepresentativeIdNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("LegalRepresentativeName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("LegalRepresentativePosition")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<string>("RegisteredAddress")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("Source")
                         .HasMaxLength(20)

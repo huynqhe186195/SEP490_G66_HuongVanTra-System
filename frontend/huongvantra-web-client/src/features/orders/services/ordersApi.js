@@ -1,4 +1,5 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { mapCustomBundle } from './customBundleApi.js'
 
 function normalizeEnum(value) {
   return String(value || '').trim()
@@ -175,6 +176,9 @@ export function mapOrderDetail(item) {
     pickupCode: item.pickupCode ?? item.PickupCode ?? '',
     depositAmount: Number(item.depositAmount ?? item.DepositAmount ?? 0),
     remainingAmountDue: Number(item.remainingAmountDue ?? item.RemainingAmountDue ?? 0),
+    customBundles: Array.isArray(item.customBundles ?? item.CustomBundles)
+      ? (item.customBundles ?? item.CustomBundles).map(mapCustomBundle).filter(Boolean)
+      : [],
   }
 }
 
@@ -360,15 +364,15 @@ export function buildCreateOrderBody(payload) {
       unitPrice: Number(line.unitPrice),
       isGift: Boolean(line.isGift),
     })),
-    customBundles: (payload.customBundles ?? []).map((b) => ({
-      label: b.label || null,
-      note: b.note || null,
-      ingredients: (b.ingredients ?? []).map((i) => ({
-        materialSkuId: i.materialSkuId,
-        materialSkuCode: i.materialSkuCode,
-        materialSnapshotName: i.materialSnapshotName,
-        quantity: Number(i.quantity),
-        unitPrice: Number(i.unitPrice),
+    CustomBundles: ((payload.customBundles || payload.CustomBundles) ?? []).map((b) => ({
+      Label: b.label || b.Label || null,
+      Note: b.note || b.Note || null,
+      Ingredients: ((b.ingredients || b.Ingredients) ?? []).map((i) => ({
+        MaterialSkuId: i.materialSkuId || i.MaterialSkuId,
+        MaterialSkuCode: i.materialSkuCode || i.MaterialSkuCode,
+        MaterialSnapshotName: i.materialSnapshotName || i.MaterialSnapshotName,
+        Quantity: Number(i.quantity || i.Quantity),
+        UnitPrice: Number(i.unitPrice || i.UnitPrice),
       })),
     })),
   }
@@ -521,18 +525,28 @@ export function mapReturnOrderSummary(item) {
     exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
     note: item.note ?? item.Note ?? null,
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    acceptanceStatus: normalizeEnum(item.acceptanceStatus ?? item.AcceptanceStatus ?? 'Accepted'),
+    acceptedAt: item.acceptedAt ?? item.AcceptedAt ?? null,
   }
 }
 
 export function mapReturnOrderDetail(item) {
   if (!item || typeof item !== 'object') return null
   const items = item.items ?? item.Items ?? []
+  const evidence = item.evidenceImageUrls ?? item.EvidenceImageUrls ?? []
   return {
     ...mapReturnOrderSummary(item),
     netCustomerPays: Number(item.netCustomerPays ?? item.NetCustomerPays ?? 0),
     customerPaidAmount: Number(item.customerPaidAmount ?? item.CustomerPaidAmount ?? 0),
     refundMethod: item.refundMethod ?? item.RefundMethod ?? '',
     note: item.note ?? item.Note ?? null,
+    rejectedAt: item.rejectedAt ?? item.RejectedAt ?? null,
+    rejectionReason: item.rejectionReason ?? item.RejectionReason ?? null,
+    acceptedBySystem: Boolean(item.acceptedBySystem ?? item.AcceptedBySystem),
+    managerOverride: Boolean(item.managerOverride ?? item.ManagerOverride),
+    policyCode: item.policyCode ?? item.PolicyCode ?? null,
+    policyVersion: item.policyVersion ?? item.PolicyVersion ?? null,
+    evidenceImageUrls: Array.isArray(evidence) ? evidence.map((url) => String(url)).filter(Boolean) : [],
     items: Array.isArray(items) ? items.map(mapReturnOrderLine).filter(Boolean) : [],
   }
 }
@@ -550,6 +564,8 @@ export function mapReturnOrderResult(item) {
     refundAmount: Number(item.refundAmount ?? item.RefundAmount ?? 0),
     exchangeOrderId: item.exchangeOrderId ?? item.ExchangeOrderId ?? null,
     exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
+    acceptanceStatus: normalizeEnum(item.acceptanceStatus ?? item.AcceptanceStatus ?? 'Accepted'),
+    acceptedAt: item.acceptedAt ?? item.AcceptedAt ?? null,
   }
 }
 
@@ -607,6 +623,21 @@ export async function fetchReturnById(id) {
   throw lastError || new Error('Không tìm thấy phiếu trả hàng.')
 }
 
+export async function acceptReturn(returnId) {
+  const data = await apiRequestAuth(`/api/v1/returns/${encodeURIComponent(returnId)}/accept`, {
+    method: 'POST',
+  })
+  return mapReturnOrderResult(data)
+}
+
+export async function rejectReturn(returnId, reason = null) {
+  const data = await apiRequestAuth(`/api/v1/returns/${encodeURIComponent(returnId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+  return mapReturnOrderResult(data)
+}
+
 export async function fetchReturnsByOrderId(orderId) {
   const data = await apiRequestAuth(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, { method: 'GET' })
   return Array.isArray(data) ? data.map(mapReturnOrderSummary).filter(Boolean) : []
@@ -634,6 +665,18 @@ export async function returnOrder(orderId, payload) {
       otherReason: payload.otherReason?.trim() || null,
       exchangeFulfillment: payload.exchangeFulfillment || null,
       exchangeManualDiscount: Number(payload.exchangeManualDiscount ?? 0),
+      checklistAnswers: Array.isArray(payload.checklistAnswers)
+        ? payload.checklistAnswers
+            .filter((item) => item?.id)
+            .map((item) => ({
+              id: String(item.id).trim(),
+              checked: Boolean(item.checked),
+            }))
+        : [],
+      evidenceImageUrls: Array.isArray(payload.evidenceImageUrls)
+        ? payload.evidenceImageUrls.map((url) => String(url || '').trim()).filter(Boolean)
+        : [],
+      managerOverride: Boolean(payload.managerOverride),
     }),
   })
   return mapReturnOrderResult(data)

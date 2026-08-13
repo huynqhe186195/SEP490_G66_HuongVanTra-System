@@ -1,4 +1,5 @@
 using DocumentService.Application.Interfaces;
+using DocumentService.Application.Models;
 using DocumentService.Application.UseCases;
 using DocumentService.Infrastructure.Data;
 using DocumentService.Infrastructure.Repositories;
@@ -8,6 +9,7 @@ using HuongVanTra.Shared.Audit;
 using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,7 +36,14 @@ builder.Services.AddDbContext<DocumentDbContext>(options =>
 
 builder.Services.AddScoped<IContractRepository, ContractRepository>();
 builder.Services.AddScoped<ContractLogic>();
+builder.Services.AddScoped<IContractDocxParser, ContractDocxParser>();
+builder.Services.AddScoped<IContractPdfParser, ContractPdfParser>();
 builder.Services.AddHostedService<DocumentService.WebAPI.Services.ContractExpiryHostedService>();
+
+builder.Services.Configure<SellerProfileOptions>(builder.Configuration.GetSection("SellerProfile"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SellerProfileOptions>>().Value);
+builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractDocxGenerator>("docx");
+builder.Services.AddKeyedSingleton<IContractDocumentGenerator, ContractPdfGenerator>("pdf");
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
@@ -43,6 +52,15 @@ builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(cl
     var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+
+builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    var internalKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalKey))
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalKey);
+});
 
 builder.Services.AddMassTransit(x =>
 {

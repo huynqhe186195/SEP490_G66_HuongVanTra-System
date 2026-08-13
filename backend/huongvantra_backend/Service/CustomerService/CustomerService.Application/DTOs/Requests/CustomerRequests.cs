@@ -12,7 +12,15 @@ public record CreateCustomerRequest(
     int? TierId,
     Guid? AssignedSaleId,
     CustomerSource? Source = null,
-    string? Department = null
+    string? Department = null,
+    string? RegisteredAddress = null,
+    string? LegalRepresentativeName = null,
+    string? LegalRepresentativePosition = null,
+    string? LegalRepresentativeIdNumber = null,
+    string? LegalRepresentativeIdIssuePlace = null,
+    DateOnly? LegalRepresentativeIdIssueDate = null,
+    string? BankAccountNumber = null,
+    string? BankName = null
 );
 
 public record UpdateCustomerRequest(
@@ -25,7 +33,15 @@ public record UpdateCustomerRequest(
     int? TierId,
     Guid? AssignedSaleId,
     CustomerSource? Source = null,
-    string? Department = null
+    string? Department = null,
+    string? RegisteredAddress = null,
+    string? LegalRepresentativeName = null,
+    string? LegalRepresentativePosition = null,
+    string? LegalRepresentativeIdNumber = null,
+    string? LegalRepresentativeIdIssuePlace = null,
+    DateOnly? LegalRepresentativeIdIssueDate = null,
+    string? BankAccountNumber = null,
+    string? BankName = null
 );
 
 public record CheckoutCustomerSearchRequest(

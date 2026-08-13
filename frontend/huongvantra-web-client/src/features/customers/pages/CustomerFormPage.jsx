@@ -94,10 +94,11 @@ function CustomerFormPage() {
       : ['general', 'vip', 'corporate'].includes(requestedType)
         ? requestedType
         : 'general'
+  const prefillName = !isEditMode ? (searchParams.get('name') ?? '') : ''
   const [form, setForm] = useState({
     type: initialType,
     customerCode: '',
-    name: '',
+    name: prefillName,
     phone: '',
     email: '',
     address: '',
@@ -105,6 +106,14 @@ function CustomerFormPage() {
     source: '',
     assignedEmployeeId: '',
     status: 'active',
+    legalRepresentativeName: '',
+    legalRepresentativePosition: '',
+    legalRepresentativeIdNumber: '',
+    legalRepresentativeIdIssuePlace: '',
+    legalRepresentativeIdIssueDate: '',
+    bankAccountNumber: '',
+    bankName: '',
+    registeredAddress: '',
   })
   const isCorporateProfile = form.type === 'corporate'
   const isCorporateLocked = isCorporateProfile && !canManageCorporate
@@ -263,6 +272,14 @@ function CustomerFormPage() {
       source: customer.source || '',
       assignedEmployeeId: customer.assignedEmployeeId || '',
       status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
+      legalRepresentativeName: customer.legalRepresentativeName || '',
+      legalRepresentativePosition: customer.legalRepresentativePosition || '',
+      legalRepresentativeIdNumber: customer.legalRepresentativeIdNumber || '',
+      legalRepresentativeIdIssuePlace: customer.legalRepresentativeIdIssuePlace || '',
+      legalRepresentativeIdIssueDate: customer.legalRepresentativeIdIssueDate || '',
+      bankAccountNumber: customer.bankAccountNumber || '',
+      bankName: customer.bankName || '',
+      registeredAddress: customer.registeredAddress || '',
     })
     setCurrentDebt(Number(customer.currentDebt || 0))
     setTotalSpend(Number(customer.totalSpend || 0))
@@ -308,6 +325,14 @@ function CustomerFormPage() {
     source: form.source || null,
     assignedSaleId: form.assignedEmployeeId || null,
     tierId: null,
+    legalRepresentativeName: form.type === 'corporate' ? (form.legalRepresentativeName.trim() || null) : null,
+    legalRepresentativePosition: form.type === 'corporate' ? (form.legalRepresentativePosition.trim() || null) : null,
+    legalRepresentativeIdNumber: form.type === 'corporate' ? (form.legalRepresentativeIdNumber.trim() || null) : null,
+    legalRepresentativeIdIssuePlace: form.type === 'corporate' ? (form.legalRepresentativeIdIssuePlace.trim() || null) : null,
+    legalRepresentativeIdIssueDate: form.type === 'corporate' ? (form.legalRepresentativeIdIssueDate || null) : null,
+    bankAccountNumber: form.type === 'corporate' ? (form.bankAccountNumber.trim() || null) : null,
+    bankName: form.type === 'corporate' ? (form.bankName.trim() || null) : null,
+    registeredAddress: form.type === 'corporate' ? (form.registeredAddress.trim() || null) : null,
   })
 
   const handleTypeChange = (type) => {
@@ -545,6 +570,108 @@ function CustomerFormPage() {
                   />
                   <FieldError message={fieldErrors.taxCode} />
                 </label>
+              ) : null}
+
+              {form.type === 'corporate' ? (
+                <div className="md:col-span-2 space-y-4 rounded-xl border border-[#c1c9c0]/40 bg-[#fafaf7] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#717971]">Thông tin pháp lý (dùng cho hợp đồng)</p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="text-xs font-semibold text-[#717971]">Địa chỉ trụ sở chính</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="Địa chỉ đăng ký kinh doanh..."
+                        value={form.registeredAddress}
+                        onChange={updateField('registeredAddress')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={500}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Người đại diện pháp luật</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="Họ và tên..."
+                        value={form.legalRepresentativeName}
+                        onChange={updateField('legalRepresentativeName')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={200}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Chức vụ</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="Giám đốc / Tổng giám đốc..."
+                        value={form.legalRepresentativePosition}
+                        onChange={updateField('legalRepresentativePosition')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={100}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Số CMND/CCCD</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="Số giấy tờ tùy thân..."
+                        value={form.legalRepresentativeIdNumber}
+                        onChange={updateField('legalRepresentativeIdNumber')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={20}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Nơi cấp</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="VD: Cục Cảnh sát QLHC về TTXH..."
+                        value={form.legalRepresentativeIdIssuePlace}
+                        onChange={updateField('legalRepresentativeIdIssuePlace')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={200}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Ngày cấp</span>
+                      <input type="date"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        value={form.legalRepresentativeIdIssueDate}
+                        onChange={updateField('legalRepresentativeIdIssueDate')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Số tài khoản ngân hàng</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="Số tài khoản..."
+                        value={form.bankAccountNumber}
+                        onChange={updateField('bankAccountNumber')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={50}
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-xs font-semibold text-[#717971]">Ngân hàng</span>
+                      <input type="text"
+                        className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                        placeholder="VD: Vietcombank - CN Hà Nội..."
+                        value={form.bankName}
+                        onChange={updateField('bankName')}
+                        readOnly={isReadOnly}
+                        disabled={isReadOnly}
+                        maxLength={200}
+                      />
+                    </label>
+                  </div>
+                </div>
               ) : null}
 
               <label className="space-y-2">
