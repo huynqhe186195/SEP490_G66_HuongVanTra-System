@@ -2053,23 +2053,12 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                   <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.maxStock} onChange={(event) => updateSku(index, { maxStock: event.target.value })} />
                 </label>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:col-span-2 md:self-end md:pb-2">
-                  {isFinishedProduct ? (
+                  {!isFinishedProduct ? (
                     <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <input type="checkbox" checked={sku.canBeBomComponent === true} onChange={(event) => updateSku(index, { canBeBomComponent: event.target.checked })} />
-                      Thành phần BOM
+                      <input type="checkbox" checked={sku.canUseInCustom === true} onChange={(event) => updateSku(index, { canUseInCustom: event.target.checked })} />
+                      Dùng Custom
                     </label>
-                  ) : (
-                    <>
-                      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <input type="checkbox" checked={sku.canBeBomComponent !== false} onChange={(event) => updateSku(index, { canBeBomComponent: event.target.checked })} />
-                        Thành phần BOM
-                      </label>
-                      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <input type="checkbox" checked={sku.canUseInCustom === true} onChange={(event) => updateSku(index, { canUseInCustom: event.target.checked })} />
-                        Dùng Custom
-                      </label>
-                    </>
-                  )}
+                  ) : null}
                 </div>
               </div>
               {isFinishedProduct ? (
@@ -3244,7 +3233,7 @@ export default function ProductApprovalsPage() {
             <p className="mt-1">
               ZIP gồm 1 file Excel và thư mục ảnh. Đặt tên ảnh theo Mã sản phẩm, ví dụ
               <span className="font-mono font-semibold"> SP01.jpg</span>,
-              <span className="font-mono font-semibold"> SP01_2.jpg</span>. Hệ thống tự ghép ảnh và upload lên Cloudinary khi gửi duyệt.
+              <span className="font-mono font-semibold"> SP01_2.jpg</span>.
             </p>
           </div>
 

@@ -128,7 +128,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
   return (
     <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl"
+        className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="stock-deduct-preview-title"
@@ -186,14 +186,20 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
               </div>
 
               {preview.lines?.length ? (
-                <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
-                  <table className="w-full text-left text-sm">
+                <div className="mb-4 overflow-hidden rounded-xl border border-slate-100">
+                  <table className="w-full table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[44%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[25%]" />
+                      <col className="w-[15%]" />
+                    </colgroup>
                     <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                      <tr>
+                      <tr className="text-[11px]">
                         <th className="px-4 py-3">Sản Phẩm</th>
                         <th className="px-4 py-3 text-right">Đã bán</th>
-                        <th className="px-4 py-3 text-right">Đã trừ thành phẩm</th>
-                        <th className="px-4 py-3 text-right">Chờ xử lý BOM</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-right">Đã trừ thành phẩm</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-right" title="Chờ xử lý BOM">Chờ BOM</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -203,9 +209,9 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                             <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
                             <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                           </td>
-                          <td className="px-4 py-3 text-right text-slate-700">{line.orderedQuantity}</td>
-                          <td className="px-4 py-3 text-right text-slate-700">{line.finishedDeductedQuantity}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-amber-700">
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{line.orderedQuantity}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{line.finishedDeductedQuantity}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-amber-700">
                             {line.pendingBomQuantity}
                           </td>
                         </tr>
@@ -215,14 +221,20 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 </div>
               ) : null}
 
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
-                <table className="w-full text-left text-sm">
+              <div className="overflow-hidden rounded-xl border border-slate-100">
+                <table className="w-full table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[44%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[25%]" />
+                    <col className="w-[15%]" />
+                  </colgroup>
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                    <tr>
+                    <tr className="text-[11px]">
                       <th className="px-4 py-3">Sản Phẩm</th>
-                      <th className="px-4 py-3 text-right">Cần trừ</th>
-                      <th className="px-4 py-3 text-right">Tồn hiện có</th>
-                      <th className="px-4 py-3 text-right">Thiếu</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Cần trừ</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Tồn hiện có</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Thiếu</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -231,10 +243,10 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                         <td className="px-4 py-3 font-medium text-slate-800">
                           {row.materialName || `SKU #${row.materialId}`}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-700">{row.requiredQuantity}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{row.availableQuantity}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.requiredQuantity}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.availableQuantity}</td>
                         <td
-                          className={`px-4 py-3 text-right font-semibold ${
+                          className={`whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums ${
                             row.shortageQuantity > 0 ? 'text-amber-700' : 'text-[#538463]'
                           }`}
                         >
