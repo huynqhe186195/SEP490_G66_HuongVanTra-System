@@ -196,6 +196,8 @@ public class OrderLogic(
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
+        if (await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
         return MapToResponse(order);
     }
 
@@ -209,6 +211,8 @@ public class OrderLogic(
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
+        if (await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         return MapToResponse(order);
     }
@@ -653,7 +657,9 @@ public class OrderLogic(
 
         var (backorderMinLeadDays, backorderMaxLeadDays) = ResolveBackorderLeadTime(order);
         InventoryStockHandlingResponse? stockPreview = null;
-        if ((order.OrderChannel is OrderChannel.POS or OrderChannel.COD)
+        InventoryStockHandlingResponse? customMaterialsPreview = null;
+        var isPosOrCodChannel = order.OrderChannel is OrderChannel.POS or OrderChannel.COD;
+        if (isPosOrCodChannel
             && (order.OrderDetails?.Count ?? 0) > 0)
         {
             order.FulfillmentPreference = req.FulfillmentPreference;
@@ -669,37 +675,13 @@ public class OrderLogic(
 
             if (string.Equals(stockPreview.StockHandlingMode, "BackorderAccepted", StringComparison.OrdinalIgnoreCase))
             {
-                var acceptedAt = DateTime.UtcNow;
-                order.BackorderAcceptedAt = acceptedAt;
-                order.BackorderMinLeadDaysSnapshot = backorderMinLeadDays;
-                order.BackorderMaxLeadDaysSnapshot = backorderMaxLeadDays;
-                order.EstimatedReadyFrom = acceptedAt.AddDays(backorderMinLeadDays);
-                order.EstimatedReadyTo = acceptedAt.AddDays(backorderMaxLeadDays);
-                order.FulfillmentPreference = req.FulfillmentPreference;
-                ApplyFulfillmentSnapshot(order, stockPreview, req.FulfillmentPreference);
-                order.PickupDate = req.PickupDate ?? order.EstimatedReadyFrom;
-                order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
-                ApplyPickupContact(order, req);
-
-                // COD backorder: không bắt cọc. POS vẫn yêu cầu cọc ≥50% khi cashier truyền DepositAmount.
-                if (order.OrderChannel == OrderChannel.POS
-                    && req.DepositAmount.HasValue
-                    && req.DepositAmount.Value > 0)
-                {
-                    var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
-                    if (req.DepositAmount.Value < minimumDeposit)
-                    {
-                        throw new OrderValidationException(
-                            $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
-                    }
-
-                    order.DepositAmount = req.DepositAmount.Value;
-                }
-
-                if (isPosCompletedOnCreate)
-                    order.OrderStatus = OrderStatus.WaitingMaterials;
-                else if (order.OrderChannel == OrderChannel.COD)
-                    order.OrderStatus = OrderStatus.WaitingMaterials;
+                ApplyBackorderAcceptedToOrder(
+                    order,
+                    req,
+                    backorderMinLeadDays,
+                    backorderMaxLeadDays,
+                    stockPreview,
+                    isPosCompletedOnCreate);
             }
             else
             {
@@ -712,6 +694,33 @@ public class OrderLogic(
                         allocatedPaymentTotal,
                         finalAmount);
                 }
+            }
+        }
+
+        if (isPosOrCodChannel && HasCustomIngredients(order))
+        {
+            customMaterialsPreview = await PrepareCustomMaterialsHandlingAsync(
+                order,
+                req.AcceptBackorder,
+                previewOnly: true,
+                backorderMinLeadDays,
+                backorderMaxLeadDays,
+                ct);
+            if (customMaterialsPreview.BackorderRequired)
+                throw new BackorderConfirmationRequiredException(customMaterialsPreview);
+
+            if (string.Equals(
+                    customMaterialsPreview.StockHandlingMode,
+                    "BackorderAccepted",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyBackorderAcceptedToOrder(
+                    order,
+                    req,
+                    backorderMinLeadDays,
+                    backorderMaxLeadDays,
+                    customMaterialsPreview,
+                    isPosCompletedOnCreate || order.OrderChannel == OrderChannel.COD);
             }
         }
 
@@ -742,6 +751,7 @@ public class OrderLogic(
         }
 
         InventoryStockHandlingResponse? stockHandling = null;
+        InventoryStockHandlingResponse? customMaterialsHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
         {
             stockHandling = await PreparePosStockHandlingAsync(
@@ -785,6 +795,32 @@ public class OrderLogic(
         }
         else
         {
+            MarkCustomOnlyInventorySyncedIfApplicable(order);
+        }
+
+        if ((order.OrderChannel is OrderChannel.POS or OrderChannel.COD)
+            && HasCustomIngredients(order))
+        {
+            customMaterialsHandling = await PrepareCustomMaterialsHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: false,
+                order.BackorderMinLeadDaysSnapshot ?? backorderMinLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? backorderMaxLeadDays,
+                ct);
+            if (customMaterialsHandling.BackorderRequired)
+                throw new BackorderConfirmationRequiredException(customMaterialsHandling);
+
+            if (string.Equals(
+                    customMaterialsHandling.StockHandlingMode,
+                    "BackorderAccepted",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                order.OrderStatus = PreferHeavierOrderStatus(
+                    order.OrderStatus,
+                    OrderStatus.WaitingMaterials);
+            }
+
             MarkCustomOnlyInventorySyncedIfApplicable(order);
         }
 
@@ -850,6 +886,17 @@ public class OrderLogic(
                 order.Id,
                 OrderActivityType.InventorySynced,
                 stockHandling.Message,
+                actorId,
+                actorName,
+                ct);
+        }
+
+        if (customMaterialsHandling != null)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.InventorySynced,
+                customMaterialsHandling.Message,
                 actorId,
                 actorName,
                 ct);
@@ -939,6 +986,18 @@ public class OrderLogic(
         {
             if (request.PaidAmount > 0 || request.TransferQrAmount > 0)
                 throw new OrderValidationException("Đơn 0 đồng hợp lệ không cần khoản thanh toán.");
+            return [];
+        }
+
+        // Form B2B cũ gửi COD cho «ghi nợ» — không tạo khoản thu hộ COD.
+        var requestedMethod = request.Payments is { Count: > 0 }
+            ? request.Payments[0].PaymentMethod
+            : request.PaymentMethod;
+        if (request.OrderChannel == OrderChannel.B2B
+            && requestedMethod is PaymentMethod.COD or PaymentMethod.Debt
+            && request.PaidAmount <= 0
+            && (request.Payments is null || request.Payments.Count == 0 || request.Payments.All(p => p.Amount <= 0)))
+        {
             return [];
         }
 
@@ -1765,7 +1824,11 @@ public class OrderLogic(
         EnsureCanView(order, access);
 
         if (order.OrderStatus != OrderStatus.ReadyToDeliver)
+        {
+            if (order.OrderStatus == OrderStatus.Completed)
+                return;
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
+        }
 
         var claimed = await _orderRepo.TryTransitionStatusAsync(
             order.Id, OrderStatus.ReadyToDeliver, OrderStatus.Completed, ct);
@@ -1778,8 +1841,8 @@ public class OrderLogic(
             throw new OrderValidationException("Trạng thái đơn vừa thay đổi; không thể xác nhận giao hàng.");
         }
 
+        // TryTransition đã Reload entity — status = Completed, RowVersion khớp DB.
         var deliveredAt = DateTime.UtcNow;
-        order.OrderStatus = OrderStatus.Completed;
         order.CompletedAt ??= deliveredAt;
         order.DeliveredAt = deliveredAt;
         order.DeliveredBy = actorId;
@@ -1825,7 +1888,10 @@ public class OrderLogic(
 
         if (order.DepositAmount is not > 0)
             throw new OrderValidationException("Đơn này không phải đơn đặt cọc.");
-        if (order.OrderStatus != OrderStatus.ReadyToDeliver)
+
+        // ReadyToDeliver = luồng chuẩn; Completed + còn thiếu tiền = sửa lỗi concurrency cũ
+        // (đã chuyển Completed trước khi ghi được khoản thu nốt).
+        if (order.OrderStatus is not (OrderStatus.ReadyToDeliver or OrderStatus.Completed))
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
@@ -1833,6 +1899,10 @@ public class OrderLogic(
             .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
             .Sum(payment => payment.Amount);
         var remaining = Math.Max(0, order.FinalAmount - collected);
+
+        if (order.OrderStatus == OrderStatus.Completed && remaining <= 0)
+            return MapToResponse(order);
+
         if (remaining > 0 && request.Amount < remaining)
         {
             throw new OrderValidationException(
@@ -1887,10 +1957,17 @@ public class OrderLogic(
                 actorId,
                 actorName,
                 ct);
+
+            // Ghi thanh toán trước khi chuyển Completed — tránh mất khoản thu nếu bước giao lỗi.
+            await _orderRepo.SaveChangesAsync(ct);
         }
 
-        await MarkDeliveredAsync(id, access, actorId, actorName, ct);
-        return MapToResponse(order);
+        if (order.OrderStatus == OrderStatus.ReadyToDeliver)
+            await MarkDeliveredAsync(id, access, actorId, actorName, ct);
+
+        var refreshed = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        return MapToResponse(refreshed);
     }
 
     /// <summary>
@@ -2023,6 +2100,25 @@ public class OrderLogic(
             }
         }
 
+        if (hasPendingTransfer
+            && order.OrderChannel == OrderChannel.POS
+            && HasCustomIngredients(order))
+        {
+            var (previewMinLeadDays, previewMaxLeadDays) = ResolveBackorderLeadTime(order);
+            var customPreview = await PrepareCustomMaterialsHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: true,
+                order.BackorderMinLeadDaysSnapshot ?? previewMinLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? previewMaxLeadDays,
+                ct);
+            if (customPreview.BackorderRequired)
+            {
+                throw new OrderValidationException(
+                    "Tồn nguyên liệu gói custom đã thay đổi sau khi tạo mã QR. Cần khách xác nhận chờ hàng trước khi xử lý lại.");
+            }
+        }
+
         var completionTarget = order.BackorderAcceptedAt.HasValue
             ? OrderStatus.WaitingMaterials
             : OrderStatus.Completed;
@@ -2140,6 +2236,40 @@ public class OrderLogic(
         else
         {
             MarkCustomOnlyInventorySyncedIfApplicable(order);
+        }
+
+        if (order.OrderChannel == OrderChannel.POS && HasCustomIngredients(order))
+        {
+            var (minLeadDays, maxLeadDays) = ResolveBackorderLeadTime(order);
+            var customHandling = await PrepareCustomMaterialsHandlingAsync(
+                order,
+                order.BackorderAcceptedAt.HasValue,
+                previewOnly: false,
+                order.BackorderMinLeadDaysSnapshot ?? minLeadDays,
+                order.BackorderMaxLeadDaysSnapshot ?? maxLeadDays,
+                ct);
+            if (customHandling.BackorderRequired)
+                throw new OrderValidationException(
+                    "Tồn nguyên liệu gói custom đã thay đổi và khách chưa xác nhận chờ hàng.");
+
+            if (string.Equals(
+                    customHandling.StockHandlingMode,
+                    "BackorderAccepted",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                order.OrderStatus = PreferHeavierOrderStatus(
+                    order.OrderStatus,
+                    OrderStatus.WaitingMaterials);
+            }
+
+            MarkCustomOnlyInventorySyncedIfApplicable(order);
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.InventorySynced,
+                customHandling.Message,
+                actorId,
+                actorName,
+                ct);
         }
 
         // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
@@ -3046,6 +3176,122 @@ public class OrderLogic(
         }
     }
 
+    private static bool HasCustomIngredients(Order order) =>
+        order.CustomBundles?.Any(bundle => (bundle.Ingredients?.Count ?? 0) > 0) ?? false;
+
+    private static List<InventoryStockHandlingItemRequest> AggregateCustomMaterialItems(Order order) =>
+        (order.CustomBundles ?? [])
+            .SelectMany(bundle => bundle.Ingredients ?? [])
+            .Where(ingredient => ingredient.MaterialSkuId != Guid.Empty && ingredient.Quantity > 0)
+            .GroupBy(ingredient => ingredient.MaterialSkuId)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new InventoryStockHandlingItemRequest(
+                    group.Key,
+                    first.MaterialSnapshotName,
+                    first.MaterialSkuCode,
+                    group.Sum(ingredient => ingredient.Quantity));
+            })
+            .OrderBy(item => item.SkuSnapshotCode ?? item.SkuSnapshotName ?? item.SkuId.ToString())
+            .ToList();
+
+    private async Task<InventoryStockHandlingResponse> PrepareCustomMaterialsHandlingAsync(
+        Order order,
+        bool acceptBackorder,
+        bool previewOnly,
+        int backorderMinLeadDays,
+        int backorderMaxLeadDays,
+        CancellationToken ct)
+    {
+        var items = AggregateCustomMaterialItems(order);
+        if (items.Count == 0)
+        {
+            return new InventoryStockHandlingResponse(
+                order.Id,
+                order.OrderCode,
+                "Immediate",
+                false,
+                "Gói custom không có nguyên liệu cần kiểm tra tồn.",
+                [],
+                []);
+        }
+
+        try
+        {
+            return await _inventoryCatalogClient.PrepareCustomMaterialsAsync(
+                new InventoryCustomMaterialsRequest(
+                    order.Id,
+                    order.OrderCode,
+                    items,
+                    acceptBackorder,
+                    previewOnly,
+                    backorderMinLeadDays,
+                    backorderMaxLeadDays),
+                ct);
+        }
+        catch (InventoryStockHandlingException ex)
+        {
+            throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    private void ApplyBackorderAcceptedToOrder(
+        Order order,
+        CreateOrderRequest req,
+        int backorderMinLeadDays,
+        int backorderMaxLeadDays,
+        InventoryStockHandlingResponse stockPreview,
+        bool setWaitingMaterials)
+    {
+        var acceptedAt = order.BackorderAcceptedAt ?? DateTime.UtcNow;
+        order.BackorderAcceptedAt = acceptedAt;
+        order.BackorderMinLeadDaysSnapshot = backorderMinLeadDays;
+        order.BackorderMaxLeadDaysSnapshot = backorderMaxLeadDays;
+        order.EstimatedReadyFrom = acceptedAt.AddDays(backorderMinLeadDays);
+        order.EstimatedReadyTo = acceptedAt.AddDays(backorderMaxLeadDays);
+        // Gói custom: luôn nhận một lần khi đủ hàng (không giao từng phần NL/bao bì).
+        var preference = HasCustomIngredients(order)
+            ? FulfillmentPreference.CompleteDelivery
+            : req.FulfillmentPreference;
+        order.FulfillmentPreference = preference;
+        ApplyFulfillmentSnapshot(order, stockPreview, preference);
+        order.PickupDate = req.PickupDate ?? order.EstimatedReadyFrom;
+        order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
+        ApplyPickupContact(order, req);
+
+        if (order.OrderChannel == OrderChannel.POS
+            && req.DepositAmount.HasValue
+            && req.DepositAmount.Value > 0)
+        {
+            var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
+            if (req.DepositAmount.Value < minimumDeposit)
+            {
+                throw new OrderValidationException(
+                    $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
+            }
+
+            order.DepositAmount = req.DepositAmount.Value;
+        }
+
+        if (setWaitingMaterials)
+            order.OrderStatus = OrderStatus.WaitingMaterials;
+    }
+
+    private static OrderStatus PreferHeavierOrderStatus(OrderStatus current, OrderStatus candidate)
+    {
+        static int Rank(OrderStatus status) => status switch
+        {
+            OrderStatus.WaitingMaterials => 4,
+            OrderStatus.WaitingProduction => 3,
+            OrderStatus.WaitingTransfer => 2,
+            OrderStatus.ReadyToDeliver => 1,
+            _ => 0
+        };
+
+        return Rank(candidate) > Rank(current) ? candidate : current;
+    }
+
     /// <summary>
     /// Fail-soft: đơn đã Cancelled + Outbox; nếu Inventory lỗi vẫn không rollback đơn — event là lớp dự phòng.
     /// </summary>
@@ -3462,7 +3708,17 @@ public class OrderLogic(
             ?? throw new OrderNotFoundException(bundleId);
 
         if (bundle.PackingStatus == PackingStatus.Packed)
-            throw new OrderValidationException("Gói này đã được đóng gói.");
+        {
+            // Đơn đã đóng gói trước khi có bước advance trạng thái — tự sửa khi mở lại.
+            if (bundle.OrderId != Guid.Empty)
+            {
+                var order = await _orderRepo.GetByIdAsync(bundle.OrderId, ct);
+                if (order is not null && await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
+                    await _orderRepo.SaveChangesAsync(ct);
+            }
+
+            return MapBundle(bundle);
+        }
 
         // Validation tăng cường: kiểm tra lại canUseInCustom và productType tại thời điểm pack
         // để phát hiện trường hợp SKU bị disable sau khi đơn được tạo
@@ -3486,20 +3742,77 @@ public class OrderLogic(
         var referenceCode = !string.IsNullOrWhiteSpace(bundle.Order?.OrderCode)
             ? bundle.Order.OrderCode
             : bundle.Label ?? bundle.Id.ToString("N")[..8];
-        await _inventoryCatalogClient.DeductMaterialsAsync(
-            ingredients,
-            "CustomBundle",
-            bundle.Id,
-            referenceCode,
-            $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
-            ct);
+        try
+        {
+            await _inventoryCatalogClient.DeductMaterialsAsync(
+                ingredients,
+                "CustomBundle",
+                bundle.Id,
+                referenceCode,
+                $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+                ct);
+        }
+        catch (InventoryStockHandlingException ex)
+        {
+            // Inventory trả message nghiệp vụ (vd thiếu tồn Kho) — đưa lên 400 cho FE hiện rõ.
+            throw new OrderValidationException(ex.Message);
+        }
 
         bundle.PackingStatus = PackingStatus.Packed;
         bundle.PackedAt = DateTime.UtcNow;
         bundle.UpdatedAt = DateTime.UtcNow;
         await _customBundleRepo.SaveChangesAsync(ct);
 
+        if (bundle.OrderId != Guid.Empty)
+        {
+            var order = await _orderRepo.GetByIdAsync(bundle.OrderId, ct);
+            if (order is not null && await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
+                await _orderRepo.SaveChangesAsync(ct);
+        }
+
         return MapBundle(bundle);
+    }
+
+    /// <summary>
+    /// Sau khi mọi gói custom đã đóng gói (đã trừ NL Kho): thoát WaitingMaterials.
+    /// Nhận tại quầy → ReadyToDeliver (chờ «Đã giao»); giao đi → Processing.
+    /// </summary>
+    private async Task<bool> TryAdvanceOrderAfterAllCustomBundlesPackedAsync(Order order, CancellationToken ct)
+    {
+        if (order.OrderStatus != OrderStatus.WaitingMaterials)
+            return false;
+
+        var bundles = order.CustomBundles ?? [];
+        if (bundles.Count == 0)
+            return false;
+        if (bundles.Any(b => b.PackingStatus != PackingStatus.Packed))
+            return false;
+
+        // Còn dòng thành phẩm chờ nguyên liệu / chờ Thủ kho → chưa advance.
+        if ((order.OrderDetails ?? []).Any(d => d.BackorderQuantity > 0))
+            return false;
+        if (order.InventorySyncStatus is InventorySyncStatus.PendingDeduction
+            or InventorySyncStatus.PendingReconciliation)
+            return false;
+
+        var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
+        var nextStatus = pickupAtStore ? OrderStatus.ReadyToDeliver : OrderStatus.Processing;
+        OrderStatusTransition.EnsureValidTransition(order.OrderStatus, nextStatus, order.Id);
+
+        order.OrderStatus = nextStatus;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Updated,
+            pickupAtStore
+                ? "Đã đóng gói custom và trừ nguyên liệu Kho. Đơn sẵn sàng giao, chờ khách nhận hàng."
+                : "Đã đóng gói custom và trừ nguyên liệu Kho. Đơn chuyển sang đang xử lý giao hàng.",
+            actorId: null,
+            actorName: "Hệ thống",
+            ct);
+
+        return true;
     }
 
     private static CustomBundleResponse MapBundle(CustomBundle b) => new(
@@ -3507,7 +3820,11 @@ public class OrderLogic(
         b.PackingStatus.ToString(), b.PackedAt,
         (b.Ingredients ?? []).Select(i => new CustomBundleIngredientResponse(
             i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
-            i.Quantity, i.UnitPrice, i.SubTotal)).ToList());
+            i.Quantity, i.UnitPrice, i.SubTotal)).ToList(),
+        b.Order?.OrderCode,
+        b.Order?.CustomerSnapshotName,
+        b.Order?.OrderStatus.ToString(),
+        b.CreatedAt);
 
     private static OrderResponse MapToResponse(Order o, StockHandlingSummaryResponse? stockHandlingSummary = null) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
@@ -3675,6 +3992,7 @@ public class OrderLogic(
         OrderChannel.Zalo => "Zalo",
         OrderChannel.Phone => "điện thoại",
         OrderChannel.COD => "COD",
+        OrderChannel.B2B => "hợp đồng doanh nghiệp",
         _ => channel.ToString()
     };
 

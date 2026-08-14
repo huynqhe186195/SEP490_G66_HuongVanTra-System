@@ -1,10 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { showError, showInfo } from '../../../app/toast.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { showError } from '../../../app/toast.js'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { fetchStoreSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
 
 function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'
+}
+
+/** Tem chống giả luôn kèm gói custom — không cho bỏ chọn trong bảng. */
+const DEFAULT_CUSTOM_STICKER_SKU_CODE = 'BB-TEM-HVT'
+
+function isDefaultStickerSku(materialOrCode) {
+  const code = String(
+    typeof materialOrCode === 'string'
+      ? materialOrCode
+      : materialOrCode?.skuCode || '',
+  ).toUpperCase()
+  return code === DEFAULT_CUSTOM_STICKER_SKU_CODE
+}
+
+/** Sửa unitName bị hỏng encoding (C??i ← Cái) từ seed/import charset sai. */
+function normalizeUnitName(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  if (/^C\?\?i$/i.test(text) || /^C\uFFFD\uFFFDi$/i.test(text)) return 'Cái'
+  return text
 }
 
 function parseMoneyInput(val) {
@@ -45,6 +65,7 @@ async function fetchMaterials(search = '') {
         skuCode: item.skuCode ?? item.SkuCode ?? item.code ?? item.Code ?? '',
         name: item.productName ?? item.ProductName ?? item.name ?? item.Name ?? '',
         unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
+        unitName: normalizeUnitName(item.unitName ?? item.UnitName ?? item.baseUnit ?? item.BaseUnit),
         packagingType: item.packagingType ?? item.PackagingType ?? '',
         description: item.description ?? item.Description ?? '',
         productType,
@@ -90,6 +111,12 @@ function DetailModal({ material, onClose }) {
             <span className="text-[#717971]">Giá bán lẻ</span>
             <span className="font-semibold text-[#356647]">{fmt(material.unitPrice)}</span>
           </div>
+          {material.unitName ? (
+            <div className="flex justify-between gap-2">
+              <span className="text-[#717971]">Đơn vị</span>
+              <span className="font-medium text-[#1b1c17]">{material.unitName}</span>
+            </div>
+          ) : null}
           {material.packagingType && (
             <div className="flex justify-between gap-2">
               <span className="text-[#717971]">Quy cách</span>
@@ -135,6 +162,16 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     loadMaterials('')
   }, [loadMaterials])
 
+  const lockedSticker = useMemo(
+    () => materials.find((m) => isDefaultStickerSku(m)) ?? null,
+    [materials],
+  )
+
+  const selectableMaterials = useMemo(
+    () => materials.filter((m) => !isDefaultStickerSku(m)),
+    [materials],
+  )
+
   const handleSearchChange = (e) => {
     const val = e.target.value
     setSearch(val)
@@ -151,6 +188,9 @@ export default function CustomBundlePanel({ bundles, onChange }) {
   }
 
   const toggleRow = (skuId) => {
+    const material = materials.find((m) => m.skuId === skuId)
+    if (material && isDefaultStickerSku(material)) return
+
     setSelected((prev) => {
       const next = { ...prev }
       if (next[skuId]) {
@@ -158,7 +198,6 @@ export default function CustomBundlePanel({ bundles, onChange }) {
       } else {
         next[skuId] = true
         if (!qtyMap[skuId]) setQtyMap((q) => ({ ...q, [skuId]: 1 }))
-        const material = materials.find((m) => m.skuId === skuId)
         if (material && priceMap[skuId] === undefined) {
           setPriceMap((p) => ({ ...p, [skuId]: Number(material.unitPrice) || 0 }))
         }
@@ -187,79 +226,75 @@ export default function CustomBundlePanel({ bundles, onChange }) {
   }
 
   const commitQty = (skuId) => {
-    const material = materials.find((m) => m.skuId === skuId)
-    if (!material) return
-
     setQtyMap((prev) => {
       const requested = Math.floor(Number(prev[skuId]))
       const validated = Number.isFinite(requested) && requested >= 1 ? requested : 1
-
-      // Kiểm tra tồn kho: không cho phép đặt số lượng > stockOnHand
-      if (validated > material.stockOnHand) {
-        showError(
-          `${material.name}: chỉ còn ${material.stockOnHand} trong kho, không đủ ${validated}`,
-        )
-        return { ...prev, [skuId]: Math.max(1, material.stockOnHand) }
-      }
-
+      // Sell-first: cho vượt tồn Kho; thiếu NL → backorder lúc thanh toán (giống thành phẩm).
       return { ...prev, [skuId]: validated }
     })
   }
 
-  const selectedMaterials = materials.filter((m) => selected[m.skuId])
+  const selectedMaterials = selectableMaterials.filter((m) => selected[m.skuId])
+  const stickerUnitPrice = lockedSticker ? priceOf(lockedSticker) : 0
+  const stickerLineTotal = lockedSticker ? stickerUnitPrice * 1 : 0
   const bundleTotal = selectedMaterials.reduce(
     (s, m) => s + priceOf(m) * qtyOf(m.skuId),
     0,
-  )
+  ) + stickerLineTotal
 
   const currentBundle = (bundles ?? [])[0] ?? null
 
   const confirmBundle = () => {
-    if (selectedMaterials.length === 0) return
+    if (selectedMaterials.length === 0) {
+      showError('Chọn ít nhất một nguyên liệu / bao bì (ngoài tem mặc định).')
+      return
+    }
 
-    // Validation cuối cùng: kiểm tra tồn kho trước khi confirm
-    const insufficientItems = selectedMaterials.filter((m) => {
-      const requested = qtyOf(m.skuId)
-      return requested > m.stockOnHand
-    })
-
-    if (insufficientItems.length > 0) {
-      const names = insufficientItems.map((m) => `${m.name} (cần ${qtyOf(m.skuId)}, còn ${m.stockOnHand})`).join(', ')
-      showError(`Không đủ tồn kho: ${names}`)
+    if (!lockedSticker) {
+      showError('Không tìm thấy tem chống giả (BB-TEM-HVT). Kiểm tra SKU «Dùng trong custom».')
       return
     }
 
     const zeroPriceItems = selectedMaterials.filter((m) => priceOf(m) <= 0)
-    if (zeroPriceItems.length > 0) {
+    if (zeroPriceItems.length > 0 || stickerUnitPrice <= 0) {
+      const names = [
+        ...zeroPriceItems.map((m) => m.name),
+        stickerUnitPrice <= 0 ? lockedSticker.name : null,
+      ].filter(Boolean)
       showError(
-        `Nguyên liệu phải có giá bán > 0: ${zeroPriceItems.map((m) => m.name).join(', ')}. Nhập giá trên POS hoặc cập nhật giá bán SKU.`,
+        `Nguyên liệu phải có giá bán > 0: ${names.join(', ')}. Nhập giá trên POS hoặc cập nhật giá bán SKU.`,
       )
       return
     }
 
-    const hasPackaging = selectedMaterials.some((m) => m.productType === 'BAO_BI')
-    if (!hasPackaging) {
-      // Soft hint — không chặn: roadmap cho phép chỉ NL; bao bì nên thêm khi giao/đóng gói.
-      showInfo(
-        'Gợi ý: gói chưa có bao bì (túi/hộp/tem). Với COD/đóng gói xuất kho nên thêm BAO_BI.',
-      )
-    }
+    const ingredients = selectedMaterials.map((m) => {
+      const quantity = qtyOf(m.skuId)
+      const unitPrice = priceOf(m)
+      return {
+        materialSkuId: m.skuId,
+        materialSkuCode: m.skuCode,
+        materialSnapshotName: m.name,
+        unitName: m.unitName || null,
+        quantity,
+        unitPrice,
+        subTotal: unitPrice * quantity,
+      }
+    })
+
+    ingredients.push({
+      materialSkuId: lockedSticker.skuId,
+      materialSkuCode: lockedSticker.skuCode,
+      materialSnapshotName: lockedSticker.name,
+      unitName: lockedSticker.unitName || null,
+      quantity: 1,
+      unitPrice: stickerUnitPrice,
+      subTotal: stickerUnitPrice,
+    })
 
     const newBundle = {
       label: label.trim() || null,
       note: null,
-      ingredients: selectedMaterials.map((m) => {
-        const quantity = qtyOf(m.skuId)
-        const unitPrice = priceOf(m)
-        return {
-          materialSkuId: m.skuId,
-          materialSkuCode: m.skuCode,
-          materialSnapshotName: m.name,
-          quantity,
-          unitPrice,
-          subTotal: unitPrice * quantity,
-        }
-      }),
+      ingredients,
     }
     onChange([newBundle])
     setSelected({})
@@ -302,7 +337,10 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                   <tr key={idx} className="border-t border-[#e8f0e8] first:border-t-0">
                     <td className="py-1 pr-2 text-[#1b1c17]">{ing.materialSnapshotName}</td>
                     <td className="py-1 pr-2 text-[#717971]">{ing.materialSkuCode}</td>
-                    <td className="py-1 pr-2 text-right text-[#717971]">×{ing.quantity}</td>
+                    <td className="py-1 pr-2 text-right text-[#717971]">
+                      ×{ing.quantity}
+                      {ing.unitName ? ` ${ing.unitName}` : ''}
+                    </td>
                     <td className="py-1 text-right font-semibold text-[#356647]">
                       {fmt(ing.unitPrice * ing.quantity)}
                     </td>
@@ -327,12 +365,40 @@ export default function CustomBundlePanel({ bundles, onChange }) {
         <div className="rounded-xl border border-[#c1c9c0] bg-white p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-[#1b1c17]">Chọn nguyên liệu</p>
-            {selectedMaterials.length > 0 && (
+            {(selectedMaterials.length > 0 || lockedSticker) && (
               <span className="text-xs font-medium text-[#356647]">
-                {selectedMaterials.length} đã chọn · {fmt(bundleTotal)}
+                {selectedMaterials.length} đã chọn
+                {lockedSticker ? ' + tem' : ''} · {fmt(bundleTotal)}
               </span>
             )}
           </div>
+
+          {lockedSticker ? (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#356647]/30 bg-[#f3f8f3] px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wide text-[#356647]">Kèm mặc định</p>
+                <p className="text-sm font-semibold text-[#1b1c17]">
+                  {lockedSticker.name}
+                  <span className="ml-2 font-mono text-xs font-normal text-[#717971]">
+                    {lockedSticker.skuCode}
+                  </span>
+                </p>
+                <p className="text-xs text-[#717971]">
+                  Luôn kèm 1 tem · tồn {lockedSticker.stockOnHand.toLocaleString('vi-VN')}
+                  {lockedSticker.unitName ? ` ${lockedSticker.unitName}` : ''}
+                  {lockedSticker.stockOnHand < 1 ? ' · bán trước, trừ sau' : ''}
+                  {' · '}{fmt(stickerUnitPrice)}
+                </p>
+              </div>
+              <span className="rounded-full bg-[#356647] px-2.5 py-1 text-xs font-bold text-white">
+                ×1 cố định
+              </span>
+            </div>
+          ) : !loading && !search.trim() ? (
+            <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Chưa có tem chống giả (BB-TEM-HVT) trong danh mục custom — kiểm tra SKU «Dùng trong custom».
+            </p>
+          ) : null}
 
           <input
             type="text"
@@ -344,7 +410,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
 
           {loading ? (
             <p className="py-6 text-center text-xs text-[#717971]">Đang tải...</p>
-          ) : materials.length === 0 ? (
+          ) : selectableMaterials.length === 0 ? (
             <div className="space-y-1 py-6 text-center text-xs text-[#717971]">
               <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : 'Chưa có nguyên liệu được phép dùng trong Custom.'}</p>
               {!search.trim() ? (
@@ -362,13 +428,13 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                     <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Sản Phẩm</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Tồn đang có</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Giá/đv</th>
-                    <th className="w-24 px-3 py-2 text-center text-xs font-semibold text-[#717971]">Số lượng</th>
+                    <th className="w-28 px-3 py-2 text-center text-xs font-semibold text-[#717971]">Số lượng</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Thành tiền</th>
                     <th className="w-8 px-2 py-2" />
                   </tr>
                 </thead>
                 <tbody>
-                  {materials.map((m) => {
+                  {selectableMaterials.map((m) => {
                     const isSelected = Boolean(selected[m.skuId])
                     const qtyValue = qtyMap[m.skuId] ?? 1
                     const unitPrice = priceOf(m)
@@ -408,9 +474,23 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                           ) : null}
                         </td>
                         <td className="px-3 py-2.5 text-right">
-                          <span className={m.stockOnHand <= 0 ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
-                            {m.stockOnHand.toLocaleString('vi-VN')}
-                          </span>
+                          <div className={m.stockOnHand <= 0 || (isSelected && qtyOf(m.skuId) > m.stockOnHand) ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
+                            <span>
+                              {m.stockOnHand.toLocaleString('vi-VN')}
+                              {m.unitName ? (
+                                <span className="ml-1 text-xs font-normal text-[#717971]">{m.unitName}</span>
+                              ) : null}
+                            </span>
+                            {isSelected && qtyOf(m.skuId) > m.stockOnHand ? (
+                              <p className="mt-0.5 text-[10px] font-semibold leading-tight text-amber-700">
+                                bán trước, trừ sau
+                              </p>
+                            ) : m.stockOnHand <= 0 ? (
+                              <p className="mt-0.5 text-[10px] font-semibold leading-tight text-amber-700">
+                                bán trước, trừ sau
+                              </p>
+                            ) : null}
+                          </div>
                         </td>
                         <td
                           className="px-3 py-2.5 text-right"
@@ -436,20 +516,27 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                           )}
                         </td>
                         <td
-                          className="w-24 px-3 py-2.5 text-center"
+                          className="w-28 px-3 py-2.5 text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={isSelected ? qtyValue : ''}
-                            disabled={!isSelected}
-                            placeholder="—"
-                            onChange={(e) => setQty(m.skuId, e.target.value)}
-                            onBlur={() => commitQty(m.skuId)}
-                            className="w-16 rounded border border-[#c1c9c0] px-2 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-[#356647] disabled:cursor-default disabled:bg-transparent disabled:text-[#c1c9c0] disabled:placeholder-[#c1c9c0]"
-                          />
+                          <div className="inline-flex items-center justify-center gap-1">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={isSelected ? qtyValue : ''}
+                              disabled={!isSelected}
+                              placeholder="—"
+                              onChange={(e) => setQty(m.skuId, e.target.value)}
+                              onBlur={() => commitQty(m.skuId)}
+                              className="w-14 rounded border border-[#c1c9c0] px-2 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-[#356647] disabled:cursor-default disabled:bg-transparent disabled:text-[#c1c9c0] disabled:placeholder-[#c1c9c0]"
+                            />
+                            {m.unitName ? (
+                              <span className="min-w-[1.5rem] text-left text-xs font-medium text-[#717971]">
+                                {m.unitName}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
                           {isSelected ? (

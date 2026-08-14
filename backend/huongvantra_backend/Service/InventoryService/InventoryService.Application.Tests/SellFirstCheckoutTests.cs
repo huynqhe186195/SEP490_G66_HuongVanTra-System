@@ -895,4 +895,70 @@ public sealed class SellFirstCheckoutTests
 
         return new ProductCatalogSnapshot([finishedProduct, materialProduct]);
     }
+
+    // ── Custom materials sell-first ─────────────────────────────────────────
+
+    private static PrepareCustomMaterialsRequest CustomReq(
+        Guid orderId,
+        params (Guid skuId, int qty)[] lines) =>
+        new(
+            orderId,
+            $"HVT-{orderId:N}"[..10],
+            lines.Select(l => new PreparePosStockDeductionItemRequest(l.skuId, "NL", "NL-CODE", l.qty)).ToList());
+
+    [Fact]
+    public async Task CustomMaterials_SufficientWarehouse_ReturnsImmediate_NoDeduct()
+    {
+        await using var db = NewDb();
+        var skuId = Guid.NewGuid();
+        await SeedAsync(db, skuId, onHand: 0, warehouseQty: 10, code: "NL-A");
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        var result = await logic.PrepareCustomMaterialsAsync(
+            CustomReq(orderId, (skuId, 5)),
+            CancellationToken.None);
+
+        Assert.Equal("Immediate", result.StockHandlingMode);
+        Assert.False(result.BackorderRequired);
+        Assert.Equal(10, (await db.SkuStocks.SingleAsync()).WarehouseQuantityOnHand);
+        Assert.Equal(5, result.Lines.Single().FinishedDeductedQuantity);
+        Assert.Equal(0, result.Lines.Single().PendingBomQuantity);
+    }
+
+    [Fact]
+    public async Task CustomMaterials_Shortage_WithoutAccept_ReturnsBackorderRequired()
+    {
+        await using var db = NewDb();
+        var skuId = Guid.NewGuid();
+        await SeedAsync(db, skuId, onHand: 0, warehouseQty: 2, code: "NL-B");
+        var logic = BuildLogic(db);
+
+        var result = await logic.PrepareCustomMaterialsAsync(
+            CustomReq(Guid.NewGuid(), (skuId, 5)) with { AcceptBackorder = false },
+            CancellationToken.None);
+
+        Assert.Equal("BackorderRequired", result.StockHandlingMode);
+        Assert.True(result.BackorderRequired);
+        Assert.Equal(2, result.Lines.Single().FinishedDeductedQuantity);
+        Assert.Equal(3, result.Lines.Single().PendingBomQuantity);
+        Assert.Equal(2, (await db.SkuStocks.SingleAsync()).WarehouseQuantityOnHand);
+    }
+
+    [Fact]
+    public async Task CustomMaterials_Shortage_WithAccept_ReturnsBackorderAccepted_NoDeduct()
+    {
+        await using var db = NewDb();
+        var skuId = Guid.NewGuid();
+        await SeedAsync(db, skuId, onHand: 0, warehouseQty: 1, code: "NL-C");
+        var logic = BuildLogic(db);
+
+        var result = await logic.PrepareCustomMaterialsAsync(
+            CustomReq(Guid.NewGuid(), (skuId, 4)) with { AcceptBackorder = true },
+            CancellationToken.None);
+
+        Assert.Equal("BackorderAccepted", result.StockHandlingMode);
+        Assert.False(result.BackorderRequired);
+        Assert.Equal(1, (await db.SkuStocks.SingleAsync()).WarehouseQuantityOnHand);
+    }
 }

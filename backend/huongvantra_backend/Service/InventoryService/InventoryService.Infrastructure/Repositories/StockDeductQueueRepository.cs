@@ -171,4 +171,16 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
 
         return query.Select(q => q.OrderId).Distinct().ToListAsync(ct);
     }
+
+    public Task<List<StockDeductQueue>> GetCancelledAfterShippingAsync(
+        int take = 50,
+        CancellationToken ct = default) =>
+        _db.StockDeductQueues
+            .Include(q => q.Items)
+            .Where(q =>
+                q.QueueStatus == QueueStatus.Cancelled
+                && q.OrderStockStatus == "cancelled_after_shipping")
+            .OrderByDescending(q => q.CancelledAt ?? q.CreatedAt)
+            .Take(Math.Clamp(take, 1, 200))
+            .ToListAsync(ct);
 }

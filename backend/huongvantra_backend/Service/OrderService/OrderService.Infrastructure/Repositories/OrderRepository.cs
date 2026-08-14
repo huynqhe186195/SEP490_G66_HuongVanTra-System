@@ -301,14 +301,28 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         Guid orderId,
         OrderStatus expectedStatus,
         OrderStatus nextStatus,
-        CancellationToken ct = default) =>
-        await _db.Orders
+        CancellationToken ct = default)
+    {
+        var affected = await _db.Orders
             .Where(order => order.Id == orderId && order.OrderStatus == expectedStatus)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(order => order.OrderStatus, nextStatus)
                     .SetProperty(order => order.UpdatedAt, DateTime.UtcNow),
-                ct) == 1;
+                ct);
+
+        if (affected != 1)
+            return false;
+
+        // ExecuteUpdate bỏ qua change tracker → RowVersion trên entity đang track bị lệch
+        // và SaveChanges sau đó ném DbUpdateConcurrencyException (500 khi thu nốt + giao).
+        var tracked = _db.ChangeTracker.Entries<Order>()
+            .FirstOrDefault(entry => entry.Entity.Id == orderId);
+        if (tracked is not null)
+            await tracked.ReloadAsync(ct);
+
+        return true;
+    }
 
     public async Task AddAsync(Order order, CancellationToken ct = default) =>
         await _db.Orders.AddAsync(order, ct);

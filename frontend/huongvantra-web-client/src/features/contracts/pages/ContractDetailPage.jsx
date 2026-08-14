@@ -139,8 +139,8 @@ function ContractDetailPage() {
   async function handleExport(format) {
     setIsExporting(true)
     try {
-      if (format === 'docx') await exportContractDocx(id)
-      else await exportContractPdf(id)
+      if (format === 'docx') await exportContractDocx(id, contract?.contractCode)
+      else await exportContractPdf(id, contract?.contractCode)
     } catch (err) {
       showError(err?.message ?? 'Không thể xuất file hợp đồng.')
     } finally {

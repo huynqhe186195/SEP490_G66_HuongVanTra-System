@@ -227,10 +227,10 @@ function ReturnInspectionsPage() {
         title="Kiểm tra hàng trả"
         titleInfo={
           canInspect
-            ? 'Hàng trả KHÔNG tự tăng tồn bán. Kiểm tra rồi quyết định: nhập lại / kiểm dịch / tiêu hủy.'
-            : 'Theo dõi trạng thái kiểm tra hàng trả.'
+            ? 'Hàng trả / hàng thu hồi sau hủy đang giao không tự về Kệ. Chọn Bán lại để nhập Kệ, hoặc Tiêu hủy.'
+            : 'Theo dõi trạng thái kiểm tra hàng trả / thu hồi.'
         }
-        searchPlaceholder="Tìm mã trả / mã đơn / SKU..."
+        searchPlaceholder="Tìm mã trả / HUY-… / mã đơn / SKU..."
         searchValue={searchValue}
         onSearchChange={(value) => {
           setSearchValue(value)

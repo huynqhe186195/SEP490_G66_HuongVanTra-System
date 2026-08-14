@@ -521,9 +521,20 @@ public class ContractLogic
             return new ContractLineItemRequest(m.SkuId!.Value, parsedItem.Quantity, parsedItem.UnitPrice, parsedItem.Note);
         }).ToList();
 
+        var titleSource = !string.IsNullOrWhiteSpace(parsed.ContractCode)
+            ? parsed.ContractCode.Trim()
+            : parsed.BuyerCompanyName?.Trim();
+        var title = string.IsNullOrWhiteSpace(titleSource)
+            ? "Hợp đồng nhập từ file"
+            : titleSource.Length >= 5
+                ? $"Hợp đồng {titleSource}"
+                : $"Hợp đồng nhập {titleSource}";
+        if (title.Length > 200)
+            title = title[..200];
+
         var createRequest = new CreateContractRequest(
             customerMatch.CustomerId!.Value,
-            parsed.ContractCode ?? $"IMPORT-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            title,
             Domain.Enums.ContractType.CungCap,
             parsed.EffectiveDate,
             parsed.EffectiveDate?.AddYears(1),

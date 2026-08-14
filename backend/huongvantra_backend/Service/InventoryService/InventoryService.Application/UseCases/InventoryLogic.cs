@@ -554,6 +554,111 @@ public class InventoryLogic(
         return response;
     }
 
+    /// <summary>
+    /// Sell-first custom: kiểm tra tồn Kho cho NL/bao bì. Không trừ tồn (trừ lúc đóng gói).
+    /// Thiếu dòng nào + !AcceptBackorder → BackorderRequired (giống POS-06a).
+    /// </summary>
+    public async Task<PosStockHandlingResponse> PrepareCustomMaterialsAsync(
+        PrepareCustomMaterialsRequest request,
+        CancellationToken ct = default)
+    {
+        if (request.OrderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId là bắt buộc khi kiểm tra nguyên liệu custom.");
+        if (string.IsNullOrWhiteSpace(request.OrderCode))
+            throw new InventoryValidationException("Mã đơn hàng là bắt buộc khi kiểm tra nguyên liệu custom.");
+
+        var normalizedItems = NormalizePosStockItems(request.Items);
+        if (normalizedItems.Count == 0)
+        {
+            return new PosStockHandlingResponse(
+                request.OrderId,
+                request.OrderCode.Trim(),
+                "Immediate",
+                false,
+                "Gói custom không có nguyên liệu cần kiểm tra tồn.",
+                [],
+                []);
+        }
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var lines = new List<PosStockHandlingLineResponse>();
+            var hasShortage = false;
+
+            foreach (var item in normalizedItems)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt);
+                var available = _inventoryOptions.SimulateWarehouse
+                    ? Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0)
+                    : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationWarehouse, innerCt));
+
+                var covered = Math.Min(item.Quantity, available);
+                var shortage = item.Quantity - covered;
+                if (shortage > 0)
+                    hasShortage = true;
+
+                var skuCode = NormalizeSnapshotText(item.SkuSnapshotCode)
+                    ?? NormalizeSnapshotText(stock?.SkuCode);
+                var skuName = NormalizeSnapshotText(item.SkuSnapshotName)
+                    ?? skuCode
+                    ?? item.SkuId.ToString();
+
+                lines.Add(new PosStockHandlingLineResponse(
+                    item.SkuId,
+                    skuCode,
+                    skuName,
+                    item.Quantity,
+                    // Map vào FinishedDeductedQuantity / PendingBomQuantity để FE modal backorder tái sử dụng.
+                    covered,
+                    shortage,
+                    0));
+            }
+
+            if (hasShortage && !request.AcceptBackorder)
+            {
+                var backorderMessage = BuildBackorderMessage(
+                    request.BackorderMinLeadDays,
+                    request.BackorderMaxLeadDays);
+                return new PosStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode.Trim(),
+                    "BackorderRequired",
+                    false,
+                    backorderMessage,
+                    [],
+                    lines,
+                    true,
+                    backorderMessage);
+            }
+
+            if (hasShortage)
+            {
+                var backorderMessage = BuildBackorderMessage(
+                    request.BackorderMinLeadDays,
+                    request.BackorderMaxLeadDays);
+                return new PosStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode.Trim(),
+                    "BackorderAccepted",
+                    false,
+                    $"Khách đã xác nhận chờ hàng cho gói custom. {backorderMessage} Nguyên liệu sẽ trừ khi đóng gói.",
+                    [],
+                    lines,
+                    false,
+                    backorderMessage);
+            }
+
+            return new PosStockHandlingResponse(
+                request.OrderId,
+                request.OrderCode.Trim(),
+                "Immediate",
+                false,
+                "Đủ nguyên liệu Kho cho gói custom; trừ tồn khi Thủ kho đóng gói.",
+                [],
+                lines);
+        }, ct);
+    }
+
     private static string BuildBackorderMessage(int minLeadDays, int maxLeadDays)
     {
         var minDays = Math.Max(1, minLeadDays);
@@ -571,7 +676,11 @@ public class InventoryLogic(
             return;
 
         if (await _processedEvents.ExistsAsync(OrderCancelledEventType, message.OrderId, ct))
+        {
+            // Event đã xử lý nhưng có thể thiếu ReturnInspection (bản cũ hủy sau shipping).
+            await TryEnsureCancelAfterShippingInspectionsByOrderIdAsync(message.OrderId, ct);
             return;
+        }
 
         await CancelStockQueuesForOrderCoreAsync(
             message.OrderId,
@@ -712,6 +821,19 @@ public class InventoryLogic(
                     "Đã đối soát và nhả giữ chỗ còn sót của lệnh đã hủy.");
             }
 
+            if (string.Equals(queue.OrderStockStatus, "cancelled_after_shipping", StringComparison.OrdinalIgnoreCase))
+            {
+                var created = await EnsureCancelAfterShippingInspectionsAsync(queue, innerCt);
+                await _queueRepo.SaveChangesAsync(innerCt);
+                return new CancelStockQueuesCoreResult(
+                    queue.Id,
+                    queue.QueueStatus.ToString().ToLowerInvariant(),
+                    created > 0,
+                    created > 0
+                        ? $"Đã tạo {created} dòng chờ kiểm tra hàng (hủy sau giao) để bán lại / tiêu hủy."
+                        : "Lệnh đã hủy sau giao; hàng chờ tại Kiểm tra hàng trả.");
+            }
+
             return new CancelStockQueuesCoreResult(
                 queue.Id,
                 queue.QueueStatus.ToString().ToLowerInvariant(),
@@ -723,7 +845,8 @@ public class InventoryLogic(
         {
             if (IsAfterShippingStatus(previousOrderStatus))
             {
-                // Hàng đã bàn giao: không cộng lại Kệ — Phase J Return Inspection.
+                // Hàng đã bàn giao: không cộng lại Kệ — tạo ReturnInspection (Phase J)
+                // để Thủ kho chọn Bán lại / Tiêu hủy trên màn Kiểm tra hàng trả.
                 queue.QueueStatus = QueueStatus.Cancelled;
                 queue.OrderStockStatus = "cancelled_after_shipping";
                 queue.ConfirmedAt ??= DateTime.UtcNow;
@@ -732,12 +855,15 @@ public class InventoryLogic(
                 queue.CancelledByName = NormalizeSnapshotText(canceller?.CreatedByName) ?? queue.CancelledByName;
                 queue.CancelledByRoleName = NormalizeSnapshotText(canceller?.CreatedByRoleName) ?? queue.CancelledByRoleName;
                 queue.CancelReason = reason;
+                var created = await EnsureCancelAfterShippingInspectionsAsync(queue, innerCt);
                 await _queueRepo.SaveChangesAsync(innerCt);
                 return new CancelStockQueuesCoreResult(
                     queue.Id,
                     "cancelled",
                     true,
-                    "Đã đánh dấu hủy (sau shipping — không hoàn tồn Kệ).");
+                    created > 0
+                        ? $"Đã hủy sau giao. {created} SKU chờ tại Kiểm tra hàng trả (Bán lại / Tiêu hủy)."
+                        : "Đã đánh dấu hủy (sau shipping — không hoàn tồn Kệ; xem Kiểm tra hàng trả).");
             }
 
             // Đã trừ tồn nhưng đơn chưa shipping: hoàn tồn và đổi trạng thái phải là một transaction.
@@ -860,6 +986,82 @@ public class InventoryLogic(
     /// </summary>
     private static bool IsAfterShippingStatus(string? previousStatus) =>
         string.Equals((previousStatus ?? string.Empty).Trim(), "Shipping", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Hủy sau Shipping: tạo ReturnInspection Pending theo dòng queue đã trừ tồn,
+    /// để Thủ kho «Bán lại» (về Kệ) hoặc «Tiêu hủy» trên màn Kiểm tra hàng trả.
+    /// ReturnId = OrderId (khóa tổng hợp); ReturnCode = HUY-{OrderCode}.
+    /// </summary>
+    private async Task<int> EnsureCancelAfterShippingInspectionsAsync(
+        StockDeductQueue queue,
+        CancellationToken ct)
+    {
+        var returnId = queue.OrderId;
+        var returnCode = $"HUY-{queue.OrderCode}";
+        var now = DateTime.UtcNow;
+        var created = 0;
+
+        var items = queue.Items
+            .Where(i => i.SkuId != Guid.Empty && i.Quantity > 0)
+            .GroupBy(i => i.SkuId)
+            .Select(g =>
+            {
+                var first = g.First();
+                return new
+                {
+                    SkuId = g.Key,
+                    SkuCode = NormalizeSnapshotText(first.SkuSnapshotCode) ?? first.SkuId.ToString()[..8],
+                    SkuName = NormalizeSnapshotText(first.SkuSnapshotName)
+                        ?? NormalizeSnapshotText(first.SkuSnapshotCode)
+                        ?? first.SkuId.ToString()[..8],
+                    Quantity = g.Sum(i => i.Quantity),
+                };
+            })
+            .ToList();
+
+        foreach (var item in items)
+        {
+            if (await _returnInspectionRepo.ExistsByReturnAndSkuAsync(returnId, item.SkuId, ct))
+                continue;
+
+            await _returnInspectionRepo.AddAsync(new ReturnInspection
+            {
+                Id = Guid.NewGuid(),
+                ReturnId = returnId,
+                ReturnCode = returnCode,
+                OrderId = queue.OrderId,
+                OrderCode = queue.OrderCode,
+                SkuId = item.SkuId,
+                SkuCode = item.SkuCode ?? item.SkuId.ToString()[..8],
+                SkuSnapshotName = item.SkuName ?? item.SkuCode ?? item.SkuId.ToString()[..8],
+                Quantity = item.Quantity,
+                Disposition = ReturnInspectionDisposition.Pending,
+                InspectionNote = "Hàng thu hồi sau khi hủy đơn đang giao — chờ kiểm tra để bán lại hoặc tiêu hủy.",
+                CreatedAt = now,
+                UpdatedAt = now,
+            }, ct);
+            created++;
+        }
+
+        if (created > 0)
+            await _returnInspectionRepo.SaveChangesAsync(ct);
+
+        return created;
+    }
+
+    private async Task TryEnsureCancelAfterShippingInspectionsByOrderIdAsync(
+        Guid orderId,
+        CancellationToken ct)
+    {
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue is null)
+            return;
+        if (!string.Equals(queue.OrderStockStatus, "cancelled_after_shipping", StringComparison.OrdinalIgnoreCase)
+            && !(queue.QueueStatus == QueueStatus.Cancelled && queue.IsDeducted))
+            return;
+
+        await EnsureCancelAfterShippingInspectionsAsync(queue, ct);
+    }
 
     public async Task<List<StockDeductQueueResponse>> GetWaitingQueuesAsync(
         string? status,
@@ -2389,10 +2591,41 @@ public class InventoryLogic(
     public async Task<PagedResponse<ReturnInspectionResponse>> GetReturnInspectionsPagedAsync(
         string? disposition, string? search, int page, int pageSize, CancellationToken ct = default)
     {
+        // Backfill: đơn hủy sau đang giao (bản cũ) chưa có dòng Kiểm tra hàng trả.
+        await TryBackfillCancelAfterShippingInspectionsAsync(ct);
+
         var (safePage, safeSize) = NormalizePagination(page, pageSize);
         var (items, total) = await _returnInspectionRepo.GetPagedAsync(disposition, search, safePage, safeSize, ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)safeSize));
         return new PagedResponse<ReturnInspectionResponse>(items.Select(MapReturnInspection).ToList(), safePage, safeSize, total, totalPages);
+    }
+
+    private static readonly SemaphoreSlim CancelAfterShippingBackfillGate = new(1, 1);
+    private static int _cancelAfterShippingBackfillDone;
+
+    private async Task TryBackfillCancelAfterShippingInspectionsAsync(CancellationToken ct)
+    {
+        // Chỉ chạy một lần / process — tránh N request song song (đếm tab FE) tạo duplicate.
+        if (Interlocked.CompareExchange(ref _cancelAfterShippingBackfillDone, 1, 0) != 0)
+            return;
+
+        if (!await CancelAfterShippingBackfillGate.WaitAsync(0, ct))
+            return;
+
+        try
+        {
+            var queues = await _queueRepo.GetCancelledAfterShippingAsync(50, ct);
+            foreach (var queue in queues)
+                await EnsureCancelAfterShippingInspectionsAsync(queue, ct);
+        }
+        catch
+        {
+            Interlocked.Exchange(ref _cancelAfterShippingBackfillDone, 0);
+        }
+        finally
+        {
+            CancelAfterShippingBackfillGate.Release();
+        }
     }
 
     public async Task<List<ReturnInspectionResponse>> GetReturnInspectionsByReturnIdAsync(
@@ -4801,6 +5034,7 @@ public class InventoryLogic(
                         SkuCode = item.SkuCode,
                         ActualQuantity = item.SubmittedQuantity,
                         UnitCost = item.UnitCost!.Value,
+                        QuantityOnHandBefore = (item.WarehouseQtyBefore ?? 0) + (item.ShelfQtyBefore ?? 0),
                         ReceiptLineOrder = line.ReceiptLineOrder,
                         ReceiptSkuLineCount = line.ReceiptSkuLineCount
                     },
@@ -8839,7 +9073,7 @@ public class InventoryLogic(
             .ToList();
 
         if (itemList.Count == 0)
-            throw new InventoryValidationException("Yeu cau tru nguyen lieu phai co it nhat mot SKU hop le.");
+            throw new InventoryValidationException("Yêu cầu trừ nguyên liệu phải có ít nhất một SKU hợp lệ.");
 
         var touchedSkuIds = new List<Guid>();
         await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
@@ -8851,19 +9085,29 @@ public class InventoryLogic(
             foreach (var item in itemList)
             {
                 var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
-                    ?? throw new InventoryValidationException($"Khong tim thay ton kho cho SKU {item.SkuId}.");
+                    ?? throw new InventoryValidationException($"Không tìm thấy tồn kho cho SKU {item.SkuId}.");
                 var available = _inventoryOptions.SimulateWarehouse
                     ? Math.Max(0, stock.WarehouseQuantityOnHand)
                     : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationWarehouse, innerCt));
 
                 if (available < item.Quantity)
-                    shortages.Add($"{item.SkuCode ?? stock.SkuCode}: can {item.Quantity}, con {available}, thieu {item.Quantity - available}");
+                {
+                    var code = item.SkuCode ?? stock.SkuCode ?? item.SkuId.ToString("N")[..8];
+                    var name = item.SkuName;
+                    var label = string.IsNullOrWhiteSpace(name) || string.Equals(name, code, StringComparison.OrdinalIgnoreCase)
+                        ? code
+                        : $"{code} ({name})";
+                    shortages.Add($"• {label}: cần {item.Quantity}, còn {available}, thiếu {item.Quantity - available}");
+                }
 
                 stockBySku[item.SkuId] = stock;
             }
 
             if (shortages.Count > 0)
-                throw new InventoryValidationException($"Khong du ton Kho de tru nguyen lieu: {string.Join("; ", shortages)}.");
+                throw new InventoryValidationException(
+                    "Không đủ tồn Kho để trừ nguyên liệu.\n"
+                    + string.Join("\n", shortages)
+                    + "\nNhập thêm hàng rồi thử đóng gói lại.");
 
             var referenceType = NormalizeSnapshotText(request.ReferenceType) ?? ReferenceCustomBundle;
             var referenceId = request.ReferenceId ?? Guid.Empty;

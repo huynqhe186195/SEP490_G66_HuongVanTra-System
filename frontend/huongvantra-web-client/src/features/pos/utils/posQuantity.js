@@ -1,11 +1,39 @@
 const GRAM_UNITS = new Set(['gram', 'grams', 'g'])
-const PIECE_UNITS = new Set(['piece', 'pieces', 'cai', 'chiếc'])
+const PIECE_UNITS = new Set([
+  'piece',
+  'pieces',
+  'cai',
+  'chiec',
+  'goi',
+  'hop',
+  'tui',
+  'loc',
+  'thung',
+  'vien',
+  'chai',
+  'lon',
+])
+
+function foldUnit(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
 
 export function normalizePosInventoryUnit(value) {
-  const normalized = String(value ?? '').trim().toLowerCase()
+  const normalized = foldUnit(value)
+  if (!normalized) return 'Piece'
   if (GRAM_UNITS.has(normalized)) return 'Gram'
   if (PIECE_UNITS.has(normalized)) return 'Piece'
-  throw new Error(`Đơn vị tồn kho "${value || 'không xác định'}" chưa được POS hỗ trợ.`)
+
+  // "Hộp 100g", "Gói trà", "Lon 500ml" là quy cách bán — đếm theo chiếc, không phải đơn vị tồn.
+  const firstToken = normalized.split(/[\s/\-_]+/)[0]
+  if (PIECE_UNITS.has(firstToken)) return 'Piece'
+  if (GRAM_UNITS.has(firstToken)) return 'Gram'
+
+  return 'Piece'
 }
 
 export function normalizePosBaseQuantity(value, inventoryUnit) {

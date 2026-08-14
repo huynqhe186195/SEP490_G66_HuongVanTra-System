@@ -18,6 +18,12 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
     }
 
     const ext = selectedFile.name.split('.').pop()?.toLowerCase()
+    if (ext === 'xlsx' || ext === 'xls') {
+      showError('Hợp đồng không import từ Excel. Hãy dùng file Word (.docx) hoặc PDF xuất từ hệ thống.')
+      setFile(null)
+      e.target.value = ''
+      return
+    }
     if (ext !== 'docx' && ext !== 'pdf') {
       showError('Chỉ hỗ trợ file Word (.docx) hoặc PDF (.pdf)')
       setFile(null)
@@ -38,7 +44,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
 
   async function handleImport() {
     if (!file) {
-      showError('Vui lòng chọn file Word cần import.')
+      showError('Vui lòng chọn file Word (.docx) hoặc PDF cần import.')
       return
     }
 
@@ -85,7 +91,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-[#f0eee6] px-6 py-4">
-          <h2 className="text-lg font-semibold text-[#1a1a1a]">Import hợp đồng từ file Word</h2>
+          <h2 className="text-lg font-semibold text-[#1a1a1a]">Import hợp đồng từ Word / PDF</h2>
           <button
             onClick={handleClose}
             className="rounded p-1 text-[#717971] hover:bg-[#f8f7f4]"
@@ -109,7 +115,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
                   className="w-full rounded-lg border border-[#d4d2ca] px-3 py-2 text-sm focus:border-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-[#1a1a1a] disabled:bg-[#f8f7f4]"
                 />
                 <p className="mt-1 text-xs text-[#717971]">
-                  Hỗ trợ file .docx và .pdf, tối đa 10MB
+                  Dùng file Word (.docx) hoặc PDF xuất từ hệ thống (nút Tải Word / Tải PDF). Không hỗ trợ Excel (.xlsx). Tối đa 10MB.
                 </p>
               </div>
 

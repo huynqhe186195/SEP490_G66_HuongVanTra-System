@@ -10,16 +10,14 @@ import { normalizePosBaseQuantity } from '../../pos/utils/posQuantity.js'
 import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
 import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
-import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
-
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateB2BOrder } from '../../auth/utils/permissions.js'
 import { calcOrderLineSubtotal, formatVnd } from '../utils/orderDisplay.js'
 
 const B2B_PAYMENT_OPTIONS = [
-  { value: 'COD', label: 'Ghi nợ (thanh toán sau)' },
+  { value: 'Debt', label: 'Ghi nợ (thanh toán sau)' },
   { value: 'Cash', label: 'Tiền mặt' },
-  { value: 'Transfer', label: 'Chuyển khoản' },
+  { value: 'BankTransfer', label: 'Chuyển khoản' },
 ]
 
 function OrderCreatePage() {
@@ -37,7 +35,7 @@ function OrderCreatePage() {
     shippingAddress: '',
     note: '',
     paidAmount: 0,
-    paymentMethod: 'COD',
+    paymentMethod: 'Debt',
     items: [],
   })
 
@@ -107,8 +105,8 @@ function OrderCreatePage() {
         skuSnapshotCode: li.skuCode || '',
         quantity: lineQty[li.skuId] ?? 1,
         unitPrice: li.unitPrice || 0,
-        inventoryUnit: '',
-        priceUnit: '',
+        inventoryUnit: li.unit || 'Piece',
+        priceUnit: li.unit || '',
       }))
     setForm((prev) => ({ ...prev, items }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,7 +192,7 @@ function OrderCreatePage() {
           skuId: line.skuId,
           skuSnapshotName: line.skuSnapshotName,
           skuSnapshotCode: line.skuSnapshotCode,
-          quantity: normalizePosBaseQuantity(line.quantity, line.inventoryUnit),
+          quantity: normalizePosBaseQuantity(line.quantity, 'Piece'),
           unitPrice: Number(line.unitPrice),
         }))
     } catch (error) {
@@ -209,14 +207,6 @@ function OrderCreatePage() {
 
 
 
-    if (needsShippingAddress && !isUsableShippingAddress(form.shippingAddress)) {
-
-      showError('Kênh online/COD cần địa chỉ giao hàng hợp lệ (không dùng placeholder).')
-
-      return
-
-    }
-
     const zeroTotalCheck = validateZeroTotalCheckout({
       items,
       finalAmount,
@@ -229,7 +219,7 @@ function OrderCreatePage() {
     const creditLimit = Number(contract.creditLimit ?? 0)
     if (creditLimit > 0) {
       const currentDebt = Number(form.selectedCustomer?.currentDebt ?? 0)
-      const paidNow = form.paymentMethod === 'COD' ? 0 : Math.min(Number(form.paidAmount || 0), finalAmount)
+      const paidNow = form.paymentMethod === 'Debt' ? 0 : Math.min(Number(form.paidAmount || 0), finalAmount)
       const unpaid = Math.max(0, finalAmount - paidNow)
       if (currentDebt + unpaid > creditLimit) {
         showError(
@@ -241,7 +231,7 @@ function OrderCreatePage() {
 
     try {
       setIsSaving(true)
-      const paidAmount = form.paymentMethod === 'COD'
+      const paidAmount = form.paymentMethod === 'Debt'
         ? 0
         : Math.min(Number(form.paidAmount || 0), finalAmount)
 
@@ -492,7 +482,7 @@ function OrderCreatePage() {
                 </div>
               ) : null}
 
-              {form.paymentMethod !== 'COD' ? (
+              {form.paymentMethod !== 'Debt' ? (
                 <label className="space-y-1">
                   <span className="text-xs font-semibold text-[#717971]">Đã thu</span>
                   <input

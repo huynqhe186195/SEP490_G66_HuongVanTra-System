@@ -12,6 +12,7 @@ public class ContractPdfGenerator : IContractDocumentGenerator
     static ContractPdfGenerator()
     {
         QuestPDF.Settings.License = LicenseType.Community;
+        QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
     }
 
     public Task<byte[]> GenerateDocxAsync(ContractDocumentData data, CancellationToken ct = default) =>
@@ -25,7 +26,7 @@ public class ContractPdfGenerator : IContractDocumentGenerator
             {
                 page.Size(PageSizes.A4);
                 page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Times New Roman").FontSize(12));
+                page.DefaultTextStyle(x => x.FontFamily(ContractPdfFonts.ResolveFamily()).FontSize(12));
 
                 page.Content().Column(col =>
                 {

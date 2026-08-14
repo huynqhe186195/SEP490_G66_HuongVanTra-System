@@ -35,12 +35,16 @@ export async function parseApiErrorBody(response) {
     errors = Object.values(body.errors).flat().filter(Boolean).map(String)
   }
 
-  const message =
+  const rawMessage =
     errors.join(' ') ||
     (typeof body.error === 'string' && body.error.trim()) ||
     (typeof body.message === 'string' && body.message.trim()) ||
     (typeof body.title === 'string' && body.title.trim()) ||
     fallback
+
+  const message = /unexpected error occurred/i.test(rawMessage)
+    ? 'Hệ thống gặp lỗi khi xử lý yêu cầu. Vui lòng thử lại hoặc liên hệ quản trị viên.'
+    : rawMessage
 
   return { message, errors, statusCode: body.statusCode ?? status, body }
 }
