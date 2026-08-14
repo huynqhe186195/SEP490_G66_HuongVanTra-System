@@ -989,6 +989,18 @@ public class OrderLogic(
             return [];
         }
 
+        // Form B2B cũ gửi COD cho «ghi nợ» — không tạo khoản thu hộ COD.
+        var requestedMethod = request.Payments is { Count: > 0 }
+            ? request.Payments[0].PaymentMethod
+            : request.PaymentMethod;
+        if (request.OrderChannel == OrderChannel.B2B
+            && requestedMethod is PaymentMethod.COD or PaymentMethod.Debt
+            && request.PaidAmount <= 0
+            && (request.Payments is null || request.Payments.Count == 0 || request.Payments.All(p => p.Amount <= 0)))
+        {
+            return [];
+        }
+
         if (request.PaymentMethod == PaymentMethod.COD)
         {
             return
@@ -3980,6 +3992,7 @@ public class OrderLogic(
         OrderChannel.Zalo => "Zalo",
         OrderChannel.Phone => "điện thoại",
         OrderChannel.COD => "COD",
+        OrderChannel.B2B => "hợp đồng doanh nghiệp",
         _ => channel.ToString()
     };
 

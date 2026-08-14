@@ -23,7 +23,7 @@ RUN dotnet publish Service/DocumentService/DocumentService.WebAPI/DocumentServic
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS final
 
-RUN apk add --no-cache wget \
+RUN apk add --no-cache wget fontconfig font-liberation \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app

@@ -34,7 +34,7 @@ public class GlobalExceptionMiddleware
             ContractNotFoundException => (StatusCodes.Status404NotFound, ex.Message),
             ContractValidationException => (StatusCodes.Status400BadRequest, ex.Message),
             ContractForbiddenException => (StatusCodes.Status403Forbidden, ex.Message),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
+            _ => (StatusCodes.Status500InternalServerError, "Hệ thống gặp lỗi khi xử lý hợp đồng. Vui lòng thử lại hoặc liên hệ quản trị viên.")
         };
 
         context.Response.ContentType = "application/json";

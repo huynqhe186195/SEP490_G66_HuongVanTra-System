@@ -111,14 +111,14 @@ export async function reviewContract(id, approved, rejectionNote) {
   return mapContract(data)
 }
 
-export async function exportContractDocx(id) {
+export async function exportContractDocx(id, contractCode) {
   const blob = await apiRequestAuth(`/api/contracts/${id}/export-docx`, { responseType: 'blob' })
-  downloadBlob(blob, `HopDong_${id}.docx`)
+  downloadBlob(blob, `HopDong_${contractCode || id}.docx`)
 }
 
-export async function exportContractPdf(id) {
+export async function exportContractPdf(id, contractCode) {
   const blob = await apiRequestAuth(`/api/contracts/${id}/export-pdf`, { responseType: 'blob' })
-  downloadBlob(blob, `HopDong_${id}.pdf`)
+  downloadBlob(blob, `HopDong_${contractCode || id}.pdf`)
 }
 
 export async function importContractFromDocx(file) {
