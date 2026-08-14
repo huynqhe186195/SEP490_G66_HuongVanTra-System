@@ -7,6 +7,7 @@ public record CreateEmployeeRequest(
     string FullName,
     string? Department,
     decimal ActualSalary,
+    string? PhoneNumber,
     string? BankAccountInfo,
     int? RoleId = null);
 
@@ -14,4 +15,5 @@ public record UpdateEmployeeRequest(
     string FullName,
     string? Department,
     decimal ActualSalary,
+    string? PhoneNumber,
     string? BankAccountInfo);

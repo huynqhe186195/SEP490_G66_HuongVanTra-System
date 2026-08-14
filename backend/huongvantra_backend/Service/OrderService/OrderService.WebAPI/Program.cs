@@ -233,7 +233,7 @@ public sealed class ForwardAuthorizationHeaderHandler(
         }
         else
         {
-            var serviceToken = serviceJwtProvider.Generate(PermissionNames.CreateOrder);
+            var serviceToken = serviceJwtProvider.Generate(PermissionNames.CreateOrder, PermissionNames.ViewAllCustomers);
             request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {serviceToken}");
         }
         return base.SendAsync(request, cancellationToken);

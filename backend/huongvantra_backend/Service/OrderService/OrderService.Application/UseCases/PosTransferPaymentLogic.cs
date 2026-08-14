@@ -370,7 +370,11 @@ public class PosTransferPaymentLogic(
         var isPaid = string.Equals(
             order.OrderStatus,
             OrderStatus.Completed.ToString(),
-            StringComparison.OrdinalIgnoreCase);
+            StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                paymentStatus,
+                PaymentStatus.Success.ToString(),
+                StringComparison.OrdinalIgnoreCase);
 
         return new PosOrderPaymentStatusResponse(
             order.Id,

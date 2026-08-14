@@ -21,7 +21,7 @@ function mapStaffRow(employee) {
     userId: mapped.employeeId,
     userGuid: mapped.userId,
     fullName: mapped.fullName,
-    phone: mapped.bankAccountInfo || '',
+    phone: mapped.phoneNumber || mapped.bankAccountInfo || '',
     username: mapped.username,
     department: mapped.department,
     roles: mapped.roles ?? [],
@@ -133,7 +133,7 @@ export async function fetchStaffAccount(employeeId) {
     userId: mapped.employeeId,
     userGuid: mapped.userId,
     fullName: mapped.fullName,
-    phone: mapped.bankAccountInfo || '',
+    phone: mapped.phoneNumber || mapped.bankAccountInfo || '',
     username: mapped.username,
     employeeCode: String(mapped.employeeId),
     department: mapped.department,
@@ -158,7 +158,8 @@ export async function createStaffAccount(payload) {
     fullName: payload.fullName,
     department: payload.note || null,
     actualSalary: 0,
-    bankAccountInfo: payload.phone || null,
+    phoneNumber: payload.phone || null,
+    bankAccountInfo: null,
   })
 }
 
@@ -203,7 +204,8 @@ export async function updateStaffAccount(employeeId, payload) {
     fullName: payload.fullName ?? current.fullName,
     department: payload.note ?? current.department ?? null,
     actualSalary: current.actualSalary || 0,
-    bankAccountInfo: payload.phone ?? current.phone ?? null,
+    phoneNumber: payload.phone ?? current.phone ?? null,
+    bankAccountInfo: null,
   })
 
   if (!nextActive) {

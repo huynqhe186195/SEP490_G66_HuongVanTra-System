@@ -245,7 +245,8 @@ function UsersPage() {
         fullName: createForm.fullName.trim(),
         department: null,
         actualSalary: 0,
-        bankAccountInfo: createForm.phone.trim() || null,
+        phoneNumber: createForm.phone.trim() || null,
+        bankAccountInfo: null,
       })
       showSuccess('Đã tạo tài khoản mới.')
       setCreateOpen(false)

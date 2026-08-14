@@ -928,7 +928,7 @@ public class OrderLogic(
                 await _posCashSessionLogic.RecordCashSaleAsync(cashCollected, ct);
         }
 
-        if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
+        if (order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingTransfer or OrderStatus.WaitingProduction)
             TrySendInvoiceEmail(order);
 
         return MapToResponse(order, MapStockHandlingSummary(stockHandling));
@@ -2283,14 +2283,16 @@ public class OrderLogic(
         }
 
         decimal completedDebt = 0;
-        var shouldSendInvoice = false;
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
         {
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
             completedDebt = Math.Max(0, order.FinalAmount - paidAmount);
             await EnqueueOrderCompletedAsync(order, completedDebt, ct);
-            shouldSendInvoice = true;
         }
+
+        var shouldSendInvoice = order.OrderStatus is
+            OrderStatus.Completed or OrderStatus.WaitingTransfer or OrderStatus.WaitingProduction
+            or OrderStatus.WaitingMaterials;
 
         // B6: đơn hợp đồng còn dư nợ khi bàn giao → ghi một dòng Deferred để phân biệt
         // "đã ghi nợ theo điều khoản" với "payment chưa xử lý".

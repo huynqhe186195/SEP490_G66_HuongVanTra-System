@@ -69,6 +69,7 @@ export function mapEmployee(item) {
     fullName: item.fullName ?? item.FullName ?? '',
     department: item.department ?? item.Department ?? '',
     actualSalary: Number(item.actualSalary ?? item.ActualSalary ?? 0),
+    phoneNumber: item.phoneNumber ?? item.PhoneNumber ?? '',
     bankAccountInfo: item.bankAccountInfo ?? item.BankAccountInfo ?? '',
     status: item.status ?? item.Status ?? 'Active',
     isActive: Boolean(item.isUserActive ?? item.IsUserActive ?? true),

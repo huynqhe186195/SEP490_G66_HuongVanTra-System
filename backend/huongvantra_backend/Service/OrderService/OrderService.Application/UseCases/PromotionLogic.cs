@@ -21,8 +21,6 @@ public class PromotionLogic(
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
     private const string NotApplicableMessage = "Mã giảm giá không áp dụng cho sản phẩm trong đơn hàng.";
     private const string CategoryNotApplicableMessage = "Mã giảm giá không áp dụng cho danh mục trong đơn hàng.";
-    private const string PerCustomerUsageRequiresCustomerMessage =
-        "Mã này yêu cầu chọn khách hàng để kiểm soát lượt sử dụng.";
     private const string CustomerTierRequiredMessage =
         "Mã này chỉ áp dụng cho khách hàng đã đăng ký thuộc hạng phù hợp.";
     private const string CustomerNotFoundMessage = "Không tìm thấy thông tin khách hàng.";
@@ -910,11 +908,8 @@ public class PromotionLogic(
             throw new OrderValidationException("Mã giảm giá đã hết lượt sử dụng.");
 
         var perCustomerLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitPerCustomer);
-        if (perCustomerLimit.HasValue)
+        if (perCustomerLimit.HasValue && customerId.HasValue && customerId.Value != Guid.Empty)
         {
-            if (!customerId.HasValue || customerId.Value == Guid.Empty)
-                throw new OrderValidationException(PerCustomerUsageRequiresCustomerMessage);
-
             var usedByCustomer = await _promotionRepo.CountOrdersUsingPromotionByCustomerAsync(
                 promotion.Id,
                 customerId.Value,
