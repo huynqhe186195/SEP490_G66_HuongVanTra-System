@@ -14,6 +14,10 @@ using HuongVanTra.Shared.Auth;
 using HuongVanTra.Shared.Audit;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -98,6 +102,7 @@ builder.Services.AddHttpClient<IShiftCatalogClient, ShiftCatalogClient>(client =
     var baseUrl = builder.Configuration["UserService:BaseUrl"] ?? "http://user-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+builder.Services.AddSingleton<ServiceJwtProvider>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(
@@ -186,16 +191,51 @@ app.MapControllers();
 
 app.Run();
 
-public sealed class ForwardAuthorizationHeaderHandler(IHttpContextAccessor httpContextAccessor) : DelegatingHandler
+public sealed class ServiceJwtProvider(IConfiguration configuration)
+{
+    private readonly string _secret = configuration["Jwt:Secret"]
+        ?? configuration["Jwt:Key"]
+        ?? throw new InvalidOperationException("Jwt:Secret is missing.");
+    private readonly string _issuer = configuration["Jwt:Issuer"] ?? "HuongVanTra";
+    private readonly string _audience = configuration["Jwt:Audience"] ?? "HuongVanTra";
+
+    public string Generate(params string[] permissions)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var claims = permissions
+            .Select(p => new Claim("permission", p))
+            .Append(new Claim(JwtRegisteredClaimNames.Sub, Guid.Empty.ToString()))
+            .ToList();
+        var token = new JwtSecurityToken(
+            issuer: _issuer,
+            audience: _audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: creds);
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+}
+
+public sealed class ForwardAuthorizationHeaderHandler(
+    IHttpContextAccessor httpContextAccessor,
+    ServiceJwtProvider serviceJwtProvider) : DelegatingHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
         var authorization = httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString();
-        if (!string.IsNullOrWhiteSpace(authorization))
+        if (!string.IsNullOrWhiteSpace(authorization)
+            && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
             request.Headers.TryAddWithoutValidation("Authorization", authorization);
-
+        }
+        else
+        {
+            var serviceToken = serviceJwtProvider.Generate(PermissionNames.CreateOrder);
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {serviceToken}");
+        }
         return base.SendAsync(request, cancellationToken);
     }
 }

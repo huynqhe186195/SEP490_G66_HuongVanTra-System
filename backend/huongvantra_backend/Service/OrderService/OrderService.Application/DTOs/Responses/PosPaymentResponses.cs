@@ -48,7 +48,8 @@ public record PosOrderPaymentStatusResponse(
     bool IsPaid,
     string? InvoiceCode,
     string ExpectedTransferContent,
-    decimal ExpectedAmount);
+    decimal ExpectedAmount,
+    decimal DisplayAmount);
 
 public record SepayWebhookPayload(
     [property: JsonPropertyName("id")] long Id,

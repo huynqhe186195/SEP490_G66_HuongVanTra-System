@@ -324,7 +324,8 @@ public class PosTransferPaymentLogic(
             isPaid,
             null,
             order.OrderCode,
-            ApplyTestQrAmount(GetRemainingBalance(order)));
+            ApplyTestQrAmount(GetRemainingBalance(order)),
+            GetRemainingBalance(order));
     }
 
     private static Payment? GetRemainingPayment(Order order) =>
@@ -381,6 +382,9 @@ public class PosTransferPaymentLogic(
             order.OrderCode,
             transferPayment is not null
                 ? GetTransferQrAmountForResponse(order, transferPayment)
+                : order.FinalAmount,
+            transferPayment is not null
+                ? GetRealTransferQrAmountForResponse(order, transferPayment)
                 : order.FinalAmount);
     }
 
@@ -390,6 +394,12 @@ public class PosTransferPaymentLogic(
         ApplyTestQrAmount(
             ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
             + GetDebtSettlementAmount(payment.CodDebtSettlementJson));
+
+    private static decimal GetRealTransferQrAmountForResponse(
+        OrderResponse order,
+        PaymentResponse payment) =>
+        ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
+        + GetDebtSettlementAmount(payment.CodDebtSettlementJson);
 
     public async Task HandleSepayWebhookAsync(SepayWebhookPayload payload, CancellationToken ct = default)
     {

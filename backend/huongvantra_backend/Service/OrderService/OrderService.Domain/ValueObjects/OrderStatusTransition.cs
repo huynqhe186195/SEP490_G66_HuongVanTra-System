@@ -21,6 +21,7 @@ public static class OrderStatusTransition
             OrderStatus.Processing,
             OrderStatus.Shipping,
             OrderStatus.WaitingMaterials,
+            OrderStatus.Completed,
             OrderStatus.Cancelled
         },
         [OrderStatus.Processing] = new()
