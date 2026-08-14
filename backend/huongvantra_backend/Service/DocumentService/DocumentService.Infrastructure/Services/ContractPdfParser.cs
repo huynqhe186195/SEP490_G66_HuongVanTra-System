@@ -85,7 +85,7 @@ public class ContractPdfParser : IContractPdfParser
 
     private static string? ExtractContractCode(List<string> lines)
     {
-        var pattern = @"Số:\s*(\S+)/HĐMB";
+        var pattern = @"Số:\s*([^\s/]+)";
         foreach (var line in lines)
         {
             var match = Regex.Match(line, pattern);
@@ -275,7 +275,7 @@ public class ContractPdfParser : IContractPdfParser
         for (int i = headerEndIdx + 1; i < lines.Count; i++)
         {
             var lower = lines[i].ToLowerInvariant();
-            if (lower.Contains("tổng cộng") || lower.Contains("tổng tiền")) break;
+            if (lower.Contains("tổng cộng") || lower.Contains("tổng tiền") || lower.Contains("tong cong")) break;
             bodyLines.Add(lines[i]);
         }
 

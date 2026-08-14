@@ -62,7 +62,7 @@ public class ContractDocxParser : IContractDocxParser
 
     private static string? ExtractContractCode(List<string> paragraphs)
     {
-        var pattern = @"Số:\s*(\S+)/HĐMB";
+        var pattern = @"Số:\s*([^\s/]+)";
         foreach (var para in paragraphs)
         {
             var match = Regex.Match(para, pattern);
