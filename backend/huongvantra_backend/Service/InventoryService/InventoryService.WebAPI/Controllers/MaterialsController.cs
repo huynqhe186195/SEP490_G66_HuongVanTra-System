@@ -42,6 +42,20 @@ public class MaterialsController(InventoryLogic _logic) : ControllerBase
     }
 
     /// <summary>
+    /// Sell-first cho gói custom: kiểm tra tồn Kho NL/bao bì (không trừ).
+    /// Thiếu → BackorderRequired; trừ thật lúc đóng gói.
+    /// </summary>
+    [HttpPost("prepare-custom-materials")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> PrepareCustomMaterials(
+        [FromBody] PrepareCustomMaterialsRequest request,
+        CancellationToken ct)
+    {
+        var result = await _logic.PrepareCustomMaterialsAsync(request, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// POS-04 (H4): OrderService gọi đồng bộ khi sửa đơn COD chờ xác nhận — thay giữ chỗ
     /// tồn Kệ Hàng nguyên tử (release + re-reserve all-or-nothing, idempotent theo OperationId).
     /// </summary>

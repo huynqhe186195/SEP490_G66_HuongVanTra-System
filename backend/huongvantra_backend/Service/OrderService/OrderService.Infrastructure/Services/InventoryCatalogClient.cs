@@ -32,8 +32,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(ct);
-            logger.LogError("Inventory deduct-materials failed {Status}: {Error}", response.StatusCode, error);
-            response.EnsureSuccessStatusCode();
+            var message = ExtractErrorMessage(error)
+                ?? "Không trừ được nguyên liệu Kho. Vui lòng kiểm tra tồn Kho rồi thử lại.";
+            logger.LogWarning("Inventory deduct-materials failed {Status}: {Error}", response.StatusCode, error);
+            throw new InventoryStockHandlingException(message);
         }
     }
 
@@ -55,6 +57,28 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         var result = JsonSerializer.Deserialize<InventoryStockHandlingResponse>(raw, JsonOptions);
         if (result == null)
             throw new InventoryStockHandlingException("InventoryService không trả về kết quả xử lý tồn POS hợp lệ.");
+
+        return result;
+    }
+
+    public async Task<InventoryStockHandlingResponse> PrepareCustomMaterialsAsync(
+        InventoryCustomMaterialsRequest request,
+        CancellationToken ct = default)
+    {
+        var response = await httpClient.PostAsJsonAsync("api/v1/inventory/prepare-custom-materials", request, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = ExtractErrorMessage(raw)
+                ?? "Không kiểm tra được tồn nguyên liệu gói custom. Vui lòng thử lại.";
+            logger.LogWarning("Inventory prepare-custom-materials failed {Status}: {Error}", response.StatusCode, raw);
+            throw new InventoryStockHandlingException(message);
+        }
+
+        var result = JsonSerializer.Deserialize<InventoryStockHandlingResponse>(raw, JsonOptions);
+        if (result == null)
+            throw new InventoryStockHandlingException("InventoryService không trả về kết quả kiểm tra nguyên liệu custom hợp lệ.");
 
         return result;
     }

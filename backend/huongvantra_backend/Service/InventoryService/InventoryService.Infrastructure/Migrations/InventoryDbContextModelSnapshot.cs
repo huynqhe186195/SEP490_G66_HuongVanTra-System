@@ -507,6 +507,7 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("SkuId");
 
                     b.HasIndex("ReturnId", "SkuId")
+                        .IsUnique()
                         .HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
 
                     b.ToTable("ReturnInspections", (string)null);

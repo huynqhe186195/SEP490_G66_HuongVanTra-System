@@ -49,6 +49,52 @@ public sealed class SupplierReceiptAverageCostTests
     }
 
     [Fact]
+    public async Task FirstReceipt_WithCatalogCostAndOnHand_BlendsOpeningStockIntoWac()
+    {
+        // Catalog CostPrice 250.000đ, tồn trước phiếu 60, nhập 50 × 400.000đ
+        // → WAC = (60×250.000 + 50×400.000) / 110 = 318.181,82đ
+        // (không nhảy thẳng 400.000đ vì quantityBefore=0)
+        var skuId = Guid.NewGuid();
+        var store = new TestCostStore(250_000m, skuId);
+
+        await CreateConsumer(store).ProcessAsync(
+            Event(Guid.NewGuid(), skuId, 1, 1, 400_000m) with
+            {
+                ActualQuantity = 50m,
+                QuantityOnHandBefore = 60m
+            });
+
+        Assert.Equal(110m, store.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(35_000_000m, store.Variant.TotalApprovedInboundValue);
+        Assert.Equal(318_181.82m, store.Variant.CostPrice);
+
+        var history = Assert.Single(store.Histories);
+        Assert.Equal(60m, history.TotalQuantityBefore);
+        Assert.Equal(15_000_000m, history.TotalValueBefore);
+        Assert.Equal(250_000m, history.OldCostPrice);
+        Assert.Equal(318_181.82m, history.NewCostPrice);
+        Assert.Equal("applied", history.ProcessingResult);
+    }
+
+    [Fact]
+    public async Task FirstReceipt_WithCatalogCostButZeroOnHand_UsesIncomingUnitCost()
+    {
+        var skuId = Guid.NewGuid();
+        var store = new TestCostStore(250_000m, skuId);
+
+        await CreateConsumer(store).ProcessAsync(
+            Event(Guid.NewGuid(), skuId, 1, 1, 400_000m) with
+            {
+                ActualQuantity = 50m,
+                QuantityOnHandBefore = 0m
+            });
+
+        Assert.Equal(50m, store.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(20_000_000m, store.Variant.TotalApprovedInboundValue);
+        Assert.Equal(400_000m, store.Variant.CostPrice);
+    }
+
+    [Fact]
     public void CostHistoryModel_UsesDurableUniqueInboxKeys()
     {
         var options = new DbContextOptionsBuilder<ProductDbContext>()
@@ -397,7 +443,7 @@ public sealed class SupplierReceiptAverageCostTests
     }
 
     [Fact]
-    public async Task LegacyCostPriceWithoutReconciliation_BlocksGroupAsReconciliationRequired()
+    public async Task CatalogSeedCostPrice_AllowsFirstReceiptToEstablishBasis()
     {
         var skuId = Guid.NewGuid();
         var store = new TestCostStore(300m, skuId);
@@ -406,15 +452,13 @@ public sealed class SupplierReceiptAverageCostTests
 
         await consumer.ProcessAsync(Event(Guid.NewGuid(), skuId, 1, 1, 400m));
 
-        Assert.Equal(300m, store.Variant.CostPrice);
-        Assert.Equal(0m, store.Variant.TotalApprovedInboundQuantity);
-        Assert.Equal(0m, store.Variant.TotalApprovedInboundValue);
+        // CostPrice catalog 300 không chặn; phiếu đầu (10 × 400) lập basis → 400.
+        Assert.Equal(400m, store.Variant.CostPrice);
+        Assert.Equal(10m, store.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(4000m, store.Variant.TotalApprovedInboundValue);
         var history = store.Histories.Single();
-        Assert.False(history.WasApplied);
-        Assert.Equal("reconciliation_required", history.ProcessingResult);
-        Assert.Equal(
-            [history.SourceReceiptId],
-            await store.GetPendingReconciliationReceiptIdsAsync(skuId, CancellationToken.None));
+        Assert.True(history.WasApplied);
+        Assert.Equal("applied", history.ProcessingResult);
     }
 
     private static SupplierReceiptApprovedCostRecordedConsumer CreateConsumer(
@@ -643,6 +687,20 @@ public sealed class SupplierReceiptAverageCostTests
                     .ToList());
         }
 
+        public Task<List<Guid>> GetSkuIdsWithPendingReconciliationAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("GetSkuIdsWithPendingReconciliation");
+            return Task.FromResult(
+                Histories
+                    .Where(history =>
+                        !history.WasApplied
+                        && history.ProcessingResult == "reconciliation_required")
+                    .Select(history => history.SkuId)
+                    .Distinct()
+                    .ToList());
+        }
+
         public void AddHistory(ProductCostPriceHistory history)
         {
             AssertLocked();
@@ -721,6 +779,7 @@ public sealed class SupplierReceiptAverageCostTests
                 IncomingUnitCost = history.IncomingUnitCost,
                 IncomingQuantity = history.IncomingQuantity,
                 IncomingValue = history.IncomingValue,
+                QuantityOnHandBefore = history.QuantityOnHandBefore,
                 TotalQuantityBefore = history.TotalQuantityBefore,
                 TotalQuantityAfter = history.TotalQuantityAfter,
                 TotalValueBefore = history.TotalValueBefore,

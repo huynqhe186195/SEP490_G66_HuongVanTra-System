@@ -702,6 +702,7 @@ public class ReturnInspectionConfiguration : IEntityTypeConfiguration<ReturnInsp
         builder.HasIndex(e => e.Disposition);
         builder.HasIndex(e => e.CreatedAt);
         builder.HasIndex(new[] { "ReturnId", "SkuId" })
+            .IsUnique()
             .HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
         builder.HasOne(e => e.QuarantineBatch)
             .WithMany()

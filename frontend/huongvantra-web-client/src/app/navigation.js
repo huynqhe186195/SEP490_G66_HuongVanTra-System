@@ -111,7 +111,6 @@ export const navigationItems = [
   { label: 'Quản lý lệnh sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Nhật ký kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
-  { label: 'Đóng gói theo yêu cầu', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
   {
     label: 'Thống kê trong kho',
     path: '/inventory/statistics',
@@ -318,7 +317,6 @@ const INVENTORY_SIDEBAR_GROUPS = [
     icon: 'precision_manufacturing',
     entries: [
       { path: '/inventory/production-orders' },
-      { path: '/inventory/custom-bundles' },
       { path: '/orders/stock-deduct', label: 'Chờ đóng gói / trừ Kho' },
     ],
   },

@@ -180,7 +180,7 @@ function CodOrdersPage() {
         titleInfo={
           activeView === 'report'
             ? 'Hai chế độ: theo ca đang trực (khung giờ ca) hoặc theo khoảng ngày.'
-            : 'Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng.'
+            : 'Theo dõi đơn kênh COD. Đơn đã hủy nằm ở tab «Đã hủy» (không hiện trong Chờ thu / Quá hạn).'
         }
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchValue}

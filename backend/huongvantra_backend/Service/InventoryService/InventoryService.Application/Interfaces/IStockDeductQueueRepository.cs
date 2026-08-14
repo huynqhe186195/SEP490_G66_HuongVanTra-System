@@ -45,4 +45,9 @@ public interface IStockDeductQueueRepository
     Task<List<Guid>> GetOrderIdsWithActiveReservationAsync(
         IReadOnlyCollection<Guid>? orderIds = null,
         CancellationToken ct = default);
+
+    /// <summary>Queue đã hủy sau khi trừ tồn (đang giao) — dùng backfill ReturnInspection.</summary>
+    Task<List<StockDeductQueue>> GetCancelledAfterShippingAsync(
+        int take = 50,
+        CancellationToken ct = default);
 }

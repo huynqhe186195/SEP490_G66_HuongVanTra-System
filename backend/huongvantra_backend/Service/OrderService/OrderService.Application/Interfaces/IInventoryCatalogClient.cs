@@ -12,6 +12,14 @@ public interface IInventoryCatalogClient
     Task<InventoryStockHandlingResponse> PreparePosStockDeductionAsync(
         InventoryStockHandlingRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Sell-first custom: kiểm tra tồn Kho NL/bao bì (không trừ). Thiếu → BackorderRequired.
+    /// </summary>
+    Task<InventoryStockHandlingResponse> PrepareCustomMaterialsAsync(
+        InventoryCustomMaterialsRequest request,
+        CancellationToken ct = default);
+
     /// <summary>
     /// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — gọi đồng bộ, all-or-nothing,
     /// idempotent theo OperationId. Ném <see cref="InventoryStockHandlingException"/> khi Inventory từ chối.
@@ -91,6 +99,15 @@ public record InventoryStockHandlingResponse(
     List<InventoryStockHandlingLineResponse> Lines,
     bool BackorderRequired = false,
     string? BackorderMessage = null);
+
+public record InventoryCustomMaterialsRequest(
+    Guid OrderId,
+    string OrderCode,
+    List<InventoryStockHandlingItemRequest> Items,
+    bool AcceptBackorder = false,
+    bool PreviewOnly = false,
+    int BackorderMinLeadDays = 3,
+    int BackorderMaxLeadDays = 5);
 
 public class InventoryStockHandlingException(string message) : Exception(message);
 public class BackorderConfirmationRequiredException : Exception

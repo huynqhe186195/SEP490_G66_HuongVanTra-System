@@ -17,6 +17,12 @@ public sealed record SupplierReceiptApprovedCostRecordedEvent
     public decimal ActualQuantity { get; init; }
     public decimal UnitCost { get; init; }
     /// <summary>
+    /// Tồn (Kho + Kệ) của SKU ngay trước khi cộng dòng phiếu này.
+    /// Dùng để seed WAC lần đầu khi catalog đã có CostPrice nhưng chưa có inbound lũy kế.
+    /// Event cũ deserialize = 0 → không seed (giữ hành vi cũ).
+    /// </summary>
+    public decimal QuantityOnHandBefore { get; init; }
+    /// <summary>
     /// Stable one-based order among lines of the same SKU in this receipt.
     /// Legacy events deserialize 0 and are treated as a single-line group.
     /// </summary>

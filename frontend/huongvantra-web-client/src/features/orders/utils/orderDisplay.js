@@ -535,8 +535,13 @@ export function canCompleteOrder(order) {
 }
 
 // POS-06 (KB4): đơn đã đủ hàng, chờ Sale xác nhận khách quay lại lấy.
+// Completed + còn thiếu tiền cọc = cho thu nốt (vá lỗi concurrency cũ).
 export function canMarkDelivered(order) {
-  return normalizeOrderKey(order?.orderStatus) === 'ReadyToDeliver'
+  const status = normalizeOrderKey(order?.orderStatus)
+  if (status === 'ReadyToDeliver') return true
+  const remaining = Number(order?.remainingAmountDue) || 0
+  const deposit = Number(order?.depositAmount) || 0
+  return status === 'Completed' && deposit > 0 && remaining > 0
 }
 
 // POS-06 (KB4): cảnh báo hạn giao dựa trên ngày hẹn; không tự động hủy đơn.
@@ -673,6 +678,7 @@ export function getStockStatusLabel(status) {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
     pending_warehouse_transfer: 'Chờ điều chuyển từ Kho',
+    pending_custom_pack: 'Gói custom chờ đóng gói',
     deducted: 'Đã trừ tồn quầy',
     synced: 'Đã trừ tồn quầy',
     restored: 'Đã hoàn tồn',

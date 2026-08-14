@@ -116,6 +116,26 @@ using (var scope = app.Services.CreateScope())
     {
         throw new InvalidOperationException("Product database migration failed after 10 attempts.");
     }
+
+    try
+    {
+        var costFix = scope.ServiceProvider.GetRequiredService<ICostBasisReconciliationService>();
+        var retry = costFix.RetryPendingReconciliationAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        if (retry.SkuCount > 0)
+        {
+            logger.LogInformation(
+                "Retried pending supplier-receipt cost groups after startup. SkuCount={SkuCount} Reapplied={Reapplied} Deferred={Deferred}",
+                retry.SkuCount,
+                retry.ReappliedCount,
+                retry.DeferredCount);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Startup retry of pending cost reconciliation failed; use POST /api/v1/products/cost-basis-reconciliation/retry-pending.");
+    }
 }
 
 if (app.Environment.IsDevelopment())

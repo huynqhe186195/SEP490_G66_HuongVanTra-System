@@ -32,6 +32,8 @@ export default function BackorderConfirmModal({
   isSubmitting = false,
   /** COD: không bắt cọc khi khách đồng ý chờ hàng. */
   skipDeposit = false,
+  /** Đơn có gói custom: chỉ nhận một lần khi đủ hàng. */
+  forceCompleteDelivery = false,
   onAccept,
   onDecline,
   onCustomerSelected,
@@ -55,9 +57,9 @@ export default function BackorderConfirmModal({
   const effectiveBackorderQuantity = Math.max(Number(backorderQuantity) || 0, linesPendingTotal)
   const canChooseFulfillment = effectiveAvailableQuantity > 0
 
-  /** COD: ẩn chọn cách nhận, mặc định giao một lần. POS: giữ UI «Khách nhận hàng thế nào?» như trước. */
-  const showFulfillmentChoice = !skipDeposit && canChooseFulfillment
-  const fulfillmentPreference = skipDeposit
+  /** COD / custom: ẩn chọn cách nhận, mặc định nhận một lần khi đủ hàng. */
+  const showFulfillmentChoice = !skipDeposit && !forceCompleteDelivery && canChooseFulfillment
+  const fulfillmentPreference = skipDeposit || forceCompleteDelivery
     ? 'CompleteDelivery'
     : canChooseFulfillment
       ? selectedPreference ?? 'PartialDelivery'
@@ -248,6 +250,12 @@ export default function BackorderConfirmModal({
                 </tbody>
               </table>
             </div>
+
+            {forceCompleteDelivery ? (
+              <p className="mt-3 rounded-xl border border-[#356647]/20 bg-[#356647]/5 px-3 py-2 text-sm text-[#356647]">
+                Đơn có gói custom: khách <span className="font-semibold">nhận một lần khi đủ hàng</span> (không giao từng phần).
+              </p>
+            ) : null}
 
             {showFulfillmentChoice ? (
               <div className="mt-4">

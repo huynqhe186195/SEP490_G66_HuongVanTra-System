@@ -599,6 +599,11 @@ namespace ProductService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<decimal>("QuantityOnHandBefore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m);
+
                     b.Property<int>("ReceiptLineOrder")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")

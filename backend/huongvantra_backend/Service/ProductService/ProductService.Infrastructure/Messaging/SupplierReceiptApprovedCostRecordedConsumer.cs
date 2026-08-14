@@ -262,6 +262,9 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
             IncomingUnitCost = message.UnitCost,
             IncomingQuantity = message.ActualQuantity,
             IncomingValue = message.ActualQuantity * message.UnitCost,
+            QuantityOnHandBefore = message.QuantityOnHandBefore < 0
+                ? 0m
+                : message.QuantityOnHandBefore,
             NewCostPrice = currentCostPrice,
             SourceType = "supplier_receipt",
             SourceReceiptId = message.SupplierReceiptId,
@@ -357,6 +360,12 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
                 latestApplied.SourceReceiptId) < 0;
         var updatedAt = DateTime.UtcNow;
 
+        // Phiếu đầu tiên trên SKU đã có CostPrice catalog nhưng chưa có inbound lũy kế:
+        // seed basis = tồn trước phiếu × CostPrice cũ, rồi mới cộng dòng nhập (WAC thật).
+        // Nếu không seed, quantityBefore=0 → CostPrice nhảy thẳng bằng đơn giá phiếu mới.
+        if (!isSuperseded)
+            TrySeedOpeningCostBasisFromOnHand(variant, ordered);
+
         foreach (var history in ordered)
         {
             var oldCostPrice = variant.CostPrice;
@@ -396,6 +405,35 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
 
         if (!isSuperseded)
             variant.UpdatedAt = updatedAt;
+    }
+
+    /// <summary>
+    /// Khi chưa có TotalApprovedInbound* nhưng đã có CostPrice catalog và tồn trước phiếu &gt; 0,
+    /// ghi nhận tồn đó như basis ảo để WAC lần đầu không nhảy thẳng bằng UnitCost phiếu mới.
+    /// </summary>
+    internal static void TrySeedOpeningCostBasisFromOnHand(
+        ProductVariant variant,
+        IReadOnlyList<ProductCostPriceHistory> orderedGroup)
+    {
+        if (variant.TotalApprovedInboundQuantity > 0 || variant.TotalApprovedInboundValue > 0)
+            return;
+
+        if (variant.CostPrice <= 0)
+            return;
+
+        var openingQuantity = orderedGroup
+            .Select(history => history.QuantityOnHandBefore)
+            .Where(quantity => quantity > 0)
+            .DefaultIfEmpty(0m)
+            .Min();
+        if (openingQuantity <= 0)
+            return;
+
+        variant.TotalApprovedInboundQuantity = openingQuantity;
+        variant.TotalApprovedInboundValue = Math.Round(
+            openingQuantity * variant.CostPrice,
+            4,
+            MidpointRounding.AwayFromZero);
     }
 
     public static ReceiptSequenceValidation EvaluateReceiptSequence(
@@ -468,10 +506,10 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
     }
 
     /// <summary>
-    /// SKU đã có dữ liệu giá vốn legacy (CostPrice &gt; 0 hoặc đã có ProductCostPriceHistory
-    /// được áp dụng) nhưng cumulative snapshot chưa được reconciliation thì không được
-    /// lấy phiếu mới làm baseline — cumulative sẽ thiếu toàn bộ lịch sử trước đó.
-    /// SKU thật sự chưa từng có inbound/cost history vẫn xử lý phiếu đầu tiên bình thường.
+    /// Chặn phiếu mới chỉ khi cumulative đã từng được áp dụng (có history applied)
+    /// nhưng snapshot TotalApprovedInbound* lại về 0 — dữ liệu lệch, cần reconcile tay.
+    /// Giá vốn catalog/seed (CostPrice &gt; 0, chưa có inbound lũy kế) KHÔNG chặn:
+    /// phiếu nhập đầu tiên được phép lập basis bình quân gia quyền.
     /// </summary>
     private static bool RequiresCostBasisReconciliation(
         ProductVariant variant,
@@ -483,7 +521,8 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
         if (variant.TotalApprovedInboundQuantity > 0 || variant.TotalApprovedInboundValue > 0)
             return false;
 
-        return variant.CostPrice > 0 || latestApplied is not null;
+        // Catalog seed CostPrice alone must not block the first real receipt.
+        return latestApplied is not null;
     }
 
     private static bool IsRecoverable(ProductCostPriceHistory history) =>

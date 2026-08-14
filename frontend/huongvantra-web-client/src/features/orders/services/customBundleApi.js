@@ -21,6 +21,8 @@ export function mapCustomBundle(item) {
     orderId: item.orderId ?? item.OrderId,
     orderCode: item.orderCode ?? item.OrderCode ?? '',
     customerName: item.customerName ?? item.CustomerName ?? '',
+    orderStatus: item.orderStatus ?? item.OrderStatus ?? '',
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
     label: item.label ?? item.Label ?? '',
     note: item.note ?? item.Note ?? '',
     totalPrice: Number(item.totalPrice ?? item.TotalPrice ?? 0),
