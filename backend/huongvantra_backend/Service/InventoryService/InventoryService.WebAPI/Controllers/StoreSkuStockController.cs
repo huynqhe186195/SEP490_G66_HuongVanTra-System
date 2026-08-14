@@ -30,7 +30,9 @@ public class StoreSkuStockController(InventoryLogic _logic) : ControllerBase
     {
         if (IsWarehouse) return Forbid();
         var stocks = await _logic.GetStoreSkuStocksAsync(ct);
-        var lowStock = stocks.Where(s => s.QuantityOnHand <= s.ShelfLowStockThreshold).ToList();
+        var lowStock = stocks.Where(s =>
+            s.ShelfLowStockThreshold > 0
+            && s.AvailableQuantity <= s.ShelfLowStockThreshold).ToList();
         return Ok(lowStock);
     }
 

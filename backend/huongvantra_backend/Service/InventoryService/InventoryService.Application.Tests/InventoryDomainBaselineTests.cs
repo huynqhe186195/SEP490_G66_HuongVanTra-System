@@ -1,12 +1,52 @@
 using InventoryService.Application.Tests.TestSupport;
+using InventoryService.Application.Interfaces;
+using InventoryService.Application.UseCases;
 using InventoryService.Domain.Entities;
 using InventoryService.Domain.Enums;
+using Moq;
 using Xunit;
 
 namespace InventoryService.Application.Tests;
 
 public class InventoryDomainBaselineTests
 {
+    [Fact]
+    public async Task Statistics_UsesAvailableQuantityForShelfLowStock()
+    {
+        var stock = InventoryWorkflowTestBuilders.SkuStock(warehouseQuantity: 100, shelfQuantity: 10);
+        stock.ReservedQuantity = 6;
+        stock.ShelfLowStockThreshold = 5;
+        stock.WarehouseLowStockThreshold = 0;
+
+        var statistics = await CreateStatisticsLogic(stock).GetStatisticsAsync();
+
+        Assert.Equal(1, statistics.LowStockSkuCount);
+    }
+
+    [Fact]
+    public async Task Statistics_DoesNotAlertWhenThresholdIsDisabled()
+    {
+        var stock = InventoryWorkflowTestBuilders.SkuStock(warehouseQuantity: 0, shelfQuantity: 0);
+        stock.ShelfLowStockThreshold = 0;
+        stock.WarehouseLowStockThreshold = 0;
+
+        var statistics = await CreateStatisticsLogic(stock).GetStatisticsAsync();
+
+        Assert.Equal(0, statistics.LowStockSkuCount);
+    }
+
+    private static StatisticsLogic CreateStatisticsLogic(params SkuStock[] stocks)
+    {
+        var skuRepo = new Mock<ISkuStockRepository>();
+        skuRepo.Setup(x => x.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(stocks.ToList());
+        var queueRepo = new Mock<IStockDeductQueueRepository>();
+        queueRepo.Setup(x => x.CountWaitingAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        var batchRepo = new Mock<IWarehouseBatchRepository>();
+        batchRepo.Setup(x => x.CalculateTotalWarehouseValueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0m);
+        batchRepo.Setup(x => x.CalculateTotalShelfValueAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0m);
+        return new StatisticsLogic(skuRepo.Object, queueRepo.Object, batchRepo.Object);
+    }
+
     [Fact]
     public void SkuStockBuilder_DocumentsSeparateWarehouseAndShelfAggregates()
     {
