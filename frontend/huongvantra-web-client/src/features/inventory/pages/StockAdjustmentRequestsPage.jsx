@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -13,6 +13,7 @@ import {
   canReviewStockReplenishmentRequest,
   isAuditOnlyAdmin,
   isWarehouseRole,
+  canViewStockTransfer,
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -21,6 +22,7 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
 import StockAdjustmentRequestAuditView from '../components/StockAdjustmentRequestAuditView.jsx'
 import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
+import { SlipActionButtons, SlipPrintStyles, StockTransferDocument } from '../components/InventorySlipDocument.jsx'
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
 import { fetchInventorySettings, fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
@@ -37,9 +39,12 @@ import {
 } from '../services/stockAdjustmentRequestApi.js'
 import {
   getStockFlowErrorMessage,
+  getStockFlowStatusClass,
+  getStockTransferStatusLabel,
   STOCK_FLOW_TERMS,
   STOCK_REQUEST_STATUS_OPTIONS,
 } from '../utils/stockFlowLabels.js'
+import { fetchStockTransferById } from '../services/stockTransferApi.js'
 
 /** Trạng thái yêu cầu còn cho phép Thủ kho tạo phiếu điều chuyển từ chi tiết. */
 const TRANSFERABLE_STATUSES = ['approved', 'processing', 'partiallyfulfilled']
@@ -95,6 +100,61 @@ const REJECT_REASON_PRESETS = [
 function textOrDash(value) {
   const trimmed = String(value ?? '').trim()
   return trimmed || UNKNOWN_CREATOR_VALUE
+}
+
+function StockTransferPreviewModal({ transfer, isLoading, onClose }) {
+  const documentRef = useRef(null)
+  if (!transfer && !isLoading) return null
+
+  const statusLabel = transfer ? getStockTransferStatusLabel(transfer.status) : ''
+  return (
+    <div className="inventory-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4">
+      <SlipPrintStyles />
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">
+            <span className="inline-flex items-center gap-2 font-semibold">
+              <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+              Đang tải Phiếu Điều Chuyển...
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="no-print flex items-start justify-between border-b border-slate-100 px-6 py-5">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="font-mono text-xl font-bold text-slate-900">{transfer.transferCode}</h2>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${getStockFlowStatusClass(transfer.status)}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  {STOCK_FLOW_TERMS.warehouse} → {STOCK_FLOW_TERMS.shelf}
+                  {transfer.sourceRequestCode ? ` · ${STOCK_FLOW_TERMS.request}: ${transfer.sourceRequestCode}` : ''}
+                </p>
+              </div>
+              <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Đóng Phiếu Điều Chuyển">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              <SlipActionButtons documentRef={documentRef} filename={`${transfer.transferCode || 'phieu-dieu-chuyen'}.pdf`} />
+              <div ref={documentRef}>
+                <StockTransferDocument transfer={transfer} statusLabel={statusLabel} />
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="no-print flex justify-end border-t border-slate-100 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50">
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -290,6 +350,7 @@ function StockAdjustmentRequestOperationsPage() {
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
   const canFilterByCreator = canFilterStockReplenishmentByCreator(session)
+  const canViewTransfer = canViewStockTransfer(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS
@@ -314,6 +375,8 @@ function StockAdjustmentRequestOperationsPage() {
   const [detail, setDetail] = useState(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [relatedTransfers, setRelatedTransfers] = useState([])
+  const [selectedTransfer, setSelectedTransfer] = useState(null)
+  const [isLoadingTransfer, setIsLoadingTransfer] = useState(false)
   const [actingId, setActingId] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -560,9 +623,26 @@ function StockAdjustmentRequestOperationsPage() {
     }
   }
 
+  async function handleViewTransfer(transferId) {
+    if (!transferId) return
+    setIsLoadingTransfer(true)
+    try {
+      const transfer = await fetchStockTransferById(transferId)
+      setSelectedTransfer({
+        ...transfer,
+        sourceRequestedByName: transfer.sourceRequestedByName || detail?.requestedByName || '',
+      })
+    } catch (error) {
+      showError(getStockFlowErrorMessage(error, 'Không tải được Phiếu Điều Chuyển.'))
+    } finally {
+      setIsLoadingTransfer(false)
+    }
+  }
+
   const creatorColumnLabel = canReview ? 'Người yêu cầu' : 'Người tạo'
   const canCreateTransferFromDetail =
     canReview && detail && TRANSFERABLE_STATUSES.includes(String(detail.status ?? '').toLowerCase())
+  const latestRelatedTransfer = relatedTransfers[0] ?? null
 
   return (
     <PageShell>
@@ -740,23 +820,24 @@ function StockAdjustmentRequestOperationsPage() {
 
       <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="min-w-full text-left text-sm">
+          <table className="min-w-[1120px] w-full table-fixed text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3">Mã yêu cầu</th>
-                <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
-                <th className="whitespace-nowrap px-4 py-3">{creatorColumnLabel}</th>
-                <th className="whitespace-nowrap px-4 py-3">Thời gian gửi</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Sản phẩm</th>
-                <th className="whitespace-nowrap px-4 py-3">Tiến độ</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Còn thiếu</th>
-                <th className="whitespace-nowrap px-4 py-3">Xử lý gần nhất</th>
+                <th className="w-[10%] whitespace-nowrap px-4 py-3">Mã yêu cầu</th>
+                <th className="w-[10%] whitespace-nowrap px-4 py-3">Trạng thái</th>
+                <th className="w-[14%] whitespace-nowrap px-4 py-3">{creatorColumnLabel}</th>
+                <th className="w-[13%] whitespace-nowrap px-4 py-3">Thời gian gửi</th>
+                <th className="w-[9%] whitespace-nowrap px-4 py-3 text-right">Sản phẩm</th>
+                <th className="w-[13%] whitespace-nowrap px-4 py-3">Tiến độ</th>
+                <th className="w-[9%] whitespace-nowrap px-4 py-3 text-right">Còn thiếu</th>
+                <th className="w-[13%] whitespace-nowrap px-4 py-3">Xử lý gần nhất</th>
+                <th className="w-[9%] whitespace-nowrap px-4 py-3 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
                     <span className="inline-flex items-center gap-2 font-semibold">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Đang tải yêu cầu...
@@ -765,7 +846,7 @@ function StockAdjustmentRequestOperationsPage() {
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <p className="font-semibold text-slate-800">
                       {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all')
                         ? 'Không có yêu cầu khớp bộ lọc'
@@ -818,9 +899,14 @@ function StockAdjustmentRequestOperationsPage() {
                   const itemCount = Number(row.itemCount ?? 0)
                   const processedItemCount = Number(row.processedItemCount ?? 0)
                   const remainingItemCount = Number(row.remainingItemCount ?? 0)
+                  const isOwnRequest = currentUserId
+                    && String(row.requestedBy ?? '').toLowerCase() === currentUserId.toLowerCase()
+                  const canCancelRow = row.status === 'pending'
+                    && canCancelRequest
+                    && (canCancelAnyRequest || isOwnRequest || activeTab === 'mine')
                   return (
                     <tr key={row.id} className="hover:bg-[#fbf9f1]/50">
-                      <td className="whitespace-nowrap px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-4">
                         <button
                           type="button"
                           onClick={() => setDetailId(row.id)}
@@ -830,29 +916,29 @@ function StockAdjustmentRequestOperationsPage() {
                           {row.requestCode || '—'}
                         </button>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-4">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(row.status)}`}
                         >
                           {getAdjustmentStatusLabel(row.status)}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-800">
+                      <td className="whitespace-nowrap px-4 py-4 text-slate-800">
                         <span className="block font-medium">{textOrDash(row.requestedByName)}</span>
                         <span className="mt-0.5 block text-xs text-slate-500">
                           {formatCreatorRole(row.requestedByRoleName)}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-4 text-slate-600">
                         {formatVietnamDateTime(row.requestedAt)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                      <td className="whitespace-nowrap px-4 py-4 text-right text-slate-700">
                         {itemCount} sản phẩm
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold text-slate-700">
+                      <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-slate-700">
                         {processedItemCount}/{itemCount} sản phẩm hoàn tất
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <td className="whitespace-nowrap px-4 py-4 text-right">
                         <span
                           className={
                             remainingItemCount > 0
@@ -863,11 +949,38 @@ function StockAdjustmentRequestOperationsPage() {
                           {remainingItemCount} sản phẩm
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                      <td className="whitespace-nowrap px-4 py-4 text-slate-700">
                         <span className="block font-medium">{textOrDash(row.reviewedByName)}</span>
                         <span className="mt-0.5 block text-xs text-slate-500">
                           {row.reviewedAt ? formatVietnamDateTime(row.reviewedAt) : '—'}
                         </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setDetailId(row.id)}
+                            title="Xem chi tiết yêu cầu"
+                            aria-label={`Xem chi tiết ${row.requestCode || 'yêu cầu'}`}
+                            className="rounded-lg p-2 text-[#356647] hover:bg-[#eef6f0]"
+                          >
+                            <span className="material-symbols-outlined text-[20px]">visibility</span>
+                          </button>
+                          {canCancelRow ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCancelTarget(row)
+                                setCancelReason('')
+                              }}
+                              title="Hủy yêu cầu"
+                              aria-label={`Hủy ${row.requestCode || 'yêu cầu'}`}
+                              className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                            >
+                              <span className="material-symbols-outlined text-[20px]">cancel</span>
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -898,6 +1011,17 @@ function StockAdjustmentRequestOperationsPage() {
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <h3 className="text-lg font-bold text-slate-800">Chi tiết {STOCK_FLOW_TERMS.request}</h3>
               <div className="flex flex-wrap gap-2">
+                {canViewTransfer && latestRelatedTransfer ? (
+                  <button
+                    type="button"
+                    onClick={() => handleViewTransfer(latestRelatedTransfer.transferId)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                    title={relatedTransfers.length > 1 ? 'Xem Phiếu Điều Chuyển mới nhất' : 'Xem Phiếu Điều Chuyển'}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                    Xem Phiếu
+                  </button>
+                ) : null}
                 {canCreateTransferFromDetail ? (
                   <button
                     type="button"
@@ -1111,6 +1235,14 @@ function StockAdjustmentRequestOperationsPage() {
           onConfirm={handleReview}
         />
       ) : null}
+
+      <StockTransferPreviewModal
+        transfer={selectedTransfer}
+        isLoading={isLoadingTransfer}
+        onClose={() => {
+          if (!isLoadingTransfer) setSelectedTransfer(null)
+        }}
+      />
     </PageShell>
   )
 }

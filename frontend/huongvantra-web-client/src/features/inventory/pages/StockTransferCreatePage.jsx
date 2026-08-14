@@ -329,9 +329,9 @@ export default function StockTransferCreatePage() {
   const session = loadAuthSession()
   const canOperate = canOperateStockTransfer(session)
 
-  const isDirectMode = searchParams.get('mode') === 'direct'
   const presetRequestId = searchParams.get('sourceRequestId') || ''
   const presetSuggestionId = searchParams.get('sourceSuggestionId') || ''
+  const isSuggestionMode = Boolean(presetSuggestionId)
 
   const [catalog, setCatalog] = useState([])
   const [stocks, setStocks] = useState([])
@@ -341,7 +341,7 @@ export default function StockTransferCreatePage() {
   const hasPrefilledSuggestion = useRef(false)
 
   const [requests, setRequests] = useState([])
-  const [isLoadingRequests, setIsLoadingRequests] = useState(!isDirectMode)
+  const [isLoadingRequests, setIsLoadingRequests] = useState(!isSuggestionMode)
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [requestLines, setRequestLines] = useState([])
 
@@ -349,9 +349,14 @@ export default function StockTransferCreatePage() {
   const [isSaving, setIsSaving] = useState(false)
 
   const stockBySkuId = useMemo(() => new Map(stocks.map((stock) => [stock.skuId, stock])), [stocks])
+  const suggestionCatalog = useMemo(() => {
+    if (!suggestion) return []
+    const suggestedSkuIds = new Set(suggestion.items.map((item) => item.skuId))
+    return catalog.filter((sku) => suggestedSkuIds.has(sku.id))
+  }, [catalog, suggestion])
 
   useEffect(() => {
-    if (!canOperate || !isDirectMode) return undefined
+    if (!canOperate || !isSuggestionMode) return undefined
     let mounted = true
     Promise.all([fetchAllActiveSkus(), fetchSkuStocks()])
       .then(([skus, stockRows]) => {
@@ -368,10 +373,10 @@ export default function StockTransferCreatePage() {
     return () => {
       mounted = false
     }
-  }, [canOperate, isDirectMode])
+  }, [canOperate, isSuggestionMode])
 
   useEffect(() => {
-    if (!canOperate || isDirectMode) return undefined
+    if (!canOperate || isSuggestionMode) return undefined
     let mounted = true
     setIsLoadingRequests(true)
     // Không lọc theo một trạng thái duy nhất: yêu cầu đã duyệt có thể đang ở Processing hoặc
@@ -401,10 +406,10 @@ export default function StockTransferCreatePage() {
     return () => {
       mounted = false
     }
-  }, [canOperate, isDirectMode])
+  }, [canOperate, isSuggestionMode])
 
   useEffect(() => {
-    if (!canOperate || !isDirectMode || !presetSuggestionId) return undefined
+    if (!canOperate || !isSuggestionMode) return undefined
     let mounted = true
     fetchShelfReplenishmentSuggestionById(presetSuggestionId)
       .then((result) => {
@@ -419,7 +424,7 @@ export default function StockTransferCreatePage() {
     return () => {
       mounted = false
     }
-  }, [canOperate, isDirectMode, presetSuggestionId])
+  }, [canOperate, isSuggestionMode, presetSuggestionId])
 
   // Điền sẵn SKU từ gợi ý nhưng để trống số lượng: Thủ kho tự quyết số lượng điều chuyển.
   useEffect(() => {
@@ -467,9 +472,9 @@ export default function StockTransferCreatePage() {
   }, [])
 
   useEffect(() => {
-    if (!canOperate || isDirectMode || !presetRequestId) return
+    if (!canOperate || isSuggestionMode || !presetRequestId) return
     selectRequest(presetRequestId)
-  }, [canOperate, isDirectMode, presetRequestId, selectRequest])
+  }, [canOperate, isSuggestionMode, presetRequestId, selectRequest])
 
   function addDirectLine(sku, warehouseQuantityOnHand) {
     setDirectLines((current) => {
@@ -563,20 +568,25 @@ export default function StockTransferCreatePage() {
     event.preventDefault()
     if (isSaving) return
 
-    if (!isDirectMode && !selectedRequest) {
+    if (!isSuggestionMode && !selectedRequest) {
       showError(`Vui lòng chọn ${STOCK_FLOW_TERMS.request} nguồn.`)
       return
     }
 
-    const payloadLines = isDirectMode ? buildDirectPayloadLines() : buildRequestPayloadLines()
+    if (isSuggestionMode && !suggestion) {
+      showError('Không tìm thấy Gợi ý bổ sung Kệ Hàng nguồn hoặc gợi ý không còn khả dụng.')
+      return
+    }
+
+    const payloadLines = isSuggestionMode ? buildDirectPayloadLines() : buildRequestPayloadLines()
     if (!payloadLines) return
 
     setIsSaving(true)
     try {
       const created = await createStockTransfer({
         note,
-        sourceRequestId: isDirectMode ? null : selectedRequest.id,
-        sourceSuggestionId: isDirectMode ? (suggestion?.id ?? null) : null,
+        sourceRequestId: isSuggestionMode ? null : selectedRequest.id,
+        sourceSuggestionId: isSuggestionMode ? suggestion.id : null,
         lines: payloadLines,
       })
       showSuccess(
@@ -615,10 +625,10 @@ export default function StockTransferCreatePage() {
   return (
     <PageShell>
       <PageHeader
-        title={isDirectMode ? `Tạo ${STOCK_FLOW_TERMS.transfer} trực tiếp` : `Tạo ${STOCK_FLOW_TERMS.transfer} từ yêu cầu`}
+        title={isSuggestionMode ? `Tạo ${STOCK_FLOW_TERMS.transfer} từ gợi ý` : `Tạo ${STOCK_FLOW_TERMS.transfer} từ yêu cầu`}
         description={
-          isDirectMode
-            ? 'Chọn sản phẩm thành phẩm và số lượng cần điều chuyển. Phiếu được lưu ở trạng thái Nháp.'
+          isSuggestionMode
+            ? 'Chọn sản phẩm thành phẩm và số lượng cần điều chuyển theo Gợi ý bổ sung Kệ Hàng. Phiếu được lưu ở trạng thái Nháp.'
             : 'Chỉ hiển thị các yêu cầu đã được duyệt và còn số lượng chưa nằm trong phiếu Nháp khác.'
         }
       />
@@ -636,9 +646,9 @@ export default function StockTransferCreatePage() {
           </section>
         ) : null}
 
-        {isDirectMode ? (
+        {isSuggestionMode ? (
           <DirectModeSection
-            catalog={catalog}
+            catalog={suggestionCatalog}
             stockBySkuId={stockBySkuId}
             lines={directLines}
             onAdd={addDirectLine}

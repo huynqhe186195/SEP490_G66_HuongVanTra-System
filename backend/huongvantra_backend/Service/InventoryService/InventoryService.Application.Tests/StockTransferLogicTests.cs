@@ -19,7 +19,7 @@ public sealed class StockTransferLogicTests
     private static readonly Guid SkuB = Guid.Parse("20000000-0000-0000-0000-000000000002");
 
     [Fact]
-    public async Task CreateAsync_ActiveFinishedProduct_CreatesDraftWithoutStockEffect()
+    public async Task CreateAsync_ActiveFinishedProductFromSuggestion_CreatesDraftWithoutStockEffect()
     {
         StockTransfer? added = null;
         var transferRepo = new Mock<IStockTransferRepository>();
@@ -28,15 +28,21 @@ public sealed class StockTransferLogicTests
             .Returns(Task.CompletedTask);
         transferRepo.Setup(repo => repo.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
+        var suggestion = OpenSuggestion(SkuA);
+        var suggestionRepo = new Mock<IShelfReplenishmentSuggestionRepository>();
+        suggestionRepo.Setup(repo => repo.GetByIdAsync(suggestion.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(suggestion);
         var logic = BuildLogic(
             transferRepo,
             stockRepo,
-            Catalog("THANH_PHAM", true, true, SkuA));
+            Catalog("THANH_PHAM", true, true, SkuA),
+            suggestionRepo: suggestionRepo);
 
         var response = await logic.CreateAsync(
             new UpsertStockTransferRequest(
                 "Điều chuyển thử nghiệm",
-                [new UpsertStockTransferLineRequest(SkuA, "CLIENT-CODE", null, null, 3)]),
+                [new UpsertStockTransferLineRequest(SkuA, "CLIENT-CODE", null, null, 3)],
+                SourceSuggestionId: suggestion.Id),
             ActorId,
             new CreatorSnapshot(ActorId, "Warehouse User", "Warehouse"));
 
@@ -45,6 +51,7 @@ public sealed class StockTransferLogicTests
         Assert.Equal(ActorId, added.CreatedBy);
         Assert.Equal("Warehouse", added.SourceLocation);
         Assert.Equal("Shelf", added.DestinationLocation);
+        Assert.Equal(suggestion.Id, added.SourceSuggestionId);
         Assert.Equal("SKU-A", added.Lines.Single().SkuCode);
         Assert.Equal("draft", response.Status);
         stockRepo.VerifyNoOtherCalls();
@@ -66,11 +73,30 @@ public sealed class StockTransferLogicTests
         await Assert.ThrowsAsync<InventoryValidationException>(() => logic.CreateAsync(
             new UpsertStockTransferRequest(
                 null,
+                [new UpsertStockTransferLineRequest(SkuA, null, null, null, 1)],
+                SourceSuggestionId: Guid.NewGuid()),
+            ActorId,
+            null));
+
+        transferRepo.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithoutRequestOrSuggestion_RejectsBeforePersistence()
+    {
+        var transferRepo = new Mock<IStockTransferRepository>(MockBehavior.Strict);
+        var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
+        var logic = BuildLogic(transferRepo, stockRepo, catalog: null);
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() => logic.CreateAsync(
+            new UpsertStockTransferRequest(
+                null,
                 [new UpsertStockTransferLineRequest(SkuA, null, null, null, 1)]),
             ActorId,
             null));
 
         transferRepo.VerifyNoOtherCalls();
+        stockRepo.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -341,7 +367,8 @@ public sealed class StockTransferLogicTests
         Mock<IStockImportSlipRepository>? importRepo = null,
         Mock<IInventoryLedgerRepository>? ledgerRepo = null,
         Mock<IProductCatalogClient>? catalogClient = null,
-        Mock<IStockAdjustmentRequestRepository>? adjustmentRequestRepo = null)
+        Mock<IStockAdjustmentRequestRepository>? adjustmentRequestRepo = null,
+        Mock<IShelfReplenishmentSuggestionRepository>? suggestionRepo = null)
     {
         catalogClient ??= new Mock<IProductCatalogClient>();
         if (catalog is not null)
@@ -368,8 +395,33 @@ public sealed class StockTransferLogicTests
             (importRepo ?? new Mock<IStockImportSlipRepository>()).Object,
             (ledgerRepo ?? new Mock<IInventoryLedgerRepository>()).Object,
             catalogClient.Object,
-            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
+            (suggestionRepo ?? new Mock<IShelfReplenishmentSuggestionRepository>()).Object,
             unitOfWork.Object);
+    }
+
+    private static ShelfReplenishmentSuggestion OpenSuggestion(params Guid[] skuIds)
+    {
+        var suggestion = new ShelfReplenishmentSuggestion
+        {
+            Id = Guid.NewGuid(),
+            SuggestionCode = "GY-TEST-001",
+            SourceStocktakeRequestId = Guid.NewGuid(),
+            SourceStocktakeCode = "KK-TEST-001",
+            Status = ShelfReplenishmentSuggestionStatus.Open,
+            CreatedAt = DateTime.UtcNow,
+        };
+        foreach (var skuId in skuIds)
+        {
+            suggestion.Items.Add(new ShelfReplenishmentSuggestionItem
+            {
+                Id = Guid.NewGuid(),
+                SuggestionId = suggestion.Id,
+                SkuId = skuId,
+                SkuCode = skuId == SkuA ? "SKU-A" : "SKU-B",
+                SkuSnapshotName = "Thành phẩm thử nghiệm",
+            });
+        }
+        return suggestion;
     }
 
     private static Mock<IStockTransferRepository> TransferRepositoryForCompletion(

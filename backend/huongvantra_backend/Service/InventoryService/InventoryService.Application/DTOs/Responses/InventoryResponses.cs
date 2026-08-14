@@ -386,6 +386,7 @@ public record StockTransferResponse(
     List<StockTransferLineResponse> Lines,
     Guid? SourceRequestId = null,
     string? SourceRequestCode = null,
+    string? SourceRequestedByName = null,
     Guid? SourceSuggestionId = null,
     string? SourceSuggestionCode = null);
 
