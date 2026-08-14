@@ -2647,9 +2647,10 @@ public class InventoryLogic(
         foreach (var item in items)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
-            if (stock != null && stock.QuantityOnHand <= stock.ShelfLowStockThreshold)
+            if (stock != null && stock.ShelfLowStockThreshold > 0
+                && Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity) <= stock.ShelfLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
-                    stock.SkuId, stock.SkuCode, stock.QuantityOnHand, stock.ShelfLowStockThreshold, ct);
+                    stock.SkuId, stock.SkuCode, Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity), stock.ShelfLowStockThreshold, ct);
         }
     }
 
@@ -2658,9 +2659,10 @@ public class InventoryLogic(
         foreach (var skuId in skuIds.Distinct())
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            if (stock != null && stock.QuantityOnHand <= stock.ShelfLowStockThreshold)
+            if (stock != null && stock.ShelfLowStockThreshold > 0
+                && Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity) <= stock.ShelfLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
-                    stock.SkuId, stock.SkuCode, stock.QuantityOnHand, stock.ShelfLowStockThreshold, ct);
+                    stock.SkuId, stock.SkuCode, Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity), stock.ShelfLowStockThreshold, ct);
         }
     }
 
@@ -6251,12 +6253,12 @@ public class InventoryLogic(
 
         var quantity = location == LocationWarehouse
             ? stock.WarehouseQuantityOnHand
-            : stock.QuantityOnHand;
+            : Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity);
         var threshold = location == LocationWarehouse
             ? stock.WarehouseLowStockThreshold
             : stock.ShelfLowStockThreshold;
 
-        if (quantity <= threshold)
+        if (threshold > 0 && quantity <= threshold)
             await _eventPublisher.PublishLowStockAsync(stock.SkuId, stock.SkuCode, quantity, threshold, ct);
     }
 
@@ -8216,8 +8218,10 @@ public class InventoryLogic(
         var stocks = await _skuStockRepo.GetAllAsync(ct);
         return stocks
             .Where(s =>
-                s.QuantityOnHand <= s.ShelfLowStockThreshold ||
-                s.WarehouseQuantityOnHand <= s.WarehouseLowStockThreshold)
+                (s.ShelfLowStockThreshold > 0
+                    && Math.Max(0, s.QuantityOnHand - s.ReservedQuantity) <= s.ShelfLowStockThreshold)
+                || (s.WarehouseLowStockThreshold > 0
+                    && s.WarehouseQuantityOnHand <= s.WarehouseLowStockThreshold))
             .Select(MapSkuStock)
             .ToList();
     }
@@ -8886,7 +8890,8 @@ public class InventoryLogic(
             foreach (var skuId in materialSkuIds)
             {
                 var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, innerCt);
-                if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
+                if (stock != null && stock.WarehouseLowStockThreshold > 0
+                    && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                     await _eventPublisher.PublishLowStockAsync(
                         stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, innerCt);
             }
@@ -9224,7 +9229,8 @@ public class InventoryLogic(
         foreach (var skuId in touchedSkuIds.Distinct())
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
+            if (stock != null && stock.WarehouseLowStockThreshold > 0
+                && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
                     stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, ct);
         }
@@ -9249,7 +9255,8 @@ public class InventoryLogic(
         foreach (var (skuId, _) in itemList)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
+            if (stock != null && stock.WarehouseLowStockThreshold > 0
+                && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
                     stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, ct);
         }

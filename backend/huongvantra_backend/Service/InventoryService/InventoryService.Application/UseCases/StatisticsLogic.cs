@@ -16,8 +16,10 @@ public class StatisticsLogic(
         var totalStoreQuantity = skus.Sum(s => s.QuantityOnHand);
         var totalWarehouseQuantity = skus.Sum(s => s.WarehouseQuantityOnHand);
         var lowStockCount = skus.Count(s =>
-            s.QuantityOnHand <= s.ShelfLowStockThreshold ||
-            s.WarehouseQuantityOnHand <= s.WarehouseLowStockThreshold);
+            (s.ShelfLowStockThreshold > 0
+                && Math.Max(0, s.QuantityOnHand - s.ReservedQuantity) <= s.ShelfLowStockThreshold)
+            || (s.WarehouseLowStockThreshold > 0
+                && s.WarehouseQuantityOnHand <= s.WarehouseLowStockThreshold));
 
         var pendingQueueCount = await _deductQueueRepo.CountWaitingAsync(ct);
         var totalWarehouseValue = await _warehouseBatchRepo.CalculateTotalWarehouseValueAsync(ct);

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -19,8 +19,21 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
+function getWarehouseLowStockMessage(productType, warehouseQuantity) {
+  if (productType === 'NGUYEN_LIEU' || productType === 'BAO_BI') {
+    return warehouseQuantity === 0
+      ? 'Hết hàng · Nhập gấp'
+      : 'Tồn thấp · Nhập NCC'
+  }
+
+  return warehouseQuantity === 0
+    ? 'Hết hàng · Nhập/SX'
+    : 'Tồn thấp · Nhập/SX'
+}
+
 function InventoryStatisticsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const canCreateSupplierReceipt = isWarehouseRole(loadAuthSession())
   const section = searchParams.get('section') || 'overview'
 
   const goSection = useCallback((nextSection) => {
@@ -112,15 +125,22 @@ function InventoryStatisticsPage() {
 
   const alerts = useMemo(() => {
     if (!skuStocks.length || !skus.length || !products.length) return []
-    const productMap = new Map(products.map(p => [p.id, p.name]))
-    const skuMap = new Map(skus.map(s => [s.id, { ...s, productName: productMap.get(s.productId) }]))
+    const productMap = new Map(products.map(p => [p.id, p]))
+    const skuMap = new Map(skus.map(s => {
+      const product = productMap.get(s.productId)
+      return [s.id, { ...s, productName: product?.name, productType: product?.productType }]
+    }))
     
     const generatedAlerts = []
 
     // 1. Tồn quầy thấp / Hết hàng quầy
     skuStocks.forEach(s => {
       const skuInfo = skuMap.get(s.skuId)
-      if (s.quantityOnHand <= s.lowStockThreshold) {
+      const shelfThreshold = Number(s.shelfLowStockThreshold ?? s.lowStockThreshold ?? 0)
+      const availableQuantity = Math.max(0, Number(s.availableQuantity ?? s.quantityOnHand ?? 0) - (s.availableQuantity == null ? Number(s.reservedQuantity ?? 0) : 0))
+      const warehouseThreshold = Number(s.warehouseLowStockThreshold ?? 0)
+
+      if (shelfThreshold > 0 && availableQuantity <= shelfThreshold) {
         generatedAlerts.push({
           id: `store_low_${s.skuId}`,
           refCode: s.skuCode,
@@ -130,13 +150,13 @@ function InventoryStatisticsPage() {
           expiry: '—',
           storeQuantity: s.quantityOnHand,
           warehouseQuantity: s.warehouseQuantityOnHand,
-          severity: s.quantityOnHand === 0 ? 'critical' : 'warning',
-          message: s.quantityOnHand === 0 ? 'Hết hàng quầy' : 'Tồn quầy thấp',
+          severity: availableQuantity === 0 ? 'critical' : 'warning',
+          message: availableQuantity === 0 ? 'Hết hàng quầy' : 'Tồn quầy thấp',
         })
       }
       
       // 2. Hết hàng kho
-      if (s.warehouseQuantityOnHand === 0) {
+      if (warehouseThreshold > 0 && s.warehouseQuantityOnHand <= warehouseThreshold) {
         generatedAlerts.push({
           id: `wh_empty_${s.skuId}`,
           refCode: s.skuCode,
@@ -145,9 +165,13 @@ function InventoryStatisticsPage() {
           importDate: '—',
           expiry: '—',
           storeQuantity: s.quantityOnHand,
-          warehouseQuantity: 0,
-          severity: 'critical',
-          message: 'Hết hàng trong kho',
+          warehouseQuantity: s.warehouseQuantityOnHand,
+          severity: s.warehouseQuantityOnHand === 0 ? 'critical' : 'warning',
+          message: getWarehouseLowStockMessage(skuInfo?.productType, s.warehouseQuantityOnHand),
+          action: canCreateSupplierReceipt
+            && (skuInfo?.productType === 'NGUYEN_LIEU' || skuInfo?.productType === 'BAO_BI')
+            ? { label: 'Nhập kho', to: '/inventory/import/create' }
+            : null,
         })
       }
     })
@@ -465,12 +489,13 @@ function InventoryStatisticsPage() {
                       <th className="px-6 py-4 text-right">Tồn quầy</th>
                       <th className="px-6 py-4 text-right">Tồn kho</th>
                       <th className="px-6 py-4">Trạng thái</th>
+                      <th className="px-6 py-4">Xử lý</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {paginatedAlerts.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-gray-500">
+                        <td colSpan={9} className="py-8 text-center text-gray-500">
                           Tất cả chỉ số đều ổn định. Không có cảnh báo nào.
                         </td>
                       </tr>
@@ -506,6 +531,16 @@ function InventoryStatisticsPage() {
                                 {item.message}
                               </span>
                             )}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            {item.action ? (
+                              <Link
+                                to={item.action.to}
+                                className="inline-flex items-center rounded-lg bg-[#538463] px-2.5 py-1.5 text-xs font-bold text-white hover:bg-[#457053]"
+                              >
+                                {item.action.label}
+                              </Link>
+                            ) : '—'}
                           </td>
                         </tr>
                       ))
