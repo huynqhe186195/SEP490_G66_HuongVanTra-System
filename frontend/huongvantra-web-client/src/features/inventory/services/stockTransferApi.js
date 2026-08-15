@@ -54,6 +54,7 @@ export function mapStockTransfer(row) {
     itemCount: Number(row.itemCount ?? row.ItemCount ?? row.lineCount ?? row.LineCount ?? lines.length),
     sourceRequestId: row.sourceRequestId ?? row.SourceRequestId ?? null,
     sourceRequestCode: row.sourceRequestCode ?? row.SourceRequestCode ?? '',
+    sourceRequestedByName: row.sourceRequestedByName ?? row.SourceRequestedByName ?? '',
     sourceSuggestionId: row.sourceSuggestionId ?? row.SourceSuggestionId ?? null,
     sourceSuggestionCode: row.sourceSuggestionCode ?? row.SourceSuggestionCode ?? '',
     totalQuantity: Number(

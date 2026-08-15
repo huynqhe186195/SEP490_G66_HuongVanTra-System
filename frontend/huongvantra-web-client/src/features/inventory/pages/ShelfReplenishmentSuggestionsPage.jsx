@@ -263,7 +263,7 @@ export default function ShelfReplenishmentSuggestionsPage() {
                               type="button"
                               onClick={() =>
                                 navigate(
-                                  `/inventory/stock-transfers/create?mode=direct&sourceSuggestionId=${row.id}`,
+                                  `/inventory/stock-transfers/create?sourceSuggestionId=${row.id}`,
                                 )
                               }
                               className="rounded-xl bg-[#538463] px-3 py-2 text-xs font-bold text-white hover:bg-[#457053]"

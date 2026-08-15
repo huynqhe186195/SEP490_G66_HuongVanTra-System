@@ -88,8 +88,10 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
         var normalizedType = (transferType ?? string.Empty).Trim().ToLowerInvariant();
         if (normalizedType == "fromrequest")
             query = query.Where(transfer => transfer.SourceRequestId != null);
+        else if (normalizedType == "fromsuggestion")
+            query = query.Where(transfer => transfer.SourceSuggestionId != null);
         else if (normalizedType == "direct")
-            query = query.Where(transfer => transfer.SourceRequestId == null);
+            query = query.Where(transfer => transfer.SourceRequestId == null && transfer.SourceSuggestionId == null);
 
         if (createdBy.HasValue && createdBy.Value != Guid.Empty)
             query = query.Where(transfer => transfer.CreatedBy == createdBy.Value);

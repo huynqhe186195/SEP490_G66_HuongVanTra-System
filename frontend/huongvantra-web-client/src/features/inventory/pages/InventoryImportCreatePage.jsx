@@ -755,20 +755,28 @@ function InventoryImportCreatePage() {
 
       const importWarnings = []
       const nextHeader = { ...headerPatch }
-      if (nextHeader.supplierName) {
-        const needle = normalizeSearch(nextHeader.supplierName)
-        const matched = suppliers.find((s) => normalizeSearch(s.name) === needle)
-          || suppliers.find((s) => {
-            const name = normalizeSearch(s.name)
-            return name.includes(needle) || needle.includes(name)
-          })
+if (nextHeader.supplierName || nextHeader.supplierCode) {
+        const codeNeedle = normalizeSearch(nextHeader.supplierCode)
+        const nameNeedle = normalizeSearch(nextHeader.supplierName)
+        const matched = (codeNeedle
+          ? suppliers.find((item) => normalizeSearch(item.supplierCode) === codeNeedle)
+          : null)
+          || (nameNeedle
+            ? suppliers.find((item) => normalizeSearch(item.name) === nameNeedle)
+              || suppliers.find((item) => {
+                const name = normalizeSearch(item.name)
+                return name.includes(nameNeedle) || nameNeedle.includes(name)
+              })
+            : null)
         if (matched) {
           nextHeader.supplierId = matched.id
           nextHeader.supplierName = matched.name
+          nextHeader.supplierCode = matched.supplierCode
         } else {
           delete nextHeader.supplierId
+          delete nextHeader.supplierCode
           importWarnings.push(
-            `Không tìm thấy nhà cung cấp “${nextHeader.supplierName}” — hãy chọn lại trên form.`,
+            `Không tìm thấy nhà cung cấp “${nextHeader.supplierCode || nextHeader.supplierName}” — hãy chọn lại trên form.`,
           )
           delete nextHeader.supplierName
         }

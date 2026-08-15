@@ -19,7 +19,11 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchSkuStocks } from '../services/inventoryStockApi.js'
-import { fetchStockAdjustmentRequestById } from '../services/stockAdjustmentRequestApi.js'
+import {
+  fetchStockAdjustmentRequestById,
+  fetchStockAdjustmentRequests,
+} from '../services/stockAdjustmentRequestApi.js'
+import { fetchOpenShelfReplenishmentSuggestionCount } from '../services/shelfReplenishmentSuggestionApi.js'
 import { SlipActionButtons, SlipPrintStyles, StockTransferDocument } from '../components/InventorySlipDocument.jsx'
 import {
   getStockFlowErrorMessage,
@@ -30,7 +34,6 @@ import {
 import {
   cancelStockTransfer,
   completeStockTransfer,
-  createStockTransfer,
   fetchStockTransferById,
   fetchStockTransfers,
   updateStockTransfer,
@@ -52,7 +55,7 @@ const STATUS_OPTIONS = [
 const TRANSFER_TYPE_OPTIONS = [
   { value: '', label: 'Tất cả loại' },
   { value: 'fromRequest', label: 'Từ yêu cầu' },
-  { value: 'direct', label: 'Trực tiếp' },
+  { value: 'fromSuggestion', label: 'Từ gợi ý' },
 ]
 
 /** API list clamp pageSize tối đa 50. */
@@ -183,13 +186,11 @@ function TransferFormModal({
         note,
         lines: payloadLines,
         sourceRequestId: transfer?.sourceRequestId ?? null,
+        sourceSuggestionId: transfer?.sourceSuggestionId ?? null,
       }
       if (transfer?.id) {
         await updateStockTransfer(transfer.id, payload)
         showSuccess(`Đã cập nhật ${STOCK_FLOW_TERMS.transfer}.`)
-      } else {
-        await createStockTransfer(payload)
-        showSuccess(`Đã tạo ${STOCK_FLOW_TERMS.transfer} ở trạng thái Nháp. Tồn kho chỉ đổi khi hoàn tất.`)
       }
       await onSaved()
       onClose()
@@ -457,10 +458,40 @@ function StockTransfersPage() {
   const [formTransfer, setFormTransfer] = useState(null)
   const [formSourceRequest, setFormSourceRequest] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [openRequestCount, setOpenRequestCount] = useState(0)
+  const [openSuggestionCount, setOpenSuggestionCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [isCatalogLoading, setIsCatalogLoading] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
+
+  useEffect(() => {
+    if (!canOperate) {
+      setOpenRequestCount(0)
+      setOpenSuggestionCount(0)
+      return undefined
+    }
+
+    let mounted = true
+    Promise.all([
+      fetchStockAdjustmentRequests({ page: 1, pageSize: 1, onlyRemaining: true }),
+      fetchOpenShelfReplenishmentSuggestionCount(),
+    ])
+      .then(([requests, suggestionCount]) => {
+        if (!mounted) return
+        setOpenRequestCount(Math.max(0, Number(requests.totalCount ?? 0)))
+        setOpenSuggestionCount(Math.max(0, Number(suggestionCount ?? 0)))
+      })
+      .catch(() => {
+        if (!mounted) return
+        setOpenRequestCount(0)
+        setOpenSuggestionCount(0)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [canOperate])
 
   const stockBySkuId = useMemo(
     () => new Map(stocks.map((stock) => [stock.skuId, stock])),
@@ -562,9 +593,23 @@ function StockTransfersPage() {
     setPage(1)
   }
 
+  async function enrichSourceRequestCreator(transfer) {
+    if (!transfer?.sourceRequestId || String(transfer.sourceRequestedByName || '').trim()) return transfer
+    try {
+      const sourceRequest = await fetchStockAdjustmentRequestById(transfer.sourceRequestId)
+      return {
+        ...transfer,
+        sourceRequestedByName: sourceRequest.requestedByName || '',
+      }
+    } catch {
+      return transfer
+    }
+  }
+
   async function openDetail(id) {
     try {
-      setSelected(await fetchStockTransferById(id))
+      const transfer = await fetchStockTransferById(id)
+      setSelected(await enrichSourceRequestCreator(transfer))
     } catch (error) {
       showError(error.message)
     }
@@ -590,7 +635,10 @@ function StockTransfersPage() {
 
   async function reloadSelected(id) {
     await loadTransfers()
-    if (id) setSelected(await fetchStockTransferById(id))
+    if (id) {
+      const transfer = await fetchStockTransferById(id)
+      setSelected(await enrichSourceRequestCreator(transfer))
+    }
   }
 
   async function handleComplete() {
@@ -601,7 +649,7 @@ function StockTransfersPage() {
     setIsCompleting(true)
     try {
       const completed = await completeStockTransfer(transferId)
-      setSelected(completed)
+      setSelected(await enrichSourceRequestCreator(completed))
       showSuccess('Đã hoàn tất điều chuyển Kho → Kệ.')
       await loadTransfers()
     } catch (error) {
@@ -609,7 +657,8 @@ function StockTransfersPage() {
       // Lỗi có thể xảy ra trước hoặc sau khi backend đổi trạng thái, nên đọc lại phiếu
       // để modal phản ánh đúng trạng thái thực tế thay vì giữ dữ liệu cũ.
       try {
-        setSelected(await fetchStockTransferById(transferId))
+        const transfer = await fetchStockTransferById(transferId)
+        setSelected(await enrichSourceRequestCreator(transfer))
         await loadTransfers()
       } catch (reloadError) {
         showError(getStockFlowErrorMessage(reloadError, 'Không tải lại được Phiếu điều chuyển. Vui lòng tải lại trang.'))
@@ -632,7 +681,7 @@ function StockTransfersPage() {
     try {
       const cancelled = await cancelStockTransfer(selected.id, reason)
       showSuccess('Đã hủy Phiếu điều chuyển.')
-      setSelected(cancelled)
+      setSelected(await enrichSourceRequestCreator(cancelled))
       await loadTransfers()
     } catch (error) {
       showError(getStockFlowErrorMessage(error, 'Không hủy được Phiếu điều chuyển. Vui lòng thử lại.'))
@@ -654,51 +703,40 @@ function StockTransfersPage() {
       <PageHeader
         compact
         title={STOCK_FLOW_TERMS.transfer}
-        titleInfo={`Thủ kho tạo/sửa/hoàn tất. Hoàn tất trừ ${STOCK_FLOW_TERMS.warehouse} (FEFO), cộng ${STOCK_FLOW_TERMS.shelf}.`}
+        titleInfo={`Chỉ tạo từ Yêu cầu bổ sung hoặc Gợi ý bổ sung. Hoàn tất trừ ${STOCK_FLOW_TERMS.warehouse} (FEFO), cộng ${STOCK_FLOW_TERMS.shelf}.`}
         searchPlaceholder="Tìm mã phiếu, mã yêu cầu nguồn, sản phẩm hoặc người tạo..."
         searchValue={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
         rightContent={canOperate ? (
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/inventory/stock-requests"
+              title="Mở danh sách Yêu cầu bổ sung"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+              Yêu cầu bổ sung
+            </Link>
             <button
               type="button"
               onClick={() => navigate('/inventory/stock-transfers/create')}
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-3.5 py-2 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
             >
               <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-              Từ yêu cầu
+              Từ yêu cầu{openRequestCount > 0 ? ` (${openRequestCount})` : ''}
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/inventory/stock-transfers/create?mode=direct')}
+            <Link
+              to="/inventory/shelf-replenishment-suggestions"
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
             >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo trực tiếp
-            </button>
+              <span className="material-symbols-outlined text-[18px]">lightbulb</span>
+              Từ gợi ý{openSuggestionCount > 0 ? ` (${openSuggestionCount})` : ''}
+            </Link>
           </div>
         ) : null}
       />
 
-      <ListFilterToolbar
-        meta={(
-          <>
-            <Link
-              to="/inventory/stock-requests"
-              className="font-semibold text-[#356647] underline-offset-2 hover:underline"
-            >
-              Yêu cầu bổ sung
-            </Link>
-            <span className="text-slate-300">·</span>
-            <Link
-              to="/inventory/shelf-replenishment-suggestions"
-              className="font-semibold text-[#356647] underline-offset-2 hover:underline"
-            >
-              Gợi ý Kệ
-            </Link>
-          </>
-        )}
-      >
+      <ListFilterToolbar>
         <StatusFilterChips
           dense
           options={statusChipOptions}
@@ -822,7 +860,7 @@ function StockTransfersPage() {
                     <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
                       {sourceRequestId
                         ? 'Tạo phiếu từ yêu cầu để chuyển hàng Kho → Kệ.'
-                        : 'Tạo phiếu từ yêu cầu bổ sung hoặc tạo trực tiếp khi đã biết SKU cần chuyển.'}
+                        : 'Tạo phiếu từ yêu cầu bổ sung hoặc mở Gợi ý bổ sung Kệ Hàng để tạo phiếu từ gợi ý.'}
                     </p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                       {canOperate ? (
@@ -837,14 +875,13 @@ function StockTransfersPage() {
                             <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
                             Từ yêu cầu
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => navigate('/inventory/stock-transfers/create?mode=direct')}
+                          <Link
+                            to="/inventory/shelf-replenishment-suggestions"
                             className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#2a5238]"
                           >
-                            <span className="material-symbols-outlined text-[18px]">add</span>
-                            Tạo trực tiếp
-                          </button>
+                            <span className="material-symbols-outlined text-[18px]">lightbulb</span>
+                            Xem gợi ý bổ sung
+                          </Link>
                         </>
                       ) : null}
                       <button
@@ -874,9 +911,15 @@ function StockTransfersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-4 text-slate-600">
-                    {transfer.sourceRequestId ? 'Từ yêu cầu' : 'Trực tiếp'}
+                    {transfer.sourceRequestId
+                      ? 'Từ yêu cầu'
+                      : transfer.sourceSuggestionId
+                        ? 'Từ gợi ý'
+                        : 'Không có nguồn (cũ)'}
                   </td>
-                  <td className="px-4 py-4 font-mono text-xs text-slate-600">{transfer.sourceRequestCode || '—'}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-slate-600">
+                    {transfer.sourceRequestCode || transfer.sourceSuggestionCode || '—'}
+                  </td>
                   <td className="px-4 py-4">{transfer.createdByName || '—'}</td>
                   <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(transfer.createdAt)}</td>
                   <td className="px-4 py-4 text-slate-600">{transfer.itemCount} sản phẩm</td>

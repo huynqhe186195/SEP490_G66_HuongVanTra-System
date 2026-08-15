@@ -153,6 +153,23 @@ function SignatureArea({ creator }) {
   )
 }
 
+function StockTransferSignatureArea({ creator }) {
+  return (
+    <div className="signature-area mt-10 grid grid-cols-2 gap-6 text-center text-sm text-slate-700">
+      <div>
+        <p className="font-semibold">Người lập phiếu</p>
+        <p className="mt-12 font-medium text-slate-800">{creator.name}</p>
+        <p className="mt-1 text-xs text-slate-500">Chức vụ/Vai trò: {creator.role}</p>
+        <p className="mt-8 text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+      </div>
+      <div>
+        <p className="font-semibold">Quản Lý Cửa Hàng</p>
+        <p className="mt-16 text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+      </div>
+    </div>
+  )
+}
+
 function HeaderField({ label, value, emptyFallback = '-' }) {
   return (
     <div>
@@ -403,6 +420,7 @@ export function StockTransferDocument({ transfer, statusLabel }) {
         <HeaderField label="Mã phiếu" value={transfer?.transferCode} />
         <HeaderField label="Trạng thái" value={statusLabel} />
         <HeaderField label="Yêu cầu nguồn" value={transfer?.sourceRequestCode} />
+        <HeaderField label="Người yêu cầu" value={transfer?.sourceRequestedByName} />
         <HeaderField label="Thời gian tạo" value={transfer?.createdAt ? formatVietnamDateTime(transfer.createdAt) : '-'} />
         <HeaderField label="Phiếu xuất" value={transfer?.exportSlipCode} />
         <HeaderField label="Phiếu nhập" value={transfer?.importSlipCode} />
@@ -431,7 +449,6 @@ export function StockTransferDocument({ transfer, statusLabel }) {
             <tr>
               <th className="border-b border-slate-200 px-3 py-2">Sản Phẩm</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
-              <th className="border-b border-slate-200 px-3 py-2">Lô FIFO</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -442,14 +459,13 @@ export function StockTransferDocument({ transfer, statusLabel }) {
                   <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                 </td>
                 <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
-                <td className="px-3 py-2 text-slate-700">{formatAllocations(line.batchAllocations)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <SignatureArea creator={creator} />
+      <StockTransferSignatureArea creator={creator} />
     </article>
   )
 }
