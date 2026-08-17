@@ -59,6 +59,40 @@ public sealed class OutboxMonitoringTests
     }
 
     [Fact]
+    public async Task GetPaged_ReadsOrderChannelFromPayload()
+    {
+        await using var db = NewContext();
+        var pos = NewMessage(OutboxMessageStatus.Failed);
+        pos.Payload = """{"orderChannel":"POS","orderCode":"POS-1"}""";
+        var cod = NewMessage(OutboxMessageStatus.Failed);
+        cod.Payload = """{"OrderChannel":"COD","OrderCode":"COD-9"}""";
+        await SeedAsync(db, pos, cod);
+
+        var logic = new OutboxMonitoringLogic(new OutboxMonitoringRepository(db));
+        var result = await logic.GetPagedAsync(OutboxMessageStatus.Failed, null, 1, 20);
+
+        Assert.Contains(result.Items, i => i.Id == pos.Id && i.OrderChannel == "POS" && i.OrderCode == "POS-1");
+        Assert.Contains(result.Items, i => i.Id == cod.Id && i.OrderChannel == "COD" && i.OrderCode == "COD-9");
+    }
+
+    [Fact]
+    public async Task GetPaged_ReadsNumericOrderChannelEnum()
+    {
+        await using var db = NewContext();
+        var pos = NewMessage(OutboxMessageStatus.Failed);
+        pos.Payload = """{"OrderChannel":0,"OrderCode":"HVT-1"}""";
+        var cod = NewMessage(OutboxMessageStatus.Failed);
+        cod.Payload = """{"orderChannel":4,"OrderCode":"HVT-2"}""";
+        await SeedAsync(db, pos, cod);
+
+        var logic = new OutboxMonitoringLogic(new OutboxMonitoringRepository(db));
+        var result = await logic.GetPagedAsync(OutboxMessageStatus.Failed, null, 1, 20);
+
+        Assert.Contains(result.Items, i => i.Id == pos.Id && i.OrderChannel == "POS");
+        Assert.Contains(result.Items, i => i.Id == cod.Id && i.OrderChannel == "COD");
+    }
+
+    [Fact]
     public async Task GetPaged_FiltersByEventTypeSubstring()
     {
         await using var db = NewContext();

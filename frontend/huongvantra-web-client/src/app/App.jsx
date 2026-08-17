@@ -157,6 +157,8 @@ function App() {
         <Route path="/admin/promotions" element={<PromotionsPage />} />
         <Route path="/admin/system-activities" element={<SystemActivityLogPage />} />
         <Route path="/admin/inventory-sync" element={<InventorySyncMonitorPage />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
+        <Route path="/integrations/errors" element={<Navigate to="/admin/inventory-sync?status=Failed" replace />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />
@@ -167,7 +169,6 @@ function App() {
         <Route path="/contracts/:id/edit" element={<ContractFormPage />} />
         <Route path="/reports" element={<Navigate to="/reports/end-of-day" replace />} />
         <Route path="/reports/end-of-day" element={<EndOfDayReportPage />} />
-        <Route path="/integrations" element={<IntegrationsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

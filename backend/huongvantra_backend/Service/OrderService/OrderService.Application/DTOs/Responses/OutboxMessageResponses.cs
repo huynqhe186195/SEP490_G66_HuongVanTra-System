@@ -3,6 +3,7 @@ namespace OrderService.Application.DTOs.Responses;
 /// <summary>
 /// G7 — dòng tóm tắt một OutboxMessage cho trang giám sát đồng bộ tồn kho.
 /// Không trả toàn bộ payload trong danh sách để tránh tải nặng; xem chi tiết ở endpoint riêng.
+/// OrderChannel / OrderCode lấy từ JSON payload (POS/COD) khi có.
 /// </summary>
 public record OutboxMessageSummaryResponse(
     Guid Id,
@@ -16,7 +17,9 @@ public record OutboxMessageSummaryResponse(
     DateTime? PublishedAtUtc,
     string? LastError,
     string? LockedBy,
-    DateTime? LockedUntilUtc);
+    DateTime? LockedUntilUtc,
+    string? OrderChannel = null,
+    string? OrderCode = null);
 
 /// <summary>Chi tiết đầy đủ một OutboxMessage, bao gồm payload JSON.</summary>
 public record OutboxMessageDetailResponse(

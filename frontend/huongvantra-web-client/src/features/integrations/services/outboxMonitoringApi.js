@@ -1,4 +1,5 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { extractOutboxContext, inferOperatingChannel, shortEventType } from '../utils/outboxPayload.js'
 
 function coalesce(item, ...keys) {
   for (const key of keys) {
@@ -10,7 +11,7 @@ function coalesce(item, ...keys) {
 
 function mapMessage(item) {
   if (!item || typeof item !== 'object') return null
-  return {
+  const mapped = {
     id: coalesce(item, 'id', 'Id'),
     eventType: coalesce(item, 'eventType', 'EventType') ?? '',
     aggregateId: coalesce(item, 'aggregateId', 'AggregateId'),
@@ -24,6 +25,19 @@ function mapMessage(item) {
     lockedBy: coalesce(item, 'lockedBy', 'LockedBy'),
     lockedUntilUtc: coalesce(item, 'lockedUntilUtc', 'LockedUntilUtc'),
     payload: coalesce(item, 'payload', 'Payload'),
+  }
+  const context = extractOutboxContext(mapped)
+  return {
+    ...mapped,
+    shortEventType: shortEventType(mapped.eventType),
+    orderChannel: inferOperatingChannel({
+      orderChannel: coalesce(item, 'orderChannel', 'OrderChannel') || context.channel,
+      eventType: mapped.eventType,
+      orderCode: coalesce(item, 'orderCode', 'OrderCode') || context.orderCode,
+    }),
+    orderCode: coalesce(item, 'orderCode', 'OrderCode') || context.orderCode,
+    orderId: context.orderId,
+    customerName: context.customerName,
   }
 }
 
