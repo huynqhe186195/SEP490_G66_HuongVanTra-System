@@ -327,15 +327,17 @@ export default function StockAdjustmentRequestCreatePage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="!gap-3 lg:h-full lg:min-h-0 lg:overflow-hidden">
       <PageHeader
         title={`Tạo ${STOCK_FLOW_TERMS.request}`}
+        titleAtEyebrow
+        reducedVerticalPadding
         titleInfo={`${STOCK_FLOW_TERMS.warehouse} cấp hàng thành phẩm cho ${STOCK_FLOW_TERMS.shelf}. Yêu cầu này chưa làm thay đổi tồn kho.`}
         description="Chọn nhiều sản phẩm thành phẩm cần bổ sung lên Kệ Hàng, nhập số lượng cho từng sản phẩm rồi gửi yêu cầu."
       />
 
-      <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+      <form onSubmit={handleSubmit} className="mt-0 grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
+        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5 lg:flex lg:min-h-0 lg:flex-col">
           <div className="border-b border-slate-100 px-5 py-4">
             <h2 className="text-base font-bold text-slate-800">Danh mục sản phẩm</h2>
             <p className="mt-1 text-xs text-slate-500">
@@ -360,7 +362,7 @@ export default function StockAdjustmentRequestCreatePage() {
             </label>
           </div>
 
-          <div className="max-h-[420px] overflow-y-auto custom-scrollbar border-t border-slate-100">
+          <div className="max-h-[420px] overflow-y-auto custom-scrollbar border-t border-slate-100 lg:min-h-0 lg:max-h-none lg:flex-1">
             {isLoadingCatalog ? (
               <p className="px-5 py-8 text-sm text-slate-500">Đang tải danh mục...</p>
             ) : catalogOptions.length === 0 ? (
@@ -426,7 +428,7 @@ export default function StockAdjustmentRequestCreatePage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7">
+        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7 lg:flex lg:min-h-0 lg:flex-col">
           <div className="border-b border-slate-100 px-5 py-4">
             <h2 className="text-base font-bold text-slate-800">Sản phẩm đã chọn</h2>
             <p className="mt-1 text-xs text-slate-500">
@@ -434,7 +436,7 @@ export default function StockAdjustmentRequestCreatePage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar">
+          <div className="overflow-x-auto custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>

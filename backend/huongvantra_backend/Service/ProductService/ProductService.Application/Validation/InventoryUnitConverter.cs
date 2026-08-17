@@ -19,7 +19,7 @@ public static class InventoryUnitConverter
             if (Enum.TryParse<InventoryUnit>(value, ignoreCase: true, out var parsed))
                 return parsed;
 
-            throw new ProductValidationException("InventoryUnit chỉ hỗ trợ Gram hoặc Piece.");
+            throw new ProductValidationException("Đơn vị tồn chỉ hỗ trợ Gram hoặc Cái.");
         }
 
         return Infer(baseUnit, weightUnit);
@@ -45,7 +45,7 @@ public static class InventoryUnitConverter
         if (normalized != decimal.Truncate(normalized))
             throw new ProductValidationException(
                 inventoryUnit == InventoryUnit.Piece
-                    ? "Số lượng PIECE phải là số nguyên."
+                    ? "Số lượng tính theo cái phải là số nguyên."
                     : "Số lượng GRAM sau quy đổi phải là số nguyên.");
 
         if (normalized > int.MaxValue)

@@ -24,6 +24,14 @@ public interface IStockAdjustmentRequestRepository
         DateTime? toDateUtc = null,
         bool onlyRemaining = false,
         string? sort = null);
+    /// <summary>Số lượng khớp từng chip của danh sách Yêu cầu bổ sung, không áp dụng chip trạng thái đang chọn.</summary>
+    Task<Dictionary<string, int>> CountQuickFiltersAsync(
+        Guid? requestedBy,
+        string? search,
+        string? creatorRole = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null,
+        CancellationToken ct = default);
     /// <summary>
     /// Danh sách vai trò người tạo đã xuất hiện trong dữ liệu, dùng để đổ tùy chọn bộ lọc
     /// mà không cần gọi UserService.

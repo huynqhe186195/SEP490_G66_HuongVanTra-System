@@ -3,8 +3,8 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
   getAdjustmentLineStatusLabel,
+  getAdjustmentRequestStatusPresentation,
   getAdjustmentStatusClass,
-  getAdjustmentStatusLabel,
 } from '../services/stockAdjustmentRequestApi.js'
 import { getStockTransferStatusLabel, STOCK_FLOW_TERMS } from '../utils/stockFlowLabels.js'
 
@@ -32,6 +32,7 @@ export default function StockAdjustmentRequestDetailPanel({
   onReject,
   onCancel,
   onCloseRemaining,
+  onViewTransfer,
 }) {
   if (!request) {
     return <p className="text-sm text-slate-500">Chọn một yêu cầu để xem chi tiết.</p>
@@ -39,6 +40,11 @@ export default function StockAdjustmentRequestDetailPanel({
 
   const items = Array.isArray(request.items) ? request.items : []
   const transfers = Array.isArray(relatedTransfers) ? relatedTransfers : []
+  const completedTransfers = transfers.filter((transfer) => transfer.status === 'completed')
+  const cancelledTransfers = transfers.filter((transfer) => transfer.status === 'cancelled')
+  const totalTransferQuantity = transfers.reduce((sum, transfer) => sum + Number(transfer.totalQuantity ?? 0), 0)
+  const completedTransferQuantity = completedTransfers.reduce((sum, transfer) => sum + Number(transfer.totalQuantity ?? 0), 0)
+  const cancelledTransferQuantity = cancelledTransfers.reduce((sum, transfer) => sum + Number(transfer.totalQuantity ?? 0), 0)
   const isOwnRequest = currentUserId && String(request.requestedBy).toLowerCase() === String(currentUserId).toLowerCase()
   const showReviewActions = request.status === 'pending' && canReview && !isOwnRequest
   const showCancelAction = request.status === 'pending' && canCancel && (canCancelAny || isOwnRequest || activeTab === 'mine')
@@ -46,6 +52,7 @@ export default function StockAdjustmentRequestDetailPanel({
     canReview
     && CLOSEABLE_STATUSES.includes(request.status)
     && Number(request.totalRemainingQuantity ?? 0) > 0
+  const requestStatusPresentation = getAdjustmentRequestStatusPresentation(request)
 
   return (
     <div className="space-y-6">
@@ -57,9 +64,9 @@ export default function StockAdjustmentRequestDetailPanel({
           </p>
         </div>
         <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${getAdjustmentStatusClass(request.status)}`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${requestStatusPresentation.className}`}
         >
-          {getAdjustmentStatusLabel(request.status)}
+          {requestStatusPresentation.label}
         </span>
       </div>
 
@@ -181,33 +188,68 @@ export default function StockAdjustmentRequestDetailPanel({
       <div className="rounded-xl border border-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
-            {STOCK_FLOW_TERMS.transfer} liên quan
+            {STOCK_FLOW_TERMS.transfer} liên quan ({transfers.length} lượt)
           </p>
           <Link to={`/inventory/stock-transfers?sourceRequestId=${request.id}`} className="text-xs font-semibold text-[#356647] hover:underline">
             Mở danh sách phiếu điều chuyển
           </Link>
         </div>
         {transfers.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 gap-px border-b border-slate-100 bg-slate-100 sm:grid-cols-4">
+              <div className="bg-white px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tổng lượt điều chuyển</p>
+                <p className="mt-1 text-base font-bold text-slate-800">{transfers.length} phiếu</p>
+              </div>
+              <div className="bg-white px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tổng số lượng trên phiếu</p>
+                <p className="mt-1 text-base font-bold text-slate-800">{formatStockQuantity(totalTransferQuantity)}</p>
+              </div>
+              <div className="bg-white px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Đã hoàn tất điều chuyển</p>
+                <p className="mt-1 text-base font-bold text-emerald-700">{formatStockQuantity(completedTransferQuantity)}</p>
+              </div>
+              <div className="bg-white px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Đã hủy</p>
+                <p className="mt-1 text-base font-bold text-slate-600">{formatStockQuantity(cancelledTransferQuantity)}</p>
+              </div>
+            </div>
           <ul className="divide-y divide-slate-100">
-            {transfers.map((transfer) => (
+            {transfers.map((transfer, index) => (
               <li key={transfer.transferId} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-mono text-sm font-bold text-[#356647]">{transfer.transferCode}</p>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(transfer.status)}`}
-                  >
-                    {getStockTransferStatusLabel(transfer.status)}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-bold text-[#356647]">{transfer.transferCode}</p>
+                    {index === 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Mới nhất</span> : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(transfer.status)}`}
+                    >
+                      {getStockTransferStatusLabel(transfer.status)}
+                    </span>
+                    {onViewTransfer ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewTransfer(transfer.transferId)}
+                        className="text-xs font-semibold text-[#356647] hover:underline"
+                      >
+                        Xem phiếu
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  {STOCK_FLOW_TERMS.transferQuantity}: {formatStockQuantity(transfer.totalQuantity)}
-                  {' · tạo '}
-                  {formatVietnamDateTime(transfer.createdAt)}
-                  {transfer.completedAt ? ` · hoàn tất ${formatVietnamDateTime(transfer.completedAt)}` : ''}
+                  {transfer.status === 'completed'
+                    ? `Số lượng đã chuyển: ${formatStockQuantity(transfer.totalQuantity)}`
+                    : transfer.status === 'cancelled'
+                      ? `Số lượng còn thiếu: ${formatStockQuantity(transfer.totalQuantity)}`
+                      : `Số lượng chờ điều chuyển: ${formatStockQuantity(transfer.totalQuantity)}`}
                 </p>
               </li>
             ))}
           </ul>
+          </>
         ) : (
           <p className="px-4 py-4 text-sm text-slate-500">
             Chưa có phiếu điều chuyển nào từ yêu cầu này. Một yêu cầu có thể được đáp ứng bằng nhiều phiếu điều chuyển.

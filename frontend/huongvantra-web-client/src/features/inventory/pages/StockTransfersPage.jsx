@@ -458,6 +458,7 @@ function StockTransfersPage() {
   const [formTransfer, setFormTransfer] = useState(null)
   const [formSourceRequest, setFormSourceRequest] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [pendingRequestCount, setPendingRequestCount] = useState(0)
   const [openRequestCount, setOpenRequestCount] = useState(0)
   const [openSuggestionCount, setOpenSuggestionCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -467,23 +468,51 @@ function StockTransfersPage() {
 
   useEffect(() => {
     if (!canOperate) {
+      setPendingRequestCount(0)
       setOpenRequestCount(0)
       setOpenSuggestionCount(0)
       return undefined
     }
 
     let mounted = true
+    const loadRequestActionCounts = async () => {
+      const firstPage = await fetchStockAdjustmentRequests({
+        page: 1,
+        pageSize: TRANSFER_PAGE_SIZE_MAX,
+        sort: 'warehouse_priority',
+      })
+      const totalPages = Math.max(1, Math.ceil(Number(firstPage.totalCount ?? 0) / TRANSFER_PAGE_SIZE_MAX))
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, index) => fetchStockAdjustmentRequests({
+          page: index + 2,
+          pageSize: TRANSFER_PAGE_SIZE_MAX,
+          sort: 'warehouse_priority',
+        })),
+      )
+      const requests = [firstPage, ...remainingPages]
+        .flatMap((result) => result.items)
+
+      return {
+        pendingCount: requests.filter((request) => request.status === 'pending').length,
+        transferableCount: requests.filter((request) => request.items.some(
+          (item) => Number(item.availableToTransferQuantity ?? 0) > 0,
+        )).length,
+      }
+    }
+
     Promise.all([
-      fetchStockAdjustmentRequests({ page: 1, pageSize: 1, onlyRemaining: true }),
+      loadRequestActionCounts(),
       fetchOpenShelfReplenishmentSuggestionCount(),
     ])
-      .then(([requests, suggestionCount]) => {
+      .then(([requestCounts, suggestionCount]) => {
         if (!mounted) return
-        setOpenRequestCount(Math.max(0, Number(requests.totalCount ?? 0)))
+        setPendingRequestCount(Math.max(0, Number(requestCounts?.pendingCount ?? 0)))
+        setOpenRequestCount(Math.max(0, Number(requestCounts?.transferableCount ?? 0)))
         setOpenSuggestionCount(Math.max(0, Number(suggestionCount ?? 0)))
       })
       .catch(() => {
         if (!mounted) return
+        setPendingRequestCount(0)
         setOpenRequestCount(0)
         setOpenSuggestionCount(0)
       })
@@ -699,7 +728,7 @@ function StockTransfersPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="-mt-3 !gap-2.5 sm:-mt-3 sm:!gap-3 lg:-mt-4 xl:-mt-4">
       <PageHeader
         compact
         title={STOCK_FLOW_TERMS.transfer}
@@ -711,32 +740,49 @@ function StockTransfersPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               to="/inventory/stock-requests"
-              title="Mở danh sách Yêu cầu bổ sung"
+              title="Xem yêu cầu bổ sung đang chờ duyệt hoặc hủy"
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
               <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span>
-              Yêu cầu bổ sung
+              Danh sách yêu cầu
+              {pendingRequestCount > 0 ? (
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">
+                  Chờ xử lý: {pendingRequestCount}
+                </span>
+              ) : null}
             </Link>
             <button
               type="button"
               onClick={() => navigate('/inventory/stock-transfers/create')}
+              title="Lập phiếu điều chuyển từ yêu cầu đã duyệt còn số lượng cần chuyển"
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-3.5 py-2 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
             >
               <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-              Từ yêu cầu{openRequestCount > 0 ? ` (${openRequestCount})` : ''}
+              Lập phiếu từ yêu cầu
+              {openRequestCount > 0 ? (
+                <span className="rounded-full bg-[#356647]/10 px-1.5 py-0.5 text-xs font-bold text-[#356647]">
+                  Cần chuyển: {openRequestCount}
+                </span>
+              ) : null}
             </button>
             <Link
               to="/inventory/shelf-replenishment-suggestions"
+              title="Xử lý các gợi ý bổ sung Kệ Hàng tự động"
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
             >
               <span className="material-symbols-outlined text-[18px]">lightbulb</span>
-              Từ gợi ý{openSuggestionCount > 0 ? ` (${openSuggestionCount})` : ''}
+              Gợi ý bổ sung
+              {openSuggestionCount > 0 ? (
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs font-bold text-white">
+                  Cần xử lý: {openSuggestionCount}
+                </span>
+              ) : null}
             </Link>
           </div>
         ) : null}
       />
 
-      <ListFilterToolbar>
+      <ListFilterToolbar className="!mb-0">
         <StatusFilterChips
           dense
           options={statusChipOptions}
@@ -789,7 +835,7 @@ function StockTransfersPage() {
       </ListFilterToolbar>
 
       {sourceRequestId ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="mb-0 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <span className="material-symbols-outlined text-[16px]">filter_alt</span>
           <span>
             Đang lọc theo yêu cầu{' '}

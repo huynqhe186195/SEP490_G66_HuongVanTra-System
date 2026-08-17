@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import PageHeader from '../../../components/shared/PageHeader.jsx'
+import ListFilterToolbar, {
+  listFilterControlClass,
+  listFilterSelectClass,
+} from '../../../components/shared/ListFilterToolbar.jsx'
+import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
@@ -9,7 +13,6 @@ import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCrea
 import {
   getStockFlowErrorMessage,
   STOCK_FLOW_TERMS,
-  STOCK_REQUEST_STATUS_OPTIONS,
 } from '../utils/stockFlowLabels.js'
 import {
   fetchStockAdjustmentRequestById,
@@ -23,16 +26,24 @@ import StockAdjustmentRequestDetailPanel from './StockAdjustmentRequestDetailPan
 
 const EMPTY_FILTERS = {
   search: '',
-  status: '',
-  createdBy: '',
-  creatorRole: '',
   fromDate: '',
   toDate: '',
 }
 
-const FIELD_CLASS =
-  'min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]'
-const LABEL_CLASS = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400'
+const QUICK_FILTERS = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'pending', label: 'Chờ tiếp nhận', status: 'Pending' },
+  { key: 'remaining', label: 'Còn thiếu', onlyRemaining: true },
+  { key: 'processed', label: 'Đã xử lý', status: 'processed' },
+]
+
+const SORT_OPTIONS = [
+  { value: '', label: 'Mới nhất trước' },
+  { value: 'oldest', label: 'Cũ nhất trước' },
+  { value: 'code_asc', label: 'Mã yêu cầu tăng dần' },
+  { value: 'code_desc', label: 'Mã yêu cầu giảm dần' },
+  { value: 'status', label: 'Theo trạng thái' },
+]
 
 function textOrDash(value) {
   const trimmed = String(value ?? '').trim()
@@ -56,8 +67,9 @@ function resolveActor(directory, id, snapshotName, snapshotRole) {
  * Sale / Quản lý / Thủ kho để Admin không có bất kỳ nút thao tác nghiệp vụ nào.
  */
 export default function StockAdjustmentRequestAuditView() {
-  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS)
-  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS)
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [activeTab, setActiveTab] = useState('all')
+  const [sort, setSort] = useState('')
   const [rows, setRows] = useState([])
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -69,7 +81,6 @@ export default function StockAdjustmentRequestAuditView() {
   }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [creatorOptions, setCreatorOptions] = useState([])
-  const [creatorRoleOptions, setCreatorRoleOptions] = useState([])
   const [detailId, setDetailId] = useState(null)
   const [detail, setDetail] = useState(null)
   const [detailTransfers, setDetailTransfers] = useState([])
@@ -88,16 +99,18 @@ export default function StockAdjustmentRequestAuditView() {
     return directory
   }, [creatorOptions])
 
+  const activeQuickFilter = QUICK_FILTERS.find((tab) => tab.key === activeTab) ?? QUICK_FILTERS[0]
+
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const data = await fetchStockAdjustmentRequests({
-        search: appliedFilters.search.trim() || undefined,
-        status: appliedFilters.status || undefined,
-        createdBy: appliedFilters.createdBy || undefined,
-        creatorRole: appliedFilters.creatorRole || undefined,
-        fromDate: appliedFilters.fromDate || undefined,
-        toDate: appliedFilters.toDate || undefined,
+        search: filters.search.trim() || undefined,
+        status: activeQuickFilter.status || undefined,
+        onlyRemaining: Boolean(activeQuickFilter.onlyRemaining),
+        fromDate: filters.fromDate || undefined,
+        toDate: filters.toDate || undefined,
+        sort: sort || undefined,
         page,
         pageSize,
       })
@@ -110,7 +123,7 @@ export default function StockAdjustmentRequestAuditView() {
     } finally {
       setIsLoading(false)
     }
-  }, [appliedFilters, page, pageSize])
+  }, [activeQuickFilter, filters, page, pageSize, sort])
 
   useEffect(() => {
     loadData()
@@ -122,12 +135,10 @@ export default function StockAdjustmentRequestAuditView() {
       .then((options) => {
         if (!mounted) return
         setCreatorOptions(options.creators)
-        setCreatorRoleOptions(options.creatorRoles)
       })
       .catch((error) => {
         if (!mounted) return
         setCreatorOptions([])
-        setCreatorRoleOptions([])
         showError(getStockFlowErrorMessage(error, 'Không tải được tùy chọn bộ lọc.'))
       })
     return () => {
@@ -169,27 +180,19 @@ export default function StockAdjustmentRequestAuditView() {
   }, [detailId])
 
   const hasActiveFilters = useMemo(
-    () => Object.values(appliedFilters).some((value) => String(value).trim() !== ''),
-    [appliedFilters],
+    () => Object.values(filters).some((value) => String(value).trim() !== '') || activeTab !== 'all' || sort !== '',
+    [activeTab, filters, sort],
   )
 
   function updateDraft(patch) {
-    setDraftFilters((prev) => ({ ...prev, ...patch }))
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault()
-    if (draftFilters.fromDate && draftFilters.toDate && draftFilters.toDate < draftFilters.fromDate) {
-      showError('Khoảng thời gian không hợp lệ: ngày kết thúc phải sau hoặc bằng ngày bắt đầu.')
-      return
-    }
-    setAppliedFilters(draftFilters)
+    setFilters((prev) => ({ ...prev, ...patch }))
     setPage(1)
   }
 
   function handleClearFilters() {
-    setDraftFilters(EMPTY_FILTERS)
-    setAppliedFilters(EMPTY_FILTERS)
+    setFilters(EMPTY_FILTERS)
+    setActiveTab('all')
+    setSort('')
     setPage(1)
   }
 
@@ -207,129 +210,114 @@ export default function StockAdjustmentRequestAuditView() {
   )
 
   return (
-    <PageShell>
-      <PageHeader
-        title={`${STOCK_FLOW_TERMS.request} — Tra soát`}
-        titleInfo="Quản trị viên chỉ xem và tra soát. Mọi thao tác duyệt, từ chối, hủy hoặc điều chuyển đều thuộc vai trò nghiệp vụ."
-        description="Chế độ chỉ đọc dành cho Quản trị viên."
-      />
+    <PageShell className="-mt-3 !gap-2 sm:-mt-4 sm:!gap-3">
+      <header className="rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-5 py-3 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:px-6">
+        <div className="flex items-center gap-3">
+          <span className="h-8 w-1 shrink-0 rounded-full bg-[#538463]" aria-hidden="true" />
+          <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">
+            {STOCK_FLOW_TERMS.request} — Tra soát
+          </h1>
+          <TitleInfoButton text="Quản trị viên chỉ xem và tra soát. Mọi thao tác duyệt, từ chối, hủy hoặc điều chuyển đều thuộc vai trò nghiệp vụ." />
+        </div>
+        <p className="mt-1.5 text-sm leading-6 text-[#707a72]">Chế độ chỉ đọc dành cho Quản trị viên.</p>
+      </header>
 
-      <form
-        onSubmit={handleSubmit}
-        className="mb-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="min-w-[220px] flex-1">
-            <span className={LABEL_CLASS}>Mã yêu cầu / SKU / Tên sản phẩm</span>
+      <ListFilterToolbar className="!mb-0">
+          <label className="w-[24rem] shrink-0">
+            <span className="sr-only">Mã yêu cầu / SKU / Tên sản phẩm</span>
             <input
               type="text"
-              value={draftFilters.search}
+              value={filters.search}
               onChange={(event) => updateDraft({ search: event.target.value })}
-              placeholder="Nhập mã yêu cầu, mã SKU hoặc tên sản phẩm"
-              className={FIELD_CLASS}
+              placeholder="Tìm mã yêu cầu, mã SKU, tên sản phẩm..."
+              className={`${listFilterControlClass} w-full`}
+            />
+          </label>
+          {QUICK_FILTERS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.key)
+                setPage(1)
+              }}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${activeTab === tab.key ? 'border-[#356647] bg-[#356647] text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-[#356647]/40 hover:bg-[#f6f4ec]'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+          <label className="min-w-[150px]">
+            <span className="sr-only">Từ ngày</span>
+            <input
+              type="date"
+              value={filters.fromDate}
+              onChange={(event) => updateDraft({ fromDate: event.target.value })}
+              className={listFilterControlClass}
+            />
+          </label>
+
+          <label className="min-w-[150px]">
+            <span className="sr-only">Đến ngày</span>
+            <input
+              type="date"
+              value={filters.toDate}
+              onChange={(event) => updateDraft({ toDate: event.target.value })}
+              className={listFilterControlClass}
             />
           </label>
 
           <label className="min-w-[180px]">
-            <span className={LABEL_CLASS}>Trạng thái</span>
+            <span className="sr-only">Sắp xếp</span>
             <select
-              value={draftFilters.status}
-              onChange={(event) => updateDraft({ status: event.target.value })}
-              className={FIELD_CLASS}
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value)
+                setPage(1)
+              }}
+              className={`${listFilterSelectClass} min-w-[9.5rem]`}
             >
-              <option value="">Tất cả trạng thái</option>
-              {STOCK_REQUEST_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value || 'default'} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
 
-          <label className="min-w-[200px]">
-            <span className={LABEL_CLASS}>Người tạo</span>
-            <select
-              value={draftFilters.createdBy}
-              onChange={(event) => updateDraft({ createdBy: event.target.value })}
-              className={FIELD_CLASS}
-            >
-              <option value="">Tất cả người tạo</option>
-              {creatorOptions.map((creator) => (
-                <option key={creator.id} value={creator.id}>
-                  {textOrDash(creator.name)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="min-w-[180px]">
-            <span className={LABEL_CLASS}>Vai trò người tạo</span>
-            <select
-              value={draftFilters.creatorRole}
-              onChange={(event) => updateDraft({ creatorRole: event.target.value })}
-              className={FIELD_CLASS}
-            >
-              <option value="">Tất cả vai trò</option>
-              {creatorRoleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {formatCreatorRole(role)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="min-w-[150px]">
-            <span className={LABEL_CLASS}>Từ ngày</span>
-            <input
-              type="date"
-              value={draftFilters.fromDate}
-              onChange={(event) => updateDraft({ fromDate: event.target.value })}
-              className={FIELD_CLASS}
-            />
-          </label>
-
-          <label className="min-w-[150px]">
-            <span className={LABEL_CLASS}>Đến ngày</span>
-            <input
-              type="date"
-              value={draftFilters.toDate}
-              onChange={(event) => updateDraft({ toDate: event.target.value })}
-              className={FIELD_CLASS}
-            />
-          </label>
-
-          <button
-            type="submit"
-            className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-          >
-            Tìm kiếm
-          </button>
-
           {hasActiveFilters ? (
             <button
               type="button"
               onClick={handleClearFilters}
-              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              className={`${listFilterControlClass} font-semibold hover:bg-slate-50`}
             >
-              Xóa bộ lọc
+              Xóa lọc
             </button>
           ) : null}
-        </div>
-      </form>
+      </ListFilterToolbar>
 
       <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="min-w-full text-left text-sm">
+          <table className="min-w-[1180px] w-full table-fixed text-left text-sm">
+            <colgroup>
+              <col className="w-[13%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
+              <col className="w-[6%]" />
+              <col className="w-[6%]" />
+              <col className="w-[8%]" />
+              <col className="w-[14%]" />
+              <col className="w-[13%]" />
+            </colgroup>
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="whitespace-nowrap px-4 py-3">Mã yêu cầu</th>
                 <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3">Người tạo</th>
-                <th className="whitespace-nowrap px-4 py-3">Chức vụ</th>
                 <th className="whitespace-nowrap px-4 py-3">Thời gian gửi</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Sản phẩm</th>
-                <th className="whitespace-nowrap px-4 py-3">Tiến độ</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Còn thiếu</th>
+                <th className="whitespace-nowrap px-4 py-3 text-center">Sản phẩm</th>
+                <th className="whitespace-nowrap px-4 py-3 text-center">Tiến độ</th>
+                <th className="whitespace-nowrap px-4 py-3 text-center">Còn thiếu</th>
                 <th className="whitespace-nowrap px-4 py-3">Người xử lý gần nhất</th>
                 <th className="whitespace-nowrap px-4 py-3">Thời gian xử lý gần nhất</th>
               </tr>
@@ -337,13 +325,13 @@ export default function StockAdjustmentRequestAuditView() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">
                     Đang tải...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">
                     Không có yêu cầu nào khớp bộ lọc.
                   </td>
                 </tr>
@@ -388,18 +376,15 @@ export default function StockAdjustmentRequestAuditView() {
                         {textOrDash(creator.name)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatCreatorRole(creator.roleName)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatVietnamDateTime(row.requestedAt)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                        {itemCount} sản phẩm
+                      <td className="whitespace-nowrap px-4 py-3 text-center text-slate-700">
+                        {itemCount}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold text-slate-700">
-                        {processedItemCount}/{itemCount} sản phẩm hoàn tất
+                      <td className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold text-slate-700">
+                        {processedItemCount}/{itemCount}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <td className="whitespace-nowrap px-4 py-3 text-center">
                         <span
                           className={
                             remainingItemCount > 0

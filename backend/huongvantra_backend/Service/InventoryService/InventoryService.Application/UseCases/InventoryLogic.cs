@@ -4205,13 +4205,21 @@ public class InventoryLogic(
         var draftReserved = await _adjustmentRequestRepo.GetDraftReservedQuantitiesAsync(
             items.Select(r => r.Id),
             ct);
+        var statusCounts = await _adjustmentRequestRepo.CountQuickFiltersAsync(
+            requestedBy,
+            search,
+            creatorRole,
+            fromDateUtc,
+            toDateUtc,
+            ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<StockAdjustmentRequestResponse>(
             items.Select(item => MapAdjustmentRequest(item, draftReserved)).ToList(),
             safePage,
             safePageSize,
             totalCount,
-            totalPages);
+            totalPages,
+            statusCounts);
     }
 
     /// <summary>Tùy chọn bộ lọc cho màn hình audit: danh sách người tạo và vai trò người tạo đã có dữ liệu.</summary>
@@ -7487,7 +7495,7 @@ public class InventoryLogic(
             throw new InventoryValidationException($"Dòng {lineNumber}: Số lượng sau quy đổi phải là số nguyên.");
 
         if (!isGram && normalizedUnit is "kg" or "g")
-            throw new InventoryValidationException($"Dòng {lineNumber}: SKU đơn vị Piece không được nhập bằng kg/g.");
+            throw new InventoryValidationException($"Dòng {lineNumber}: SKU đơn vị cái không được nhập bằng kg/g.");
 
         if (normalized > int.MaxValue)
             throw new InventoryValidationException($"Dòng {lineNumber}: Số lượng nhập vượt giới hạn cho phép.");

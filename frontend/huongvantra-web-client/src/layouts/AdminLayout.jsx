@@ -198,6 +198,9 @@ function AdminLayout() {
 
   const isStoreProductsPage =
     location.pathname === '/inventory/products' && !isWarehouseUserRole(authSession?.roles ?? [])
+  const isInventoryCreatePage =
+    location.pathname === '/inventory/stock-requests/create'
+    || location.pathname === '/inventory/stock-transfers/create'
   const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
 
   const visibleSidebarItems =
@@ -259,6 +262,8 @@ function AdminLayout() {
             className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
               isViewportLocked
                 ? 'overflow-hidden p-2 sm:p-3 lg:p-3'
+                : isInventoryCreatePage
+                  ? 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-4 lg:overflow-hidden lg:p-3'
                 : 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6 xl:p-8'
             }`}
           >
@@ -267,6 +272,8 @@ function AdminLayout() {
                 className={
                   isViewportLocked
                     ? 'flex min-h-0 min-w-0 flex-1 flex-col'
+                    : isInventoryCreatePage
+                      ? 'flex min-w-0 flex-col lg:min-h-0 lg:flex-1'
                     : 'flex min-w-0 flex-col'
                 }
               >

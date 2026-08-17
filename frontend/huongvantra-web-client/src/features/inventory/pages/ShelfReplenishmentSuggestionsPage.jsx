@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ListFilterToolbar, { listFilterControlClass } from '../../../components/shared/ListFilterToolbar.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
@@ -18,11 +20,11 @@ import {
 } from '../services/shelfReplenishmentSuggestionApi.js'
 import { getStockFlowErrorMessage, STOCK_FLOW_TERMS } from '../utils/stockFlowLabels.js'
 
-const STATUS_TABS = [
-  { key: 'Open', label: 'Đang mở' },
-  { key: 'Handled', label: 'Đã xử lý' },
-  { key: 'Dismissed', label: 'Đã bỏ qua' },
-  { key: '', label: 'Tất cả' },
+const STATUS_FILTER_OPTIONS = [
+  { value: 'Open', label: 'Đang mở' },
+  { value: 'Handled', label: 'Đã xử lý' },
+  { value: 'Dismissed', label: 'Đã bỏ qua' },
+  { value: '', label: 'Tất cả' },
 ]
 
 const STATUS_CLASS = {
@@ -150,44 +152,39 @@ export default function ShelfReplenishmentSuggestionsPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="-mt-3 !gap-2.5 sm:-mt-3 sm:!gap-3 lg:-mt-4 xl:-mt-4">
       <PageHeader
         compact
         title="Gợi ý bổ sung Kệ Hàng"
         titleInfo={
           `Sinh tự động khi phiếu kiểm ${STOCK_FLOW_TERMS.shelf} được duyệt và tồn khả dụng chạm ngưỡng tối thiểu.`
         }
-        description={
-          'Gợi ý chỉ hiển thị số liệu tại thời điểm kiểm kệ — Thủ kho tự quyết số lượng điều chuyển. '
-          + 'Gợi ý tự động đóng khi phiếu điều chuyển liên kết được hoàn tất.'
-        }
         searchPlaceholder="Tìm mã gợi ý, mã phiếu kiểm kệ, mã SKU..."
-        searchValue={searchValue}
-        onSearchChange={(value) => {
-          setSearchValue(value)
-          setPage(1)
-        }}
+        {...{ searchPlaceholder: null }}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.key || 'all'}
-            type="button"
-            onClick={() => {
-              setStatus(tab.key)
-              setPage(1)
-            }}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
-              status === tab.key
-                ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <ListFilterToolbar className="!mb-0">
+        <StatusFilterChips
+          dense
+          options={STATUS_FILTER_OPTIONS}
+          value={status}
+          onChange={(value) => {
+            setStatus(value)
+            setPage(1)
+          }}
+        />
+        <input
+          type="search"
+          aria-label="Tìm gợi ý bổ sung"
+          placeholder="Tìm mã gợi ý, mã phiếu kiểm kê, mã SKU..."
+          value={searchValue}
+          onChange={(event) => {
+            setSearchValue(event.target.value)
+            setPage(1)
+          }}
+          className={`${listFilterControlClass} min-w-[18rem] flex-1 basis-[24rem]`}
+        />
+      </ListFilterToolbar>
 
       <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto custom-scrollbar">

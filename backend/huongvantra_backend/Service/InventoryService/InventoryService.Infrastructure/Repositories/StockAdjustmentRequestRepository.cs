@@ -67,6 +67,41 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         return (items, totalCount);
     }
 
+    public async Task<Dictionary<string, int>> CountQuickFiltersAsync(
+        Guid? requestedBy,
+        string? search,
+        string? creatorRole = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null,
+        CancellationToken ct = default)
+    {
+        var query = BuildListQuery(null, false, requestedBy, search, creatorRole, fromDateUtc, toDateUtc);
+        var byStatus = await query
+            .GroupBy(request => request.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+
+        var counts = byStatus.ToDictionary(row => row.Status, row => row.Count);
+        var total = counts.Values.Sum();
+        var pending = counts.GetValueOrDefault(StockAdjustmentRequestStatus.Pending);
+        var processing = counts.GetValueOrDefault(StockAdjustmentRequestStatus.Processing);
+        var remaining = await query.CountAsync(request => request.Items.Any(item =>
+            item.Status != StockAdjustmentRequestItemStatus.Fulfilled &&
+            item.Status != StockAdjustmentRequestItemStatus.Rejected &&
+            item.Status != StockAdjustmentRequestItemStatus.ClosedPartial &&
+            item.Status != StockAdjustmentRequestItemStatus.Cancelled &&
+            item.QuantityDelta - item.FulfilledQuantity - item.RejectedQuantity > 0), ct);
+
+        return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["all"] = total,
+            ["pending"] = pending,
+            ["processing"] = processing,
+            ["remaining"] = remaining,
+            ["processed"] = total - pending,
+        };
+    }
+
     /// <summary>
     /// Thứ tự ưu tiên xử lý của Thủ kho: Chờ tiếp nhận → Đang xử lý → Đã bổ sung một phần →
     /// Chờ bổ sung tồn Kho → các trạng thái đã kết thúc; cùng nhóm thì cũ trước.

@@ -33,12 +33,12 @@ export function getDefaultSellableByType(value) {
 
 export const INVENTORY_UNIT_OPTIONS = [
   { value: 'Gram', label: 'GRAM' },
-  { value: 'Piece', label: 'PIECE' },
+  { value: 'Piece', label: 'Cái' },
 ]
 
 export function getInventoryUnitLabel(value) {
   if (value === 'Gram') return 'GRAM'
-  if (value === 'Piece') return 'PIECE'
+  if (value === 'Piece') return 'Cái'
   return value || '—'
 }
 

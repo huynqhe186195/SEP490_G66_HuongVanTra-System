@@ -481,7 +481,7 @@ function buildGuideSheet({ isSample = false } = {}) {
     { text: '• Giá vốn trong file Hương Vân chỉ là dữ liệu demo (~50% giá bán), không phải giá vốn thực tế của HTX.', kind: 'body' },
     { text: '• Mỗi sản phẩm chỉ có đúng 1 đơn vị cơ bản = Có, Quy đổi = 1.', kind: 'body' },
     { text: '• Quy đổi phải là số nguyên dương; giá SKU quy đổi luôn = giá SKU cơ bản × Quy đổi.', kind: 'body' },
-    { text: '• Đơn vị tồn: Piece hoặc Gram.', kind: 'body' },
+    { text: '• Đơn vị tồn: Cái hoặc Gram.', kind: 'body' },
     { text: '• Loại hàng hóa: THANH_PHAM / NGUYEN_LIEU / BAO_BI.', kind: 'body' },
     { text: '• Cột Có/Không chỉ nhận: Có hoặc Không.', kind: 'body' },
     { text: '• Không xóa dòng tiêu đề cột. Dòng bắt đầu bằng ▼ là dòng trang trí (không import).', kind: 'body' },
@@ -561,7 +561,7 @@ function buildReferenceSheet(referenceData = {}) {
   const rows = [
     {
       type: PRODUCT_TYPE.THANH_PHAM,
-      unit: 'Piece',
+      unit: 'Cái',
       category: categories[0] || 'Trà',
       sku: componentSkus[0] || 'LA-TRA-SEN-G',
       attr: attributeNames[0] || 'Hương vị',
@@ -718,7 +718,7 @@ function demoProductRows() {
         productName: 'Hương Trà Hương Vân',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà xanh Tân Cương Thái Nguyên',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Ví dụ theo catalog Hương Vân — xóa nếu không dùng',
       },
     ],
@@ -801,7 +801,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Ly giấy 350ml',
         productType: PRODUCT_TYPE.BAO_BI,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Bao bì dùng 1 lần — size M',
       },
       {
@@ -809,7 +809,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Ly giấy 500ml',
         productType: PRODUCT_TYPE.BAO_BI,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Bao bì dùng 1 lần — size L',
       },
       {
@@ -817,7 +817,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Ống hút giấy',
         productType: PRODUCT_TYPE.BAO_BI,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Ống hút kèm ly mang đi',
       },
       {
@@ -825,7 +825,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Nắp ly pet',
         productType: PRODUCT_TYPE.BAO_BI,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Nắp đậy ly mang đi',
       },
       {
@@ -833,7 +833,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Trà Sen',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Thành phẩm bán tại quầy — có BOM',
       },
       {
@@ -841,7 +841,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Trà Đào',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Thành phẩm có 2 size / BOM',
       },
       {
@@ -849,7 +849,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Trà Sữa Trân Châu',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Best-seller — nhiều component BOM',
       },
       {
@@ -857,7 +857,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Trà Lài',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Thành phẩm đơn giản (1 SKU)',
       },
       {
@@ -865,7 +865,7 @@ export function legacyRichSampleProductRows() {
         productName: 'Nước lọc đóng chai',
         productType: PRODUCT_TYPE.THANH_PHAM,
         category: 'Trà',
-        inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
         description: 'Thành phẩm mua sẵn — vẫn cần BOM bao bì',
       },
     ],
@@ -1243,19 +1243,19 @@ export function richSampleProductRows() {
     { key: 'NL03', name: 'Hoa bưởi sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-BUOI-G', cost: 900, min: 2000 },
     { key: 'NL04', name: 'Hoa sen sấy', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Trà nguyên liệu', unit: 'Gram', code: 'NL-HOA-SEN-G', cost: 1200, min: 2000 },
     // Dụng cụ thô (mua về) — component BOM cho thành phẩm kệ cùng tên
-    { key: 'NL05', name: 'Xúc trà tre (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-TRE', cost: 20000, min: 50 },
-    { key: 'NL06', name: 'Xúc trà đồng cán gỗ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-DONG-GO', cost: 25000, min: 50 },
-    { key: 'NL07', name: 'Xúc trà gỗ nâu (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-GO-NAU', cost: 45000, min: 50 },
-    { key: 'NL08', name: 'Xúc trà vàng chuôi đen (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-VANG-DEN', cost: 120000, min: 30 },
-    { key: 'NL09', name: 'Xúc trà chuôi rồng (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-XUC-CHUOI-RONG', cost: 55000, min: 30 },
-    { key: 'NL10', name: 'Tống thủy tinh trong (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-THUY-TINH', cost: 250000, min: 20 },
-    { key: 'NL11', name: 'Tống nâu đỏ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-NAU-DO', cost: 60000, min: 20 },
-    { key: 'NL12', name: 'Tống quai gỗ to (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Piece', code: 'NL-TONG-QUAI-GO', cost: 180000, min: 20 },
-    { key: 'BB01', name: 'Túi trà thực phẩm', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-TUI-TRA', cost: 1500, min: 500 },
-    { key: 'BB02', name: 'Hộp giấy Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HOP-GIAY-HVT', cost: 5000, min: 300 },
-    { key: 'BB03', name: 'Hũ sứ đựng trà', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HU-SU-HVT', cost: 45000, min: 100 },
-    { key: 'BB04', name: 'Hộp quà cứng Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-HOP-QUA-HVT', cost: 50000, min: 100 },
-    { key: 'BB05', name: 'Tem chống giả Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Piece', code: 'BB-TEM-HVT', cost: 300, min: 1000 },
+    { key: 'NL05', name: 'Xúc trà tre (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-XUC-TRE', cost: 20000, min: 50 },
+    { key: 'NL06', name: 'Xúc trà đồng cán gỗ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-XUC-DONG-GO', cost: 25000, min: 50 },
+    { key: 'NL07', name: 'Xúc trà gỗ nâu (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-XUC-GO-NAU', cost: 45000, min: 50 },
+    { key: 'NL08', name: 'Xúc trà vàng chuôi đen (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-XUC-VANG-DEN', cost: 120000, min: 30 },
+    { key: 'NL09', name: 'Xúc trà chuôi rồng (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-XUC-CHUOI-RONG', cost: 55000, min: 30 },
+    { key: 'NL10', name: 'Tống thủy tinh trong (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-TONG-THUY-TINH', cost: 250000, min: 20 },
+    { key: 'NL11', name: 'Tống nâu đỏ (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-TONG-NAU-DO', cost: 60000, min: 20 },
+    { key: 'NL12', name: 'Tống quai gỗ to (NL)', type: PRODUCT_TYPE.NGUYEN_LIEU, category: 'Nguyên liệu sản xuất', unit: 'Cái', code: 'NL-TONG-QUAI-GO', cost: 180000, min: 20 },
+    { key: 'BB01', name: 'Túi trà thực phẩm', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Cái', code: 'BB-TUI-TRA', cost: 1500, min: 500 },
+    { key: 'BB02', name: 'Hộp giấy Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Cái', code: 'BB-HOP-GIAY-HVT', cost: 5000, min: 300 },
+    { key: 'BB03', name: 'Hũ sứ đựng trà', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Cái', code: 'BB-HU-SU-HVT', cost: 45000, min: 100 },
+    { key: 'BB04', name: 'Hộp quà cứng Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Cái', code: 'BB-HOP-QUA-HVT', cost: 50000, min: 100 },
+    { key: 'BB05', name: 'Tem chống giả Hương Vân', type: PRODUCT_TYPE.BAO_BI, category: 'Bao bì sản xuất', unit: 'Cái', code: 'BB-TEM-HVT', cost: 300, min: 1000 },
   ]
 
   const finishedProducts = [
@@ -1531,7 +1531,7 @@ export function richSampleProductRows() {
       productName: product.name,
       productType: PRODUCT_TYPE.THANH_PHAM,
       category: product.category,
-      inventoryUnit: 'Piece',
+        inventoryUnit: 'Cái',
       description: `${product.description} Nguồn tên/giá: huongvantra.vn (08/2026).`,
     })
 

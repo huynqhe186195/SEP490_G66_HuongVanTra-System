@@ -33,7 +33,43 @@ function isShelfEligibleSku(sku) {
   )
 }
 
-function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQuantityChange, search, onSearchChange }) {
+function TransferNoteActions({ note, onNoteChange, isSaving, onCancel }) {
+  return (
+    <>
+      <div className="border-t border-slate-100 px-5 py-4">
+        <label className="block">
+          <span className={LABEL_CLASS}>Ghi chú</span>
+          <textarea
+            rows={3}
+            maxLength={500}
+            value={note}
+            onChange={(event) => onNoteChange(event.target.value)}
+            className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
+            placeholder="VD: Bổ sung hàng cho Ca 2"
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Hủy
+        </button>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+        >
+          {isSaving ? 'Đang lưu...' : 'Lưu Nháp'}
+        </button>
+      </div>
+    </>
+  )
+}
+
+function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQuantityChange, search, onSearchChange, note, onNoteChange, isSaving, onCancel }) {
   const selectedIds = useMemo(() => new Set(lines.map((line) => line.skuId)), [lines])
   const normalizedSearch = search.trim().toLowerCase()
   const filteredCatalog = useMemo(() => {
@@ -48,8 +84,8 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
   }, [catalog, normalizedSearch])
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5 lg:flex lg:min-h-0 lg:flex-col">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="text-base font-bold text-slate-800">Danh mục sản phẩm</h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -67,7 +103,7 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
             className={FIELD_CLASS}
           />
         </div>
-        <div className="max-h-[420px] overflow-y-auto custom-scrollbar border-t border-slate-100">
+        <div className="max-h-[420px] overflow-y-auto custom-scrollbar border-t border-slate-100 lg:min-h-0 lg:max-h-none lg:flex-1">
           {filteredCatalog.length === 0 ? (
             <p className="px-5 py-8 text-sm text-slate-500">Không tìm thấy sản phẩm thành phẩm phù hợp.</p>
           ) : (
@@ -109,14 +145,14 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7">
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7 lg:flex lg:min-h-0 lg:flex-col">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="text-base font-bold text-slate-800">Sản phẩm</h2>
           <p className="mt-1 text-xs text-slate-500">
             Số lượng điều chuyển là số nguyên dương và không được vượt tồn {STOCK_FLOW_TERMS.warehouse} khả dụng.
           </p>
         </div>
-        <div className="overflow-x-auto custom-scrollbar">
+        <div className="overflow-x-auto custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
@@ -182,6 +218,12 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
             </tbody>
           </table>
         </div>
+        <TransferNoteActions
+          note={note}
+          onNoteChange={onNoteChange}
+          isSaving={isSaving}
+          onCancel={onCancel}
+        />
       </section>
     </div>
   )
@@ -193,18 +235,23 @@ function RequestModeSection({
   selectedRequest,
   onSelectRequest,
   lines,
+  stockBySkuId,
   onQuantityChange,
+  note,
+  onNoteChange,
+  isSaving,
+  onCancel,
 }) {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-3 lg:flex lg:min-h-0 lg:flex-col">
         <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="text-base font-bold text-slate-800">{STOCK_FLOW_TERMS.request} đã duyệt</h2>
+          <h2 className="text-base font-bold text-slate-800">Yêu cầu đã duyệt</h2>
           <p className="mt-1 text-xs text-slate-500">
             Chỉ hiển thị các yêu cầu đã được duyệt và còn số lượng chưa nằm trong phiếu Nháp khác.
           </p>
         </div>
-        <div className="max-h-[520px] overflow-y-auto custom-scrollbar">
+        <div className="max-h-[520px] overflow-y-auto custom-scrollbar lg:min-h-0 lg:max-h-none lg:flex-1">
           {isLoadingRequests ? (
             <p className="px-5 py-8 text-sm text-slate-500">Đang tải danh sách yêu cầu...</p>
           ) : requests.length === 0 ? (
@@ -237,16 +284,16 @@ function RequestModeSection({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7">
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-9 lg:flex lg:min-h-0 lg:flex-col">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="text-base font-bold text-slate-800">
             {selectedRequest ? `Sản phẩm của ${selectedRequest.requestCode}` : 'Sản phẩm của yêu cầu'}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Không được thêm SKU ngoài yêu cầu và không được vượt số lượng có thể điều chuyển.
+            Không được thêm SKU ngoài yêu cầu; số lượng tối đa là mức thấp hơn giữa phần còn theo yêu cầu và tồn Kho hiện tại.
           </p>
         </div>
-        <div className="overflow-x-auto custom-scrollbar">
+        <div className="overflow-x-auto custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
@@ -254,28 +301,37 @@ function RequestModeSection({
                 <th className="whitespace-nowrap px-4 py-3 text-right">Đã duyệt</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Đã chuyển</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Đang giữ trong Nháp</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Có thể điều chuyển</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Còn theo yêu cầu</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Tồn Kho hiện tại</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Tối đa có thể hoàn tất</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Số lượng lần này</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {!selectedRequest ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
                     Hãy chọn một yêu cầu ở danh sách bên trái.
                   </td>
                 </tr>
               ) : lines.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
                     Yêu cầu này không còn sản phẩm nào có thể điều chuyển.
                   </td>
                 </tr>
               ) : (
                 lines.map((line) => {
                   const quantity = Number(line.quantity)
-                  const isOverAvailable =
-                    Number.isFinite(quantity) && quantity > 0 && quantity > line.availableToTransferQuantity
+                  const warehouseQuantityOnHand = Number(
+                    stockBySkuId.get(line.skuId)?.warehouseQuantityOnHand ?? 0,
+                  )
+                  const maxCompletableQuantity = Math.min(
+                    line.availableToTransferQuantity,
+                    warehouseQuantityOnHand,
+                  )
+                  const isOverMaximum =
+                    Number.isFinite(quantity) && quantity > 0 && quantity > maxCompletableQuantity
                   return (
                     <tr key={line.sourceRequestLineId} className="align-top">
                       <td className="px-4 py-3 text-slate-800">
@@ -294,20 +350,26 @@ function RequestModeSection({
                       <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[#356647]">
                         {formatStockQuantity(line.availableToTransferQuantity)}
                       </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                        {formatStockQuantity(warehouseQuantityOnHand)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-[#356647]">
+                        {formatStockQuantity(maxCompletableQuantity)}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <input
                           type="number"
                           inputMode="numeric"
                           min="0"
                           step="1"
-                          max={line.availableToTransferQuantity}
+                          max={maxCompletableQuantity}
                           value={line.quantity}
                           onChange={(event) => onQuantityChange(line.sourceRequestLineId, event.target.value)}
                           className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm outline-none focus:border-[#538463]"
                         />
-                        {isOverAvailable ? (
+                        {isOverMaximum ? (
                           <span className="mt-1 block text-[11px] font-semibold text-rose-600">
-                            Vượt số lượng có thể điều chuyển.
+                            Vượt số lượng tối đa có thể hoàn tất.
                           </span>
                         ) : null}
                       </td>
@@ -318,6 +380,12 @@ function RequestModeSection({
             </tbody>
           </table>
         </div>
+        <TransferNoteActions
+          note={note}
+          onNoteChange={onNoteChange}
+          isSaving={isSaving}
+          onCancel={onCancel}
+        />
       </section>
     </div>
   )
@@ -382,9 +450,13 @@ export default function StockTransferCreatePage() {
     // Không lọc theo một trạng thái duy nhất: yêu cầu đã duyệt có thể đang ở Processing hoặc
     // PartiallyFulfilled mà vẫn còn dòng chưa điều chuyển. Điều kiện thật sự là
     // AvailableToTransferQuantity > 0 trên ít nhất một dòng.
-    fetchStockAdjustmentRequests({ page: 1, pageSize: 100, sort: 'warehouse_priority' })
-      .then((result) => {
+    Promise.all([
+      fetchStockAdjustmentRequests({ page: 1, pageSize: 100, sort: 'warehouse_priority' }),
+      fetchSkuStocks(),
+    ])
+      .then(([result, stockRows]) => {
         if (!mounted) return
+        setStocks(stockRows)
         const eligible = result.items
           .map((request) => ({
             ...request,
@@ -463,13 +535,16 @@ export default function StockTransferCreatePage() {
             fulfilledQuantity: Number(item.fulfilledQuantity ?? 0),
             draftReservedQuantity: Number(item.draftReservedQuantity ?? 0),
             availableToTransferQuantity: Number(item.availableToTransferQuantity ?? 0),
-            quantity: String(Number(item.availableToTransferQuantity ?? 0)),
+            quantity: String(Math.min(
+              Number(item.availableToTransferQuantity ?? 0),
+              Number(stockBySkuId.get(item.skuId)?.warehouseQuantityOnHand ?? 0),
+            )),
           })),
       )
     } catch (error) {
       showError(getStockFlowErrorMessage(error, 'Không tải được chi tiết yêu cầu.'))
     }
-  }, [])
+  }, [stockBySkuId])
 
   useEffect(() => {
     if (!canOperate || isSuggestionMode || !presetRequestId) return
@@ -538,15 +613,19 @@ export default function StockTransferCreatePage() {
     const payloadLines = []
     for (const line of requestLines) {
       const quantity = Number(line.quantity)
+      const warehouseQuantityOnHand = Number(
+        stockBySkuId.get(line.skuId)?.warehouseQuantityOnHand ?? 0,
+      )
+      const maxCompletableQuantity = Math.min(line.availableToTransferQuantity, warehouseQuantityOnHand)
       if (!line.quantity || quantity === 0) continue
       if (!Number.isInteger(quantity) || quantity < 0) {
         showError(`${STOCK_FLOW_TERMS.transferQuantity} của ${line.skuCode} phải là số nguyên dương.`)
         return null
       }
-      if (quantity > line.availableToTransferQuantity) {
+      if (quantity > maxCompletableQuantity) {
         showError(
-          `${line.skuCode}: ${STOCK_FLOW_TERMS.transferQuantity} ${quantity} vượt số lượng còn có thể `
-          + `điều chuyển (${line.availableToTransferQuantity}).`,
+          `${line.skuCode}: ${STOCK_FLOW_TERMS.transferQuantity} ${quantity} vượt số lượng tối đa có thể hoàn tất `
+          + `(${maxCompletableQuantity}).`,
         )
         return null
       }
@@ -623,9 +702,11 @@ export default function StockTransferCreatePage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="!gap-3 lg:h-full lg:min-h-0 lg:overflow-hidden">
       <PageHeader
         title={isSuggestionMode ? `Tạo ${STOCK_FLOW_TERMS.transfer} từ gợi ý` : `Tạo ${STOCK_FLOW_TERMS.transfer} từ yêu cầu`}
+        titleAtEyebrow
+        reducedVerticalPadding
         description={
           isSuggestionMode
             ? 'Chọn sản phẩm thành phẩm và số lượng cần điều chuyển theo Gợi ý bổ sung Kệ Hàng. Phiếu được lưu ở trạng thái Nháp.'
@@ -633,7 +714,7 @@ export default function StockTransferCreatePage() {
         }
       />
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+      <form onSubmit={handleSubmit} className="mt-0 flex min-h-0 flex-1 flex-col gap-4">
         {suggestion ? (
           <section className="rounded-2xl border border-[#cfe2d6] bg-[#f2f8f4] px-5 py-4">
             <p className="text-sm font-bold text-[#356647]">
@@ -656,6 +737,10 @@ export default function StockTransferCreatePage() {
             onQuantityChange={updateDirectQuantity}
             search={catalogSearch}
             onSearchChange={setCatalogSearch}
+            note={note}
+            onNoteChange={setNote}
+            isSaving={isSaving}
+            onCancel={() => navigate('/inventory/stock-transfers')}
           />
         ) : (
           <RequestModeSection
@@ -664,41 +749,14 @@ export default function StockTransferCreatePage() {
             selectedRequest={selectedRequest}
             onSelectRequest={selectRequest}
             lines={requestLines}
+            stockBySkuId={stockBySkuId}
             onQuantityChange={updateRequestQuantity}
+            note={note}
+            onNoteChange={setNote}
+            isSaving={isSaving}
+            onCancel={() => navigate('/inventory/stock-transfers')}
           />
         )}
-
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="px-5 py-4">
-            <label className="block">
-              <span className={LABEL_CLASS}>Ghi chú</span>
-              <textarea
-                rows={3}
-                maxLength={500}
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
-                placeholder="VD: Bổ sung hàng cho Ca 2"
-              />
-            </label>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4">
-            <button
-              type="button"
-              onClick={() => navigate('/inventory/stock-transfers')}
-              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-            >
-              {isSaving ? 'Đang lưu...' : 'Lưu Nháp'}
-            </button>
-          </div>
-        </section>
       </form>
     </PageShell>
   )

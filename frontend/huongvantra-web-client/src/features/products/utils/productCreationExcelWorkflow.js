@@ -923,7 +923,7 @@ function buildMultiSheetDropdownValidations(referenceData, lastRow = 200) {
     [MULTI_SHEET.product]: [
       buildValidationXml(`C4:C${lastRow}`, '"THANH_PHAM,NGUYEN_LIEU,BAO_BI"'),
       buildValidationXml(`D4:D${lastRow}`, multiSheetReferenceFormula('C', categories)),
-      buildValidationXml(`E4:E${lastRow}`, '"Piece,Gram"'),
+      buildValidationXml(`E4:E${lastRow}`, '"Cái,Gram"'),
     ],
     [MULTI_SHEET.sku]: [
       buildValidationXml(`F4:F${lastRow}`, '"Có,Không"'),
@@ -966,7 +966,7 @@ function buildGuidedInputValidations(referenceData, lastRowNumber) {
     buildValidationXml(`A13:A${lastRow}`, '"SẢN PHẨM,SKU,THUỘC TÍNH,BOM"'),
     buildValidationXml(`E13:E${lastRow}`, '"THANH_PHAM,NGUYEN_LIEU,BAO_BI"'),
     buildValidationXml(`F13:F${lastRow}`, referenceFormula('A', referenceData.categories.length)),
-    buildValidationXml(`G13:G${lastRow}`, '"Piece,Gram"'),
+    buildValidationXml(`G13:G${lastRow}`, '"Cái,Gram"'),
     buildValidationXml(`K13:K${lastRow}`, '"Có,Không"'),
     buildValidationXml(`P13:P${lastRow}`, '"Có,Không"'),
     buildValidationXml(`S13:S${lastRow}`, referenceFormula('M', referenceData.attributeNames.length)),

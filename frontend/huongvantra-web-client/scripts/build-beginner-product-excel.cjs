@@ -448,7 +448,7 @@ function main() {
 
   // Demo product (cluster 1) — full example for beginners
   const demo = [
-    ['SẢN PHẨM', 'P001', '', 'Trà Nhài (ví dụ)', 'THANH_PHAM', 'Trà thành phẩm', 'Piece', 'Sửa tên/danh mục cho đúng hệ thống của bạn', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['SẢN PHẨM', 'P001', '', 'Trà Nhài (ví dụ)', 'THANH_PHAM', 'Trà thành phẩm', 'Cái', 'Sửa tên/danh mục cho đúng hệ thống của bạn', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['SKU', 'P001', 'P001-U1', '', '', '', '', '', 'Hộp', 1, 'Có', 'TRA-NHAI-MAU-HOP', 20000, 12000, '893000000001', 'Có', 5, 500, '', '', '', '', '', ''],
     ['THUỘC TÍNH', 'P001', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Hương vị', 'Nhài', '', '', '', ''],
     ['THUỘC TÍNH', 'P001', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Màu sắc', 'Xanh', '', '', '', ''],

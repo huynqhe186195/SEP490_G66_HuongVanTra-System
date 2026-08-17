@@ -119,6 +119,23 @@ export function getAdjustmentStatusClass(status) {
   return getStockFlowStatusClass(status)
 }
 
+export function getAdjustmentRequestStatusPresentation(request) {
+  const hasRejectedQuantity = Number(request?.totalRejectedQuantity ?? 0) > 0
+  const hasNoRemainingQuantity = Number(request?.totalRemainingQuantity ?? 0) === 0
+
+  if (hasRejectedQuantity && hasNoRemainingQuantity) {
+    return {
+      label: 'Đã xử lý (có từ chối)',
+      className: 'bg-amber-100 text-amber-800',
+    }
+  }
+
+  return {
+    label: getAdjustmentStatusLabel(request?.status),
+    className: getAdjustmentStatusClass(request?.status),
+  }
+}
+
 export async function fetchStockAdjustmentRequestById(id) {
   const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}`, {
     method: 'GET',

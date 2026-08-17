@@ -29,16 +29,27 @@ function PageHeader({
   searchValue,
   onSearchChange,
   searchWide = false,
+  searchCompact = false,
   searchDropdown = null,
   rightContent = null,
+  inlineContent = null,
+  /** Đưa tiêu đề vào vị trí nhãn đầu header, vẫn giữ nguyên kiểu chữ của tiêu đề. */
+  titleAtEyebrow = false,
   /** Gọn hơn cho trang danh sách — thêm chỗ cho bảng. */
   compact = false,
+  /** Giảm nhẹ chiều cao header nhưng vẫn giữ nguyên kiểu chữ và nội dung. */
+  reducedVerticalPadding = false,
 }) {
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
   const hasRightContent = Boolean(rightContent)
+  const hasInlineContent = Boolean(inlineContent)
   const showActionRow = hasSearch || hasRightContent
-  const searchWidthClass = searchWide ? 'min-w-0 w-full lg:flex-1 lg:max-w-none' : 'min-w-0 w-full lg:max-w-xl'
+  const searchWidthClass = searchWide
+    ? 'min-w-0 w-full lg:flex-1 lg:max-w-none'
+    : searchCompact
+      ? 'min-w-0 w-full lg:max-w-md'
+      : 'min-w-0 w-full lg:max-w-xl'
 
   const searchInput = hasSearch ? (
     <div className={`group relative ${searchWidthClass}`}>
@@ -66,33 +77,45 @@ function PageHeader({
       className={
         compact
           ? 'rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-3 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:px-5'
-          : 'rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px] sm:px-6 sm:py-6'
+          : `rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 ${reducedVerticalPadding ? 'py-3 sm:px-5 sm:py-4' : 'py-4 sm:px-6 sm:py-6'} shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px]`
       }
     >
       <div className={`flex flex-col ${compact ? (showActionRow ? 'gap-3' : 'gap-0') : 'gap-5'}`}>
         {hasTitle ? (
           <div className="min-w-0">
             <div className={compact ? 'space-y-1' : 'space-y-3'}>
-              {compact ? null : (
+              {compact ? null : titleAtEyebrow ? (
+                <div className="flex items-center gap-3">
+                  <span className="h-10 w-1 shrink-0 rounded-full bg-[#538463]" aria-hidden="true" />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">
+                      {title}
+                    </h1>
+                    <TitleInfoButton text={titleInfo} />
+                  </div>
+                </div>
+              ) : (
                 <div className="flex items-center gap-3">
                   <span className="h-10 w-1 rounded-full bg-[#538463]" aria-hidden="true" />
                   <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
                 </div>
               )}
               <div>
-                <div className="flex items-center gap-2">
-                  {compact ? <span className="h-6 w-1 shrink-0 rounded-full bg-[#538463]" aria-hidden="true" /> : null}
-                  <h1
-                    className={
-                      compact
-                        ? 'text-lg font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-xl'
-                        : 'text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]'
-                    }
-                  >
-                    {title}
-                  </h1>
-                  <TitleInfoButton text={titleInfo} />
-                </div>
+                {!titleAtEyebrow ? (
+                  <div className="flex items-center gap-2">
+                    {compact ? <span className="h-6 w-1 shrink-0 rounded-full bg-[#538463]" aria-hidden="true" /> : null}
+                    <h1
+                      className={
+                        compact
+                          ? 'text-lg font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-xl'
+                          : 'text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]'
+                      }
+                    >
+                      {title}
+                    </h1>
+                    <TitleInfoButton text={titleInfo} />
+                  </div>
+                ) : null}
                 {description ? (
                   <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>
                     {description}
@@ -106,15 +129,21 @@ function PageHeader({
         ) : null}
 
         {hasTitle && showActionRow ? (
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className={`flex flex-col gap-3 lg:flex-row lg:items-center ${hasInlineContent ? 'lg:justify-start' : 'lg:justify-between'}`}>
             {hasSearch ? (
-              <div className={searchWide ? 'w-full lg:flex-1' : 'w-full lg:max-w-xl'}>{searchInput}</div>
+              <div className={searchWide ? 'w-full lg:flex-1' : searchCompact ? 'w-full lg:max-w-md' : 'w-full lg:max-w-xl'}>{searchInput}</div>
             ) : (
               <div className="hidden lg:block lg:flex-1" />
             )}
 
+            {hasInlineContent ? (
+              <div className={`flex flex-wrap items-center ${compact ? 'gap-2' : 'gap-3'}`}>
+                {inlineContent}
+              </div>
+            ) : null}
+
             {hasRightContent ? (
-              <div className={`flex flex-wrap items-center text-[#356647] lg:justify-end ${compact ? 'gap-2' : 'gap-3'}`}>
+              <div className={`flex flex-wrap items-center text-[#356647] lg:justify-end ${hasInlineContent ? 'lg:ml-auto' : ''} ${compact ? 'gap-2' : 'gap-3'}`}>
                 {rightContent}
               </div>
             ) : null}
@@ -122,6 +151,7 @@ function PageHeader({
         ) : !hasTitle && hasRightContent ? (
           <div className={`flex flex-wrap items-center text-[#356647] ${compact ? 'gap-2' : 'gap-3'}`}>{rightContent}</div>
         ) : null}
+
       </div>
     </header>
   )

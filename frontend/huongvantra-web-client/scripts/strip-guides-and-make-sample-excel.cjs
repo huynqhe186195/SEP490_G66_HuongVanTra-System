@@ -240,7 +240,7 @@ function buildSampleSheet(baseEntries) {
   // 24 columns A..X
   const sampleRows = [
     // P001 product cluster starting row 13
-    ['SẢN PHẨM', 'P001', '', 'Trà Nhài Demo', 'THANH_PHAM', 'Trà thành phẩm', 'Piece', 'Trà Nhài bán lẻ theo hộp và đóng thùng', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['SẢN PHẨM', 'P001', '', 'Trà Nhài Demo', 'THANH_PHAM', 'Trà thành phẩm', 'Cái', 'Trà Nhài bán lẻ theo hộp và đóng thùng', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['SKU', 'P001', 'P001-U1', '', '', '', '', '', 'Hộp', 1, 'Có', 'TRA-NHAI-DEMO-HOP', 20000, 12000, '893000000001', 'Có', 5, 500, '', '', '', '', '', ''],
     ['THUỘC TÍNH', 'P001', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Hương vị', 'Nhài', '', '', '', ''],
     ['THUỘC TÍNH', 'P001', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Màu sắc', 'Xanh', '', '', '', ''],
@@ -260,7 +260,7 @@ function buildSampleSheet(baseEntries) {
   next = setDataRow(next, templateRow, 21, Array(24).fill(''))
 
   const p002 = [
-    ['SẢN PHẨM', 'P002', '', 'Hộp quà Trà Tổng Hợp', 'THANH_PHAM', 'Quà tặng', 'Piece', 'Thành phẩm gồm nhiều thành phần', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['SẢN PHẨM', 'P002', '', 'Hộp quà Trà Tổng Hợp', 'THANH_PHAM', 'Quà tặng', 'Cái', 'Thành phẩm gồm nhiều thành phần', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['SKU', 'P002', 'P002-U1', '', '', '', '', '', 'Hộp quà', 1, 'Có', 'HOP-QUA-TRA-TONG-HOP', 350000, 260000, '893000000020', 'Có', 2, 100, '', '', '', '', '', ''],
     ['THUỘC TÍNH', 'P002', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Dịp sử dụng', 'Quà biếu', '', '', '', ''],
     ['BOM', 'P002', 'P002-U1', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'TRA-NHAI-DEMO-HOP', 1, 'Sản phẩm kệ', ''],

@@ -1024,7 +1024,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
         if (!line.submittedUnit) {
           lineErr.submittedUnit = 'Vui lòng chọn đơn vị nhập.'
         } else if (!validUnits.includes(line.submittedUnit)) {
-          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU tính theo ${isGram ? 'khối lượng (kg/g)' : 'cái (piece)'}.`
+          lineErr.submittedUnit = `Đơn vị "${line.submittedUnit}" không hợp lệ cho SKU tính theo ${isGram ? 'khối lượng (kg/g)' : 'cái'}.`
         }
       }
 
