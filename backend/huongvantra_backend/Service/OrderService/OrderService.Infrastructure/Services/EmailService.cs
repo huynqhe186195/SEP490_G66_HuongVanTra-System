@@ -151,7 +151,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 
                 <div class='info-section' style='background-color: #f9fafb; padding: 15px; border-radius: 6px;'>
                     <p><strong>Mã đơn hàng:</strong> {order.OrderCode}</p>
-                    <p><strong>Ngày mua:</strong> {order.CreatedAt.ToLocalTime():dd/MM/yyyy HH:mm:ss}</p>
+                    <p><strong>Ngày mua:</strong> {TimeZoneInfo.ConvertTimeFromUtc(order.CreatedAt, TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh")):dd/MM/yyyy HH:mm:ss}</p>
                     {(string.IsNullOrWhiteSpace(tierName) ? "" : $"<p><strong>Hạng thành viên:</strong> {tierName}</p>")}
                     {(string.IsNullOrWhiteSpace(order.ShippingAddress) ? "" : $"<p><strong>Địa chỉ nhận hàng:</strong> {order.ShippingAddress}</p>")}
                 </div>
@@ -179,7 +179,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 
             var priceStr = item.IsGift ? "Quà tặng" : $"{item.UnitPrice:N0}đ";
             var subTotalStr = item.IsGift ? "0đ" : $"{item.SubTotal:N0}đ";
-            
+
             sb.Append($@"
                         <tr>
                             <td>{item.SkuSnapshotName} {(item.IsGift ? "<span style='color:#e11d48;font-size:12px;'>(Quà)</span>" : "")}</td>
@@ -187,6 +187,25 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
                             <td class='text-right'>{priceStr}</td>
                             <td class='text-right'>{subTotalStr}</td>
                         </tr>");
+        }
+
+        foreach (var bundle in order.CustomBundles ?? Enumerable.Empty<CustomBundle>())
+        {
+            foreach (var ingredient in bundle.Ingredients ?? Enumerable.Empty<CustomBundleIngredient>())
+            {
+                totalQuantity += ingredient.Quantity;
+                totalUnitPrice += ingredient.UnitPrice;
+                totalSubTotal += ingredient.SubTotal;
+
+                var bundleLabel = string.IsNullOrWhiteSpace(bundle.Label) ? "Gói custom" : bundle.Label;
+                sb.Append($@"
+                        <tr>
+                            <td>{ingredient.MaterialSnapshotName} <span style='color:#6b7280;font-size:12px;'>({bundleLabel})</span></td>
+                            <td class='text-right'>{ingredient.Quantity}</td>
+                            <td class='text-right'>{ingredient.UnitPrice:N0}đ</td>
+                            <td class='text-right'>{ingredient.SubTotal:N0}đ</td>
+                        </tr>");
+            }
         }
 
         sb.Append($@"

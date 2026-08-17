@@ -40,12 +40,15 @@ public class UserRepository(UserDbContext context) : IUserRepository
                 !u.IsDeleted
                 && u.IsActive
                 && u.Employee != null
-                && u.Employee.BankAccountInfo != null
-                && u.Employee.BankAccountInfo != "")
+                && (
+                    (u.Employee.PhoneNumber != null && u.Employee.PhoneNumber != "")
+                    || (u.Employee.BankAccountInfo != null && u.Employee.BankAccountInfo != "")
+                ))
             .ToListAsync();
 
         return candidates.FirstOrDefault(u =>
-            NormalizePhoneDigits(u.Employee!.BankAccountInfo) == phoneDigits);
+            NormalizePhoneDigits(u.Employee!.PhoneNumber) == phoneDigits
+            || NormalizePhoneDigits(u.Employee!.BankAccountInfo) == phoneDigits);
     }
 
     private static string NormalizePhoneDigits(string? value)

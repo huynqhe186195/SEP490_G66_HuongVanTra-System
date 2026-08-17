@@ -72,6 +72,7 @@ function PosTransferQrPage() {
   const [pollError, setPollError] = useState('')
   const [expectedTransferContent, setExpectedTransferContent] = useState('')
   const [expectedAmount, setExpectedAmount] = useState(0)
+  const [serverDisplayAmount, setServerDisplayAmount] = useState(0)
   const [sepaySetup, setSepaySetup] = useState(null)
   const [qrData, setQrData] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -239,6 +240,9 @@ function PosTransferQrPage() {
       if (status.expectedAmount > 0) {
         setExpectedAmount(status.expectedAmount)
       }
+      if (status.displayAmount > 0) {
+        setServerDisplayAmount(status.displayAmount)
+      }
 
       if (status.isPaid) {
         finishWithReceipt(status)
@@ -271,7 +275,7 @@ function PosTransferQrPage() {
     return (payment?.orderCode || payment?.orderLabel || '').trim().toUpperCase()
   }, [expectedTransferContent, qrData?.transferContent, payment?.transferContent, payment?.orderCode, payment?.orderLabel])
 
-  const displayAmount = expectedAmount > 0 ? expectedAmount : payment?.total || 0
+  const displayAmount = serverDisplayAmount > 0 ? serverDisplayAmount : payment?.total || 0
 
   const qrImageUrl = !qrExpired && !isTerminalUnavailable
     ? resolveTransferQrImageUrl({

@@ -35,6 +35,10 @@ namespace UserService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("Department")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");

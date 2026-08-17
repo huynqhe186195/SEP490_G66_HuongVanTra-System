@@ -9,6 +9,7 @@ public class Employee : BaseEntity
     public string FullName { get; set; } = string.Empty;
     public string? Department { get; set; }
     public decimal ActualSalary { get; set; }
+    public string? PhoneNumber { get; set; }
     public string? BankAccountInfo { get; set; }
     public EmployeeStatus Status { get; set; } = EmployeeStatus.Active;
 

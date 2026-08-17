@@ -7,6 +7,7 @@ public record EmployeeDetailResponse(
     string FullName,
     string? Department,
     decimal ActualSalary,
+    string? PhoneNumber,
     string? BankAccountInfo,
     string Status,
     bool IsUserActive,

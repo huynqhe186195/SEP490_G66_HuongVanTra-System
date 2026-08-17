@@ -19,7 +19,7 @@ public class EmployeeLogic(
         IReadOnlyList<string>? actorPermissions = null)
     {
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
-        UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
+        UserInputValidator.ValidatePhoneIfProvided(request.PhoneNumber);
 
         if (await userRepo.ExistsAsync(request.Username))
             throw new DuplicateUsernameException(request.Username);
@@ -52,6 +52,7 @@ public class EmployeeLogic(
             FullName = request.FullName,
             Department = request.Department,
             ActualSalary = request.ActualSalary,
+            PhoneNumber = request.PhoneNumber,
             BankAccountInfo = request.BankAccountInfo,
             Status = EmployeeStatus.Active
         };
@@ -138,6 +139,7 @@ public class EmployeeLogic(
         employee.FullName = request.FullName;
         employee.Department = request.Department;
         employee.ActualSalary = request.ActualSalary;
+        employee.PhoneNumber = request.PhoneNumber;
         employee.BankAccountInfo = request.BankAccountInfo;
         employee.UpdatedAt = DateTime.UtcNow;
 
@@ -187,6 +189,7 @@ public class EmployeeLogic(
             employee.FullName,
             employee.Department,
             employee.ActualSalary,
+            employee.PhoneNumber,
             employee.BankAccountInfo,
             employee.Status.ToString(),
             employee.User?.IsActive ?? false,
