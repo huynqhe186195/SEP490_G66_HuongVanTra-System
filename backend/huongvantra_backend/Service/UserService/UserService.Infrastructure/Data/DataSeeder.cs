@@ -237,12 +237,18 @@ public static class DataSeeder
     {
         var existing = await context.Permissions
             .Where(p => !p.IsDeleted)
-            .Select(p => p.PermissionName)
             .ToListAsync();
 
+        foreach (var permission in existing.Where(p => string.IsNullOrWhiteSpace(p.PermissionCode)))
+            permission.PermissionCode = permission.PermissionName;
+
+        var existingCodes = existing
+            .Select(p => string.IsNullOrWhiteSpace(p.PermissionCode) ? p.PermissionName : p.PermissionCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var missing = PermissionNames.All
-            .Where(name => !existing.Contains(name))
-            .Select(name => new Permission { PermissionName = name })
+            .Where(name => !existingCodes.Contains(name))
+            .Select(name => new Permission { PermissionName = name, PermissionCode = name })
             .ToList();
 
         if (missing.Count == 0) return;
@@ -283,7 +289,8 @@ public static class DataSeeder
         string[] permissionNames)
     {
         var permissions = await context.Permissions
-            .Where(p => !p.IsDeleted && permissionNames.Contains(p.PermissionName))
+            .Where(p => !p.IsDeleted
+                && (permissionNames.Contains(p.PermissionCode) || permissionNames.Contains(p.PermissionName)))
             .ToListAsync();
 
         var role = await context.Roles

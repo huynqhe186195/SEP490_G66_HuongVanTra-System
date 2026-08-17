@@ -9,8 +9,11 @@ public class UserNotFoundByUsernameException(string username)
 public class InvalidCredentialsException()
     : Exception("Username or password is incorrect.");
 
+public class UserDeactivatedException()
+    : Exception("Tài khoản đã được cho ngừng hoạt động.");
+
 public class UserInactiveException()
-    : Exception("This account has been deactivated.");
+    : Exception("Tài khoản đã bị khoá.");
 
 public class DuplicateUsernameException(string username)
     : Exception($"Username '{username}' already exists.");
@@ -33,8 +36,8 @@ public class ForbiddenException(string message = "You do not have permission to 
 public class RoleInUseException(int id)
     : Exception($"Role with id '{id}' is assigned to users and cannot be deleted.");
 
-public class DuplicatePermissionException(string name)
-    : Exception($"Permission '{name}' already exists.");
+public class DuplicatePermissionException(string code)
+    : Exception($"Mã quyền '{code}' đã tồn tại.");
 
 public class UserValidationException(string message) : Exception(message);
 

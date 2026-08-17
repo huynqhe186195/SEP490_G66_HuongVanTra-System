@@ -88,6 +88,11 @@ namespace UserService.Infrastructure.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
 
+                    b.Property<string>("PermissionCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("PermissionName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -97,6 +102,9 @@ namespace UserService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PermissionCode")
+                        .IsUnique();
 
                     b.ToTable("Permissions", (string)null);
                 });

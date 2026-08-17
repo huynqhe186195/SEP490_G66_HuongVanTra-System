@@ -109,7 +109,8 @@ public class MultiRoleUserManagementTests
                 "Dual Employee",
                 "Sales",
                 0,
-                "0900000000"),
+                "0900000000",
+                null),
             [PermissionNames.ManageEmployee]);
 
         Assert.Equal(["SaleCod", "SalePos"], created.Roles.OrderBy(role => role));
@@ -135,7 +136,8 @@ public class MultiRoleUserManagementTests
                 "Ops Support",
                 "Operations",
                 0,
-                "0900000001"),
+                "0900000001",
+                null),
             [PermissionNames.ManageEmployee]);
 
         Assert.Equal(["Accountant", "Warehouse"], created.Roles.OrderBy(role => role));

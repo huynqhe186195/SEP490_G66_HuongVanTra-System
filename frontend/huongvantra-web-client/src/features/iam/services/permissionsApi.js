@@ -5,10 +5,10 @@ export function fetchPermissions(params = {}) {
   return apiRequestAuth(`/api/permissions${query}`, { method: 'GET' })
 }
 
-export function createPermission(permissionName) {
+export function createPermission({ permissionName, permissionCode }) {
   return apiRequestAuth('/api/permissions', {
     method: 'POST',
-    body: JSON.stringify({ permissionName }),
+    body: JSON.stringify({ permissionName, permissionCode }),
   })
 }
 
@@ -22,9 +22,12 @@ export function restorePermission(id) {
 
 export function mapPermission(item) {
   if (!item || typeof item !== 'object') return null
+  const permissionName = item.permissionName ?? item.PermissionName ?? ''
+  const permissionCode = item.permissionCode ?? item.PermissionCode ?? permissionName
   return {
     id: item.id ?? item.Id,
-    permissionName: item.permissionName ?? item.PermissionName ?? '',
+    permissionName,
+    permissionCode,
     isDeleted: item.isDeleted ?? item.IsDeleted ?? false,
   }
 }

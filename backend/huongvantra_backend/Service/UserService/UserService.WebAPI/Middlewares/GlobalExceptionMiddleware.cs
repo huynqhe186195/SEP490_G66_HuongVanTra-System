@@ -31,6 +31,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next)
             ShiftSlotNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             ShiftRegistrationNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             InvalidCredentialsException e => (StatusCodes.Status401Unauthorized, e.Message),
+            UserDeactivatedException e => (StatusCodes.Status401Unauthorized, e.Message),
             InvalidRefreshTokenException e => (StatusCodes.Status401Unauthorized, "Phiên đăng nhập đã hết hạn hoặc tài khoản đã đăng nhập ở thiết bị khác."),
             UserInactiveException e => (StatusCodes.Status403Forbidden, e.Message),
             ForbiddenException e => (StatusCodes.Status403Forbidden, e.Message),

@@ -1,6 +1,7 @@
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Exceptions;
 
@@ -10,20 +11,31 @@ public class PermissionLogic(IPermissionRepository permissionRepo)
 {
     public async Task<PermissionResponse> CreateAsync(CreatePermissionRequest request)
     {
-        if (await permissionRepo.GetByNameAsync(request.PermissionName) is not null)
-            throw new DuplicatePermissionException(request.PermissionName);
+        var (name, code) = PermissionInputValidator.NormalizeAndValidate(
+            request.PermissionName,
+            request.PermissionCode);
 
-        var permission = new Permission { PermissionName = request.PermissionName };
+        if (await permissionRepo.ExistsByCodeAsync(code))
+            throw new DuplicatePermissionException(code);
+
+        if (await permissionRepo.GetByNameAsync(name) is not null)
+            throw new UserValidationException($"Tên quyền '{name}' đã tồn tại.");
+
+        var permission = new Permission
+        {
+            PermissionName = name,
+            PermissionCode = code,
+        };
         await permissionRepo.AddAsync(permission);
         await permissionRepo.SaveChangesAsync();
 
-        return new PermissionResponse(permission.Id, permission.PermissionName, permission.IsDeleted);
+        return Map(permission);
     }
 
     public async Task<IEnumerable<PermissionResponse>> GetAllAsync(bool onlyDeleted = false)
     {
         var permissions = await permissionRepo.GetAllAsync(onlyDeleted);
-        return permissions.Select(p => new PermissionResponse(p.Id, p.PermissionName, p.IsDeleted));
+        return permissions.Select(Map);
     }
 
     public async Task SoftDeleteAsync(int id)
@@ -37,4 +49,7 @@ public class PermissionLogic(IPermissionRepository permissionRepo)
         await permissionRepo.RestoreAsync(id);
         _ = await permissionRepo.GetByIdAsync(id) ?? throw new PermissionNotFoundException(id);
     }
+
+    private static PermissionResponse Map(Permission permission) =>
+        new(permission.Id, permission.PermissionName, permission.AuthorizationCode, permission.IsDeleted);
 }

@@ -170,7 +170,9 @@ public class PasswordResetLogic(
         var user = challenge.User ?? await userRepo.GetByIdAsync(challenge.UserId)
             ?? throw new PasswordResetException("Tài khoản không tồn tại.");
 
-        if (!user.IsActive || user.IsDeleted)
+        if (user.IsDeleted)
+            throw new UserDeactivatedException();
+        if (!user.IsActive)
             throw new UserInactiveException();
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
