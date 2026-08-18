@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
 import { DetailBox, HubSegment, StatusPill } from '../components/IntegrationUi.jsx'
@@ -46,6 +48,11 @@ function statusLabel(status) {
   return status || '—'
 }
 
+function stamp(value) {
+  const time = Date.parse(value || '')
+  return Number.isFinite(time) ? time : 0
+}
+
 function matchesStatus(item, status) {
   if (!status) return true
   if (status === 'Pending') return item.status === 'Pending' || item.status === 'Processing'
@@ -65,17 +72,19 @@ function InventorySyncMonitorPage() {
   const [note, setNote] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [retrying, setRetrying] = useState(false)
+  const [page, setPage] = useState(1)
 
   const load = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [all, failed, nextStats] = await Promise.all([
+      const [all, failed, pending, nextStats] = await Promise.all([
         fetchOutboxMessages({ page: 1, pageSize: 100 }),
         fetchOutboxMessages({ status: 'Failed', page: 1, pageSize: 100 }),
+        fetchOutboxMessages({ status: 'Pending', page: 1, pageSize: 100 }),
         fetchOutboxStats(),
       ])
       const byId = new Map()
-      for (const item of [...all.items, ...failed.items]) byId.set(item.id, item)
+      for (const item of [...all.items, ...failed.items, ...pending.items]) byId.set(item.id, item)
       setMessages([...byId.values()])
       setStats(nextStats)
     } catch (error) {
@@ -103,9 +112,29 @@ function InventorySyncMonitorPage() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(needle))
       })
+      .sort((a, b) => stamp(b.occurredAtUtc || b.lastAttemptAtUtc) - stamp(a.occurredAtUtc || a.lastAttemptAtUtc))
   }, [messages, skipped, channel, status, searchValue])
 
-  const selected = visible.find((item) => String(item.id) === selectedId) || visible[0] || null
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(visible.length)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPage(1), 0)
+    return () => window.clearTimeout(timer)
+  }, [searchValue, channel, status])
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((visible.length || 0) / pageSize) || 1)
+    if (page <= totalPages) return undefined
+    const timer = window.setTimeout(() => setPage(totalPages), 0)
+    return () => window.clearTimeout(timer)
+  }, [visible.length, page, pageSize])
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return visible.slice(start, start + pageSize)
+  }, [visible, page, pageSize])
+
+  const selected = paged.find((item) => String(item.id) === selectedId) || paged[0] || null
   const canRetry = Boolean(selected && selected.status !== 'Published')
 
   useEffect(() => {
@@ -167,8 +196,8 @@ function InventorySyncMonitorPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Hàng đợi đồng bộ"
-        description="Tin POS/COD gửi sang kho. Tab Lỗi chỉ có khi gửi thất bại."
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
         onSearchChange={setSearchValue}
@@ -176,7 +205,7 @@ function InventorySyncMonitorPage() {
           <button
             type="button"
             onClick={handleSaveDraft}
-            className="rounded-full bg-[#8fb48c] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#7ea57b]"
+            className="inline-flex items-center rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
           >
             Lưu nháp
           </button>
@@ -252,7 +281,7 @@ function InventorySyncMonitorPage() {
 
           {!isLoading && visible.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              {visible.map((message, index) => {
+              {paged.map((message, index) => {
                 const active = selected?.id === message.id
                 return (
                   <button
@@ -282,6 +311,20 @@ function InventorySyncMonitorPage() {
               })}
             </div>
           ) : null}
+
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            totalCount={visible.length}
+            itemLabel="tin đồng bộ"
+            disabled={isLoading}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(1)
+            }}
+          />
 
           <div className="mt-4 rounded-2xl border border-slate-100 bg-[#fbf9f1]/80 p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Action</p>
