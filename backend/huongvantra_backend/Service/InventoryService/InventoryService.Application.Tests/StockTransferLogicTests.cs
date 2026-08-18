@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Notifications;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.UseCases;
@@ -396,6 +397,7 @@ public sealed class StockTransferLogicTests
             (ledgerRepo ?? new Mock<IInventoryLedgerRepository>()).Object,
             catalogClient.Object,
             (suggestionRepo ?? new Mock<IShelfReplenishmentSuggestionRepository>()).Object,
+            new Mock<INotificationClient>().Object,
             unitOfWork.Object);
     }
 

@@ -14,11 +14,23 @@ public class NotificationLogic(ProductDbContext _db)
     {
         "Manager",
         "Admin",
+        "Warehouse",
+        "SalePos",
+        "SaleCod",
     };
 
     private static readonly HashSet<string> AllowedBroadcastTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "warehouse_daily_report_shared",
+        "order_waiting_transfer",
+        "order_waiting_production",
+        "order_waiting_materials",
+        "stock_queue_pending_confirm",
+        "production_order_pending_approval",
+        "order_cancellation_pending_approval",
+        "return_request_pending_approval",
+        "low_stock_alert",
+        "production_order_approved",
     };
 
     public async Task<PagedResponse<NotificationResponse>> GetPagedAsync(
@@ -226,6 +238,55 @@ public class NotificationLogic(ProductDbContext _db)
     {
         if (role.Equals("Manager", StringComparison.OrdinalIgnoreCase)) return "Manager";
         if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase)) return "Admin";
+        if (role.Equals("Warehouse", StringComparison.OrdinalIgnoreCase)) return "Warehouse";
+        if (role.Equals("SalePos", StringComparison.OrdinalIgnoreCase)) return "SalePos";
+        if (role.Equals("SaleCod", StringComparison.OrdinalIgnoreCase)) return "SaleCod";
         return role;
+    }
+
+    public async Task BroadcastAsync(
+        string role,
+        string type,
+        string message,
+        string? linkUrl,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var entity = new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientRoleName = CanonicalRoleName(role),
+            Type = type.ToLowerInvariant(),
+            Title = message,
+            Body = message,
+            Link = linkUrl,
+            CreatedAt = now,
+        };
+
+        _db.Notifications.Add(entity);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task CreateDirectAsync(
+        Guid recipientUserId,
+        string type,
+        string message,
+        string? linkUrl,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var entity = new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientUserId = recipientUserId,
+            Type = type.ToLowerInvariant(),
+            Title = message,
+            Body = message,
+            Link = linkUrl,
+            CreatedAt = now,
+        };
+
+        _db.Notifications.Add(entity);
+        await _db.SaveChangesAsync(ct);
     }
 }

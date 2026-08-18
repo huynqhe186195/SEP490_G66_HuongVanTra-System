@@ -141,6 +141,8 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
             Mock.Of<IInventoryEventPublisher>(), Mock.Of<IInventoryUnitOfWork>(),
             Mock.Of<IProductionOrderRepository>(), Mock.Of<IStockTransferRepository>(), productCatalog.Object, Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
-            Mock.Of<IReturnInspectionRepository>(), Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
+            Mock.Of<IReturnInspectionRepository>(),
+            Mock.Of<HuongVanTra.Shared.Notifications.INotificationClient>(),
+            Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }
 }

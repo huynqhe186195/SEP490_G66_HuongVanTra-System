@@ -1,5 +1,6 @@
 using HuongVanTra.Shared.Auth;
 using HuongVanTra.Shared.Audit;
+using HuongVanTra.Shared.Notifications;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
@@ -67,6 +68,13 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
     if (!string.IsNullOrWhiteSpace(internalKey))
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalKey);
 });
+
+builder.Services.AddHttpClient<INotificationClient, NotificationClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
+
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StockTransferLogic>();
 builder.Services.AddScoped<StatisticsLogic>();

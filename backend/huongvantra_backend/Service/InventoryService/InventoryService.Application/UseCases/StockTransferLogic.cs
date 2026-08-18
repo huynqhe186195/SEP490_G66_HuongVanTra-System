@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using HuongVanTra.Shared.Notifications;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.DTOs.Responses;
 using InventoryService.Application.Interfaces;
@@ -18,6 +19,7 @@ public class StockTransferLogic(
     IInventoryLedgerRepository _ledgerRepo,
     IProductCatalogClient _productCatalogClient,
     IShelfReplenishmentSuggestionRepository _suggestionRepo,
+    INotificationClient _notificationClient,
     IInventoryUnitOfWork _unitOfWork)
 {
     private const string LocationWarehouse = "Warehouse";
@@ -127,6 +129,14 @@ public class StockTransferLogic(
         await _transferRepo.SaveChangesAsync(ct);
         transfer.SourceRequest = sourceRequest;
         transfer.SourceSuggestion = sourceSuggestion;
+
+        // Notify Warehouse: new transfer slip created (Draft)
+        _ = _notificationClient.SendBroadcastAsync(
+            "Warehouse",
+            NotificationTypes.TransferSlipPendingConfirm,
+            $"Phiếu điều chuyển {transfer.TransferCode} đã tạo, cần xác nhận",
+            $"/inventory/transfers/{transfer.Id}");
+
         return Map(transfer);
     }
 

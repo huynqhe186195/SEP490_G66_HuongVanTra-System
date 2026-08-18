@@ -74,6 +74,7 @@ public sealed class CodReservationTraceabilityTests
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
+            Mock.Of<HuongVanTra.Shared.Notifications.INotificationClient>(),
             Microsoft.Extensions.Options.Options.Create(
                 new InventoryOptions { SimulateWarehouse = simulateWarehouse }));
 

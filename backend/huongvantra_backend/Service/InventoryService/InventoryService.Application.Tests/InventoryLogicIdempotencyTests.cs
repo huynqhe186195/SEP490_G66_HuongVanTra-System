@@ -53,6 +53,7 @@ public sealed class InventoryLogicIdempotencyTests
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
+            Mock.Of<HuongVanTra.Shared.Notifications.INotificationClient>(),
             Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }
 

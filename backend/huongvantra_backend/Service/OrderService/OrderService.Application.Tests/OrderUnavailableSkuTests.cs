@@ -62,6 +62,7 @@ public class OrderUnavailableSkuTests
             new PaymentIdempotencyService(
                 Mock.Of<IPaymentIdempotencyRepository>(),
                 Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
 
         var request = new CreateOrderRequest(

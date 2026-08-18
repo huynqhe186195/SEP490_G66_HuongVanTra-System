@@ -1,5 +1,6 @@
 using MassTransit;
 using HuongVanTra.Shared.Messages;
+using HuongVanTra.Shared.Notifications;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
 using OrderService.Application.Services;
@@ -102,6 +103,13 @@ builder.Services.AddHttpClient<IShiftCatalogClient, ShiftCatalogClient>(client =
     var baseUrl = builder.Configuration["UserService:BaseUrl"] ?? "http://user-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+
+builder.Services.AddHttpClient<INotificationClient, NotificationClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
+
 builder.Services.AddSingleton<ServiceJwtProvider>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));

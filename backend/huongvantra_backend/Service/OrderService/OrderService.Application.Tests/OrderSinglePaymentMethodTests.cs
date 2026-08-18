@@ -153,6 +153,7 @@ public class OrderSinglePaymentMethodTests
                 new PaymentIdempotencyService(
                     Mock.Of<IPaymentIdempotencyRepository>(),
                     Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+                new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
                 Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
         }
 

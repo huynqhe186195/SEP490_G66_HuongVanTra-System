@@ -236,6 +236,7 @@ public sealed class MentorBackorderTests
             new PaymentIdempotencyService(
                 Mock.Of<IPaymentIdempotencyRepository>(),
                 Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
             Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
 
@@ -684,6 +685,7 @@ public sealed class MentorBackorderTests
                 OrderStatus.ReadyToDeliver,
                 OrderStatus.Completed,
                 It.IsAny<CancellationToken>()))
+            .Callback(() => order.OrderStatus = OrderStatus.Completed)
             .ReturnsAsync(true);
         repository.Setup(item => item.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
@@ -790,6 +792,7 @@ public sealed class MentorBackorderTests
             new PaymentIdempotencyService(
                 Mock.Of<IPaymentIdempotencyRepository>(),
                 Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
             Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
     }
@@ -839,6 +842,7 @@ public sealed class MentorBackorderTests
             new PaymentIdempotencyService(
                 Mock.Of<IPaymentIdempotencyRepository>(),
                 Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
             Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
     }

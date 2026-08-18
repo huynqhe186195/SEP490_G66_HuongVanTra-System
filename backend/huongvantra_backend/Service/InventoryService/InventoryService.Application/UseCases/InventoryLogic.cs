@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Messages;
+using HuongVanTra.Shared.Notifications;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.DTOs.Responses;
 using InventoryService.Application.Interfaces;
@@ -34,6 +35,7 @@ public class InventoryLogic(
     ISupplierRepository _supplierRepo,
     ISupplierProductRepository _supplierProductRepo,
     IReturnInspectionRepository _returnInspectionRepo,
+    INotificationClient _notificationClient,
     IOptions<InventoryOptions> inventoryOptions)
 {
     private readonly InventoryOptions _inventoryOptions = inventoryOptions.Value;
@@ -1232,6 +1234,11 @@ public class InventoryLogic(
                 && !string.IsNullOrWhiteSpace(item.MaterialRequirementSnapshotJson))
                 continue;
 
+            // Queue điều chuyển Kho→Kệ đã được phân bổ sẵn — không tái tính BOM.
+            if (string.Equals(item.StockHandlingMode, "WarehouseTransferPending", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.StockHandlingMode, "PartialFinishedDeductedWarehouseTransferPending", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             if (!stockBySkuId.TryGetValue(item.SkuId, out var stock))
             {
                 stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, ct)
@@ -1443,6 +1450,16 @@ public class InventoryLogic(
         {
             queue.QueueStatus = QueueStatus.Waiting;
             queue.LastShortageReason = null;
+        }
+
+        // Notify Warehouse: stock deduction queue pending confirmation
+        if (queue.QueueStatus == QueueStatus.Waiting)
+        {
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.StockQueuePendingConfirm,
+                $"Lệnh trừ kho {queue.OrderCode} đang chờ xác nhận",
+                $"/inventory/stock-requests");
         }
     }
 
@@ -2503,10 +2520,9 @@ public class InventoryLogic(
         CancellationToken ct = default)
     {
         if (!Enum.TryParse<ReturnInspectionDisposition>(request.Disposition, ignoreCase: true, out var disposition)
-            || disposition == ReturnInspectionDisposition.Pending
-            || disposition == ReturnInspectionDisposition.Quarantined)
+            || disposition == ReturnInspectionDisposition.Pending)
             throw new InventoryValidationException(
-                $"Disposition không hợp lệ: '{request.Disposition}'. Chỉ hỗ trợ RestockApproved (bán lại) hoặc Disposed (tiêu hủy).");
+                $"Disposition không hợp lệ: '{request.Disposition}'. Hỗ trợ: RestockApproved, Quarantined, Disposed.");
 
         return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
@@ -2661,8 +2677,18 @@ public class InventoryLogic(
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
             if (stock != null && stock.ShelfLowStockThreshold > 0
                 && Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity) <= stock.ShelfLowStockThreshold)
+            {
                 await _eventPublisher.PublishLowStockAsync(
                     stock.SkuId, stock.SkuCode, Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity), stock.ShelfLowStockThreshold, ct);
+
+                // Notify Warehouse: low stock detected
+                var available = Math.Max(0, stock.QuantityOnHand - stock.ReservedQuantity);
+                _ = _notificationClient.SendBroadcastAsync(
+                    "Warehouse",
+                    NotificationTypes.LowStockAlert,
+                    $"Sản phẩm {stock.SkuCode} sắp hết: còn {available}, ngưỡng {stock.ShelfLowStockThreshold}",
+                    $"/inventory/stocks");
+            }
         }
     }
 
@@ -2784,6 +2810,13 @@ public class InventoryLogic(
             queue.OrderStockStatus = warehouseTransferBySku.Values.Any(v => v > 0)
                 ? "pending_warehouse_transfer"
                 : "pending_deduct";
+
+            // Notify Warehouse: COD stock queue created and waiting
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.StockQueuePendingConfirm,
+                $"Lệnh giữ chỗ COD {queue.OrderCode} đã tạo, chờ xác nhận",
+                $"/inventory/stock-requests");
 
             // Lưu phần Kệ / chờ điều chuyển vào queue items để Thủ kho biết phải xử lý.
             foreach (var item in queue.Items)
@@ -3093,6 +3126,12 @@ public class InventoryLogic(
             await _processedEvents.AddAsync(
                 CodReservationReplacedEventType, request.OperationId, request.OperationId, innerCt);
             await _queueRepo.SaveChangesAsync(innerCt);
+
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.StockQueuePendingConfirm,
+                $"Lệnh giữ chỗ COD {queue.OrderCode} đã cập nhật, chờ xác nhận",
+                "/inventory/stock-requests");
 
             return new ReplaceCodReservationResponse(
                 queue.Id, queue.OrderId, queue.OrderCode,
@@ -4619,7 +4658,7 @@ public class InventoryLogic(
         await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(request), excludeReceiptId: null, ct);
 
         // ProductService HTTP hoàn tất trước khi mở transaction Inventory.
-        var (normalized, catalog) = await NormalizeSupplierReceiptItemsAsync(request, ct);
+        var (normalized, _) = await NormalizeSupplierReceiptItemsAsync(request, ct);
         var now = DateTime.UtcNow;
         var countToday = await _supplierReceiptRepo.CountCreatedSinceAsync(now.Date, ct);
         var snapshot = await ResolveSupplierSnapshotAsync(request.SupplierId, request.SupplierName, ct);
@@ -4680,7 +4719,7 @@ public class InventoryLogic(
         return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
             await _supplierReceiptRepo.AddAsync(receipt, innerCt);
-            await ApplySupplierReceiptToWarehouseAsync(receipt, createdBy, creator, catalog, innerCt);
+            await _supplierReceiptRepo.SaveChangesAsync(innerCt);
             return MapSupplierReceipt(receipt);
         }, ct);
     }
@@ -4832,6 +4871,8 @@ public class InventoryLogic(
         }
         if (approvalContext.Status != SupplierReceiptStatus.PendingApproval)
             throw new InventoryValidationException("Chỉ được duyệt phiếu nhập đang chờ xác nhận.");
+        if (approvalContext.CreatedBy == reviewerId)
+            throw new InventoryValidationException("Người tạo không thể tự duyệt phiếu nhập nhà cung cấp.");
 
         // ProductService HTTP is deliberately completed before the Inventory
         // transaction. The snapshot is rechecked against every receipt line
@@ -8507,6 +8548,7 @@ public class InventoryLogic(
         order.UpdatedAt = now;
 
         await _productionOrderRepo.SaveChangesAsync(ct);
+
         return MapProductionOrder(order);
     }
 
@@ -8543,6 +8585,7 @@ public class InventoryLogic(
         order.UpdatedAt = now;
 
         await _productionOrderRepo.SaveChangesAsync(ct);
+
         return MapProductionOrder(order);
     }
 

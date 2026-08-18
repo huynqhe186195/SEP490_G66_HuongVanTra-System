@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using HuongVanTra.Shared.Notifications;
 using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
@@ -34,6 +35,7 @@ public class OrderLogic(
     PosCashSessionLogic _posCashSessionLogic,
     StaffShiftGuard _shiftGuard,
     PaymentIdempotencyService _idempotencyService,
+    INotificationClient _notificationClient,
     IOptions<SepayOptions> sepayOptions,
     IOptions<BackorderOptions>? backorderOptions = null,
     ReturnPolicyLogic? returnPolicyLogic = null)
@@ -880,6 +882,34 @@ public class OrderLogic(
                 ct);
         }
 
+        if (order.OrderStatus == OrderStatus.WaitingTransfer)
+        {
+            // Notify Warehouse: order needs warehouse transfer
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.OrderWaitingTransfer,
+                $"Đơn hàng {order.OrderCode} cần điều chuyển hàng từ Kho sang Kệ",
+                $"/inventory/stock-requests");
+        }
+
+        if (order.OrderStatus == OrderStatus.WaitingProduction)
+        {
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.OrderWaitingProduction,
+                $"Đơn hàng {order.OrderCode} cần sản xuất và điều chuyển hàng",
+                $"/inventory/stock-requests");
+        }
+
+        if (order.OrderStatus == OrderStatus.WaitingMaterials)
+        {
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.OrderWaitingMaterials,
+                $"Đơn hàng {order.OrderCode} đang chờ nhập nguyên liệu (backorder)",
+                $"/inventory/stock-requests");
+        }
+
         if (stockHandling != null)
         {
             await RecordActivityAsync(
@@ -1508,6 +1538,13 @@ public class OrderLogic(
             actorName,
             ct);
         await _orderRepo.SaveChangesAsync(ct);
+
+        // Notify Manager: backorder cancellation needs approval
+        _ = _notificationClient.SendBroadcastAsync(
+            "Manager",
+            NotificationTypes.OrderCancellationPendingApproval,
+            $"Đơn {order.OrderCode} yêu cầu hủy và hoàn tiền {FormatVnd(collectedAmount)}",
+            $"/orders/{order.Id}");
 
         // Đóng băng lệnh chờ trừ kho — Thủ kho không Confirm trong lúc chờ duyệt hủy/hoàn tiền.
         await TryFreezeLinkedStockQueuesAsync(order.Id, reason.Trim(), ct);
@@ -2520,6 +2557,13 @@ public class OrderLogic(
 
         if (autoAccept)
             return await AcceptReturnAsync(returnId, access, actorId, actorName, ct, systemAutoAccept: true);
+
+        // Notify Manager: return request needs approval
+        _ = _notificationClient.SendBroadcastAsync(
+            "Manager",
+            NotificationTypes.ReturnRequestPendingApproval,
+            $"Yêu cầu trả hàng {returnCode} cho đơn {order.OrderCode} cần duyệt",
+            $"/orders/returns/{returnId}");
 
         return new ReturnOrderResponse(
             returnId,

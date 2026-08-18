@@ -50,6 +50,31 @@ public sealed class ReturnInspectionTests
             Func<CancellationToken, Task<T>> action, CancellationToken ct = default) => action(ct);
     }
 
+    private sealed class FakeCatalogClient : IProductCatalogClient
+    {
+        private static ProductCatalogSnapshot ForIds(IEnumerable<Guid> ids)
+        {
+            var products = ids.ToList().Select(id =>
+            {
+                var pid = Guid.NewGuid();
+                return new CatalogProduct(pid, "Test", "THANH_PHAM", "Piece", "Cái", true,
+                    [new CatalogVariant(id, pid, "SKU", "Test", true, true, false, 0, [], CanHaveBom: true)]);
+            }).ToList();
+            return new ProductCatalogSnapshot(products);
+        }
+
+        public Task<ProductCatalogSnapshot> GetCatalogAsync(CancellationToken ct = default) =>
+            Task.FromResult(new ProductCatalogSnapshot([]));
+
+        public Task<ProductCatalogSnapshot> GetCatalogForVariantIdsAsync(
+            IEnumerable<Guid> variantIds, CancellationToken ct = default) =>
+            Task.FromResult(ForIds(variantIds));
+
+        public Task<ProductCatalogSnapshot> GetSupplierReceiptCatalogForVariantIdsAsync(
+            IEnumerable<Guid> variantIds, CancellationToken ct = default) =>
+            Task.FromResult(new ProductCatalogSnapshot([]));
+    }
+
     private static InventoryLogic BuildLogic(InventoryDbContext db)
     {
         var opts = MSOptions.Create(new InventoryOptions { SimulateWarehouse = false });
@@ -71,10 +96,11 @@ public sealed class ReturnInspectionTests
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
             Mock.Of<IStockTransferRepository>(),
-            Mock.Of<IProductCatalogClient>(),
+            new FakeCatalogClient(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             new ReturnInspectionRepository(db),
+            Mock.Of<HuongVanTra.Shared.Notifications.INotificationClient>(),
             opts);
     }
 

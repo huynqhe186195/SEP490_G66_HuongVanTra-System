@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Messages;
+using HuongVanTra.Shared.Notifications;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
@@ -78,10 +79,10 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             new ReturnInspectionRepository(db),
+            Mock.Of<INotificationClient>(),
             opts);
     }
 
-    /// <param name="warehouseQty">WarehouseQuantityOnHand — used by SimulateWarehouse BOM checks for raw materials.</param>
     private static async Task<SkuStock> SeedAsync(
         InventoryDbContext db,
         Guid skuId,
@@ -864,6 +865,7 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<ISupplierRepository>(),
             Mock.Of<ISupplierProductRepository>(),
             new ReturnInspectionRepository(db),
+            Mock.Of<INotificationClient>(),
             opts);
     }
 

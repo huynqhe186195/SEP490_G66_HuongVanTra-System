@@ -112,6 +112,7 @@ public class SupplierReturnSingleStepTests
             new SupplierRepository(db),
             new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
+            Mock.Of<HuongVanTra.Shared.Notifications.INotificationClient>(),
             opts);
     }
 
