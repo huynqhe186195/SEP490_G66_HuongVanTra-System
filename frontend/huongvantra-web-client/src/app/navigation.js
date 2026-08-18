@@ -14,7 +14,6 @@ const ROLE_GROUPS = {
 
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng / khi đã tách rõ với kiểm kê. */
 const SIDEBAR_DISABLED_MODULES = new Set([
-  'integrations',
   'inventory_reports',
 ])
 
@@ -36,7 +35,6 @@ const HOME_MODULE_PRIORITY = [
 
 // --- Tạm ẩn (chưa xử lý backend) ---
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-// { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
@@ -213,11 +211,11 @@ export const navigationItems = [
     roles: ['admin'],
   },
   {
-    label: 'Đồng bộ Outbox',
-    path: '/admin/inventory-sync',
-    module: 'inventory_sync_monitor',
-    icon: 'sync_alt',
-    roles: ['admin'],
+    label: 'Tích hợp',
+    path: '/integrations',
+    module: 'integrations',
+    icon: 'hub',
+    roles: ['admin', 'agencyManager'],
   },
   {
     label: 'Thống kê bán hàng',
@@ -394,6 +392,15 @@ function takeNavLeaf(byPath, consumed, path, label) {
     section: found.section,
     sectionScope: found.sectionScope,
   }
+}
+
+/** Lấy mục đã lọc; nếu thiếu thì lấy từ catalog (tránh mất menu khi modules session cũ). */
+function takeNavLeafOrCatalog(byPath, consumed, path, label) {
+  if (!byPath.has(path)) {
+    const fallback = navigationItems.find((item) => item.path === path)
+    if (fallback) byPath.set(path, fallback)
+  }
+  return takeNavLeaf(byPath, consumed, path, label)
 }
 
 function takeNavLeaves(byPath, consumed, entries) {
@@ -623,16 +630,23 @@ function groupAdminManagerSidebar(items, isAdmin) {
     })
   }
 
-  // Hệ thống — chỉ Admin
+  const syncNav = takeNavLeafOrCatalog(byPath, consumed, '/integrations', 'Tích hợp')
+  if (syncNav) {
+    result.push({
+      ...syncNav,
+      icon: 'hub',
+    })
+  }
+
+  // Hệ thống — chỉ Admin (IAM / chính sách)
   if (isAdmin) {
-    const systemChildren = takeNavLeaves(byPath, consumed, [
-      ['/admin/users', 'Tài khoản'],
-      ['/admin/phan-quyen', 'Phân quyền'],
-      ['/admin/membership-tiers', 'Hạng khách hàng'],
-      ['/admin/promotions', 'Mã giảm giá'],
-      ['/admin/system-activities', 'Nhật ký hệ thống'],
-      ['/admin/inventory-sync', 'Đồng bộ Outbox'],
-    ])
+    const systemChildren = [
+      takeNavLeafOrCatalog(byPath, consumed, '/admin/users', 'Tài khoản'),
+      takeNavLeafOrCatalog(byPath, consumed, '/admin/phan-quyen', 'Phân quyền'),
+      takeNavLeafOrCatalog(byPath, consumed, '/admin/membership-tiers', 'Hạng khách hàng'),
+      takeNavLeafOrCatalog(byPath, consumed, '/admin/promotions', 'Mã giảm giá'),
+      takeNavLeafOrCatalog(byPath, consumed, '/admin/system-activities', 'Nhật ký hệ thống'),
+    ].filter(Boolean)
     if (systemChildren.length) {
       result.push({
         label: 'Hệ thống',
@@ -1060,10 +1074,11 @@ export function canAccessModule(session, module) {
       && (canViewAll || session.permissions.includes('CREATE_POS_ORDER'))
   }
 
-  if (String(module).toLowerCase() === 'inventory_sync_monitor') {
+  if (String(module).toLowerCase() === 'inventory_sync_monitor' || String(module).toLowerCase() === 'integrations') {
     if (
       session?.permissions?.includes('MONITOR_OUTBOX')
       || session?.permissions?.includes('MANAGE_ROLE')
+      || session?.permissions?.includes('MANAGE_EMPLOYEE')
     ) {
       return true
     }
@@ -1257,8 +1272,8 @@ export function getAccessDeniedMessage(pathname) {
   if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
   }
-  if (module === 'inventory_sync_monitor') {
-    return 'Chỉ Admin (hoặc tài khoản có quyền MONITOR_OUTBOX) mới được theo dõi đồng bộ Outbox.'
+  if (module === 'inventory_sync_monitor' || module === 'integrations') {
+    return 'Chỉ Quản lý hoặc Admin được xem trang đồng bộ bán hàng sang kho.'
   }
   if (module === 'users_admin' || module === 'phan_quyen_admin') {
     return 'Chỉ Quản trị viên mới được quản lý tài khoản và phân quyền.'
@@ -1423,6 +1438,15 @@ export function isNavigationItemActive(pathname, item, search = '') {
       return path === '/reports' || path === '/reports/end-of-day' || path.startsWith('/reports/end-of-day/')
     }
     return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'integrations' || target === '/integrations') {
+    return (
+      path === '/integrations'
+      || path.startsWith('/integrations/')
+      || path === '/admin/inventory-sync'
+      || path.startsWith('/admin/inventory-sync/')
+    )
   }
 
   // POS bán hàng: không highlight khi đang ở Quỹ ca POS (/pos/cash-sessions).

@@ -9,17 +9,26 @@ public class UserNotFoundByUsernameException(string username)
 public class InvalidCredentialsException()
     : Exception("Username or password is incorrect.");
 
+public class UserDeactivatedException()
+    : Exception("Tài khoản đã được cho ngừng hoạt động.");
+
 public class UserInactiveException()
-    : Exception("This account has been deactivated.");
+    : Exception("Tài khoản đã bị khoá.");
 
 public class DuplicateUsernameException(string username)
-    : Exception($"Username '{username}' already exists.");
+    : Exception($"Tên đăng nhập '{username}' đã tồn tại");
 
 public class RoleNotFoundException(int id)
-    : Exception($"Role with id '{id}' was not found.");
+    : Exception($"Vai trò với ID '{id}' không tồn tại");
+
+public class RoleAlreadyDeactivatedException(int id)
+    : Exception($"Vai trò với ID '{id}' đã bị ngừng hoạt động");
 
 public class PermissionNotFoundException(int id)
-    : Exception($"Permission with id '{id}' was not found.");
+    : Exception($"Quyền với ID '{id}' không tồn tại");
+
+public class PermissionAlreadyDeactivatedException(int id)
+    : Exception($"Quyền với ID '{id}' đã bị ngừng hoạt động");
 
 public class EmployeeNotFoundException(long id)
     : Exception($"Employee with id '{id}' was not found.");
@@ -33,8 +42,11 @@ public class ForbiddenException(string message = "You do not have permission to 
 public class RoleInUseException(int id)
     : Exception($"Role with id '{id}' is assigned to users and cannot be deleted.");
 
-public class DuplicatePermissionException(string name)
-    : Exception($"Permission '{name}' already exists.");
+public class DuplicatePermissionException(string code)
+    : Exception($"Mã quyền '{code}' đã tồn tại.");
+
+public class DuplicateRoleException(string roleName)
+    : Exception($"Tên vai trò '{roleName}' đã tồn tại");
 
 public class UserValidationException(string message) : Exception(message);
 

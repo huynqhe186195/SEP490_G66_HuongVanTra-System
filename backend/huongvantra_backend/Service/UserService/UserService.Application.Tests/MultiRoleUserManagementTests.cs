@@ -24,7 +24,8 @@ public class MultiRoleUserManagementTests
     [Fact]
     public void ResolveRoleIds_rejects_empty_assignment()
     {
-        Assert.Throws<UserValidationException>(() => UserInputValidator.ResolveRoleIds(null));
+        var ex = Assert.Throws<UserValidationException>(() => UserInputValidator.ResolveRoleIds(null));
+        Assert.Equal(UserInputValidator.EmptyRolesMessage, ex.Message);
     }
 
     [Fact]
@@ -109,7 +110,8 @@ public class MultiRoleUserManagementTests
                 "Dual Employee",
                 "Sales",
                 0,
-                "0900000000"),
+                "0900000000",
+                null),
             [PermissionNames.ManageEmployee]);
 
         Assert.Equal(["SaleCod", "SalePos"], created.Roles.OrderBy(role => role));
@@ -135,7 +137,8 @@ public class MultiRoleUserManagementTests
                 "Ops Support",
                 "Operations",
                 0,
-                "0900000001"),
+                "0900000001",
+                null),
             [PermissionNames.ManageEmployee]);
 
         Assert.Equal(["Accountant", "Warehouse"], created.Roles.OrderBy(role => role));

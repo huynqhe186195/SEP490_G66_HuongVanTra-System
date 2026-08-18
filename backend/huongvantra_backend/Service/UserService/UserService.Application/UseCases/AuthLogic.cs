@@ -3,6 +3,7 @@ using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
 using UserService.Domain.Entities;
+using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -26,10 +27,10 @@ public class AuthLogic(
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
-        var user = await userRepo.GetByUsernameAsync(request.Username)
+        var user = await userRepo.GetByUsernameForAuthenticationAsync(request.Username)
             ?? throw new InvalidCredentialsException();
 
-        if (!user.IsActive) throw new UserInactiveException();
+        EnsureUserCanAuthenticate(user);
 
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new InvalidCredentialsException();
@@ -55,7 +56,7 @@ public class AuthLogic(
         var user = await userRepo.GetByIdAsync(stored.UserId)
             ?? throw new InvalidRefreshTokenException();
 
-        if (!user.IsActive) throw new UserInactiveException();
+        EnsureUserCanAuthenticate(user);
 
         stored.IsRevoked = true;
         refreshTokenRepo.Update(stored);
@@ -118,9 +119,18 @@ public class AuthLogic(
     public async Task EnsureSessionActiveAsync(Guid userId, int tokenSessionVersion)
     {
         var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
-        if (!user.IsActive) throw new UserInactiveException();
+        EnsureUserCanAuthenticate(user);
         if (user.SessionVersion != tokenSessionVersion)
             throw new InvalidRefreshTokenException();
+    }
+
+    private static void EnsureUserCanAuthenticate(User user)
+    {
+        if (user.IsDeleted || user.Employee?.Status == EmployeeStatus.Inactive)
+            throw new UserDeactivatedException();
+
+        if (!user.IsActive)
+            throw new UserInactiveException();
     }
 
     private async Task<LoginResponse> IssueTokensAsync(User user)
@@ -135,7 +145,7 @@ public class AuthLogic(
             .ToList();
         var permissions = roles
             .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.PermissionName)
+            .Select(rp => rp.Permission.AuthorizationCode)
             .Distinct(StringComparer.Ordinal)
             .ToList();
 

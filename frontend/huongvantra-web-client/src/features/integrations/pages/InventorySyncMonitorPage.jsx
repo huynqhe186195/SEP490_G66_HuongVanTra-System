@@ -1,350 +1,393 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import { DetailBox, HubSegment, StatusPill } from '../components/IntegrationUi.jsx'
 import {
   fetchOutboxMessages,
-  fetchOutboxMessageDetail,
   fetchOutboxStats,
   retryOutboxMessage,
 } from '../services/outboxMonitoringApi.js'
+import {
+  HUB_CHANNELS,
+  buildErrorHint,
+  channelLabel,
+  errorCode,
+  eventActionLabel,
+} from '../utils/outboxPayload.js'
 
-const STATUS_META = {
-  Pending: { label: 'Chờ gửi', cls: 'border-amber-200 bg-amber-50 text-amber-700' },
-  Processing: { label: 'Đang gửi', cls: 'border-sky-200 bg-sky-50 text-sky-700' },
-  Published: { label: 'Đã gửi', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  Failed: { label: 'Thất bại', cls: 'border-rose-200 bg-rose-50 text-rose-700' },
+const DRAFT_KEY = 'hvt-integration-error-drafts'
+
+function readDrafts() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
-function formatDateTime(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('vi-VN')
+function writeDrafts(drafts) {
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(drafts))
 }
 
-function display(value) {
-  return value === undefined || value === null || value === '' ? '—' : value
+function readStatus(searchParams) {
+  const raw = searchParams.get('status')
+  if (raw === 'Failed' || raw === 'Pending' || raw === 'Published') return raw
+  return ''
 }
 
-function StatusBadge({ status }) {
-  const meta = STATUS_META[status] || { label: status || '—', cls: 'border-slate-200 bg-slate-50 text-slate-600' }
-  return (
-    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
-      {meta.label}
-    </span>
-  )
+function statusLabel(status) {
+  if (status === 'Failed') return 'Lỗi'
+  if (status === 'Pending' || status === 'Processing') return 'Đang chờ'
+  if (status === 'Published') return 'Đã gửi'
+  return status || '—'
+}
+
+function stamp(value) {
+  const time = Date.parse(value || '')
+  return Number.isFinite(time) ? time : 0
+}
+
+function matchesStatus(item, status) {
+  if (!status) return true
+  if (status === 'Pending') return item.status === 'Pending' || item.status === 'Processing'
+  return item.status === status
 }
 
 function InventorySyncMonitorPage() {
-  const [filters, setFilters] = useState({ status: '', eventType: '' })
+  const [searchParams, setSearchParams] = useSearchParams()
+  const channel = searchParams.get('channel') || ''
+  const status = readStatus(searchParams)
+  const selectedId = searchParams.get('id') || ''
+  const [searchValue, setSearchValue] = useState('')
   const [messages, setMessages] = useState([])
   const [stats, setStats] = useState({ pending: 0, processing: 0, published: 0, failed: 0 })
-  const [pagination, setPagination] = useState({
-    page: 1,
-    totalCount: 0,
-    totalPages: 1,
-  })
-  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(pagination.totalCount)
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil((pagination.totalCount || 0) / pageSize) || 1)
-    if (pagination.page > totalPages) {
-      setPagination((current) => ({ ...current, page: totalPages }))
-    }
-  }, [pagination.totalCount, pagination.page, pageSize])
+  const [skipped, setSkipped] = useState(() => new Set())
+  const [drafts, setDrafts] = useState(readDrafts)
+  const [note, setNote] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [selected, setSelected] = useState(null)
-  const [isDetailLoading, setIsDetailLoading] = useState(false)
-  const [retryingId, setRetryingId] = useState(null)
+  const [retrying, setRetrying] = useState(false)
+  const [page, setPage] = useState(1)
 
-  const queryParams = useMemo(
-    () => ({
-      status: filters.status,
-      eventType: filters.eventType.trim(),
-      page: pagination.page,
-      pageSize,
-    }),
-    [filters, pagination.page, pageSize],
-  )
-
-  const loadStats = useCallback(async () => {
-    try {
-      setStats(await fetchOutboxStats())
-    } catch (error) {
-      showError(error.message)
-    }
-  }, [])
-
-  const loadMessages = useCallback(async () => {
+  const load = useCallback(async () => {
     setIsLoading(true)
     try {
-      const result = await fetchOutboxMessages(queryParams)
-      setMessages(result.items)
-      setPagination((current) => ({
-        ...current,
-        page: result.page,
-        totalCount: result.totalCount,
-        totalPages: result.totalPages,
-      }))
+      const [all, failed, pending, nextStats] = await Promise.all([
+        fetchOutboxMessages({ page: 1, pageSize: 100 }),
+        fetchOutboxMessages({ status: 'Failed', page: 1, pageSize: 100 }),
+        fetchOutboxMessages({ status: 'Pending', page: 1, pageSize: 100 }),
+        fetchOutboxStats(),
+      ])
+      const byId = new Map()
+      for (const item of [...all.items, ...failed.items, ...pending.items]) byId.set(item.id, item)
+      setMessages([...byId.values()])
+      setStats(nextStats)
     } catch (error) {
       setMessages([])
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [queryParams])
+  }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      loadMessages()
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [loadMessages])
+    void load()
+  }, [load])
+
+  const visible = useMemo(() => {
+    const needle = searchValue.trim().toLowerCase()
+    return messages
+      .filter((item) => !item.orderChannel || item.orderChannel === 'POS' || item.orderChannel === 'COD')
+      .filter((item) => !skipped.has(item.id))
+      .filter((item) => !channel || item.orderChannel === channel)
+      .filter((item) => matchesStatus(item, status))
+      .filter((item) => {
+        if (!needle) return true
+        return [item.orderCode, item.lastError, item.orderChannel, item.eventType]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(needle))
+      })
+      .sort((a, b) => stamp(b.occurredAtUtc || b.lastAttemptAtUtc) - stamp(a.occurredAtUtc || a.lastAttemptAtUtc))
+  }, [messages, skipped, channel, status, searchValue])
+
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(visible.length)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      loadStats()
-    }, 0)
+    const timer = window.setTimeout(() => setPage(1), 0)
     return () => window.clearTimeout(timer)
-  }, [loadStats])
+  }, [searchValue, channel, status])
 
-  function updateFilter(key, value) {
-    setFilters((current) => ({ ...current, [key]: value }))
-    setPagination((current) => ({ ...current, page: 1 }))
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((visible.length || 0) / pageSize) || 1)
+    if (page <= totalPages) return undefined
+    const timer = window.setTimeout(() => setPage(totalPages), 0)
+    return () => window.clearTimeout(timer)
+  }, [visible.length, page, pageSize])
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return visible.slice(start, start + pageSize)
+  }, [visible, page, pageSize])
+
+  const selected = paged.find((item) => String(item.id) === selectedId) || paged[0] || null
+  const canRetry = Boolean(selected && selected.status !== 'Published')
+
+  useEffect(() => {
+    if (!selected) {
+      setNote('')
+      return
+    }
+    setNote(drafts[selected.id] || '')
+  }, [selected, drafts])
+
+  function patchParams(mutator) {
+    const next = new URLSearchParams(searchParams)
+    mutator(next)
+    setSearchParams(next, { replace: true })
   }
 
-  async function openDetail(message) {
-    setIsDetailLoading(true)
-    setSelected(message)
+  function selectMessage(message) {
+    patchParams((next) => {
+      if (message?.id) next.set('id', message.id)
+      else next.delete('id')
+    })
+  }
+
+  async function handleRetry() {
+    if (!selected || !canRetry) return
+    setRetrying(true)
     try {
-      const detail = await fetchOutboxMessageDetail(message.id)
-      setSelected(detail || message)
+      const result = await retryOutboxMessage(selected.id)
+      showSuccess(result.message || 'Đã gửi lại.')
+      await load()
     } catch (error) {
       showError(error.message)
     } finally {
-      setIsDetailLoading(false)
+      setRetrying(false)
     }
   }
 
-  async function handleRetry(message) {
-    setRetryingId(message.id)
-    try {
-      const result = await retryOutboxMessage(message.id)
-      showSuccess(result.message || 'Đã yêu cầu gửi lại.')
-      await Promise.all([loadMessages(), loadStats()])
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setRetryingId(null)
-    }
+  function handleSkip() {
+    if (!selected) return
+    setSkipped((current) => new Set(current).add(selected.id))
+    patchParams((next) => next.delete('id'))
   }
+
+  function handleSaveDraft() {
+    if (!selected) {
+      showError('Chọn một dòng trước khi lưu nháp.')
+      return
+    }
+    const next = { ...drafts, [selected.id]: note }
+    setDrafts(next)
+    writeDrafts(next)
+    showSuccess('Đã lưu nháp.')
+  }
+
+  const createPath = selected?.orderId || selected?.aggregateId
+    ? `/orders/${selected.orderId || selected.aggregateId}${selected.orderChannel === 'COD' ? '?from=cod' : ''}`
+    : '/orders/cod'
 
   return (
     <PageShell>
       <PageHeader
         compact
-        title="Giám sát đồng bộ tồn kho"
-        titleInfo="Theo dõi hàng đợi Outbox phát sự kiện đơn hàng sang kho và gửi lại thủ công khi thất bại."
+        title="Hàng đợi đồng bộ"
+        searchPlaceholder="Tìm mã đơn..."
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
         rightContent={
           <button
             type="button"
-            onClick={() => Promise.all([loadMessages(), loadStats()])}
-            disabled={isLoading}
-            className="rounded-xl border border-[#538463] px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={handleSaveDraft}
+            className="inline-flex items-center rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
           >
-            Làm mới
+            Lưu nháp
           </button>
         }
       />
 
-      <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Chờ gửi" value={stats.pending} cls="text-amber-700" />
-        <StatCard label="Đang gửi" value={stats.processing} cls="text-sky-700" />
-        <StatCard label="Đã gửi" value={stats.published} cls="text-emerald-700" />
-        <StatCard label="Thất bại" value={stats.failed} cls="text-rose-700" />
-      </section>
-
-      <section className="mb-5 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Trạng thái
-            <select
-              value={filters.status}
-              onChange={(event) => updateFilter('status', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case tracking-normal text-slate-700"
-            >
-              <option value="">Tất cả</option>
-              <option value="Pending">Chờ gửi</option>
-              <option value="Processing">Đang gửi</option>
-              <option value="Published">Đã gửi</option>
-              <option value="Failed">Thất bại</option>
-            </select>
-          </label>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:col-span-2">
-            Loại sự kiện
-            <input
-              type="text"
-              value={filters.eventType}
-              onChange={(event) => updateFilter('eventType', event.target.value)}
-              placeholder="OrderPlacedEvent, OrderCancelledEvent..."
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case tracking-normal text-slate-700"
-            />
-          </label>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm sm:px-5">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+          <HubSegment
+            label="Trạng thái"
+            value={status}
+            onChange={(value) => {
+              patchParams((next) => {
+                if (value) next.set('status', value)
+                else next.delete('status')
+                next.delete('id')
+              })
+            }}
+            options={[
+              { id: '', label: `Tất cả` },
+              { id: 'Failed', label: `Lỗi` },
+              { id: 'Pending', label: `Đang chờ` },
+              { id: 'Published', label: `Đã gửi` },
+            ]}
+          />
+          <span className="hidden h-10 w-px bg-slate-200 lg:block" aria-hidden="true" />
+          <HubSegment
+            label="Kênh"
+            value={channel}
+            onChange={(value) => {
+              patchParams((next) => {
+                if (value) next.set('channel', value)
+                else next.delete('channel')
+                next.delete('id')
+              })
+            }}
+            options={[
+              { id: '', label: 'Tất cả' },
+              ...HUB_CHANNELS.map((item) => ({ id: item.id, label: item.label })),
+            ]}
+          />
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="custom-scrollbar overflow-x-auto">
-          <table className="min-w-[1000px] w-full text-left text-sm">
-            <thead className="bg-[#fbf9f1]/70 text-xs font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Loại sự kiện</th>
-                <th className="px-4 py-3">Aggregate</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3">Số lần thử</th>
-                <th className="px-4 py-3">Phát sinh</th>
-                <th className="px-4 py-3">Lỗi gần nhất</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-slate-500">
-                    Đang tải danh sách...
-                  </td>
-                </tr>
-              ) : null}
-              {!isLoading && messages.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-slate-500">
-                    Không có message phù hợp bộ lọc.
-                  </td>
-                </tr>
-              ) : null}
-              {!isLoading
-                ? messages.map((message) => (
-                    <tr key={message.id} className="hover:bg-[#fbf9f1]/40">
-                      <td className="px-4 py-4 font-semibold text-slate-800">{display(message.eventType)}</td>
-                      <td className="px-4 py-4 font-mono text-xs text-slate-600">{display(message.aggregateId)}</td>
-                      <td className="px-4 py-4">
-                        <StatusBadge status={message.status} />
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">{message.retryCount}</td>
-                      <td className="px-4 py-4 text-slate-700">{formatDateTime(message.occurredAtUtc)}</td>
-                      <td className="px-4 py-4 max-w-[240px] truncate text-xs text-rose-600" title={message.lastError || ''}>
-                        {display(message.lastError)}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openDetail(message)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            Chi tiết
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRetry(message)}
-                            disabled={message.status === 'Published' || retryingId === message.id}
-                            className="rounded-lg border border-[#538463] px-3 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            {retryingId === message.id ? 'Đang gửi...' : 'Gửi lại'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                : null}
-            </tbody>
-          </table>
-        </div>
-        <TablePagination
-          page={pagination.page}
-          pageSize={pageSize}
-          pageSizeOptions={pageSizeOptions}
-          totalCount={pagination.totalCount}
-          onPageChange={(page) => setPagination((current) => ({ ...current, page }))}
-          onPageSizeChange={(size) => {
-            setPageSize(size)
-            setPagination((current) => ({ ...current, page: 1 }))
-          }}
-          disabled={isLoading}
-          itemLabel="message"
-        />
-      </section>
-
-      {selected ? (
-        <MessageDetailModal message={selected} isLoading={isDetailLoading} onClose={() => setSelected(null)} />
-      ) : null}
-    </PageShell>
-  )
-}
-
-function StatCard({ label, value, cls }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${cls}`}>{value}</div>
-    </div>
-  )
-}
-
-function MessageDetailModal({ message, isLoading, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Chi tiết message</h2>
-            <p className="font-mono text-xs text-slate-500">{display(message.id)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            Đóng
-          </button>
-        </div>
-        <div className="custom-scrollbar max-h-[calc(90vh-88px)] overflow-y-auto p-6">
-          {isLoading ? <p className="mb-4 text-sm text-slate-500">Đang tải chi tiết...</p> : null}
-          <dl className="grid gap-4 md:grid-cols-2">
-            <DetailItem label="Loại sự kiện" value={message.eventType} />
-            <DetailItem label="Trạng thái" value={STATUS_META[message.status]?.label || message.status} />
-            <DetailItem label="Aggregate" value={message.aggregateId} />
-            <DetailItem label="Số lần thử" value={message.retryCount} />
-            <DetailItem label="Phát sinh" value={formatDateTime(message.occurredAtUtc)} />
-            <DetailItem label="Thử gần nhất" value={formatDateTime(message.lastAttemptAtUtc)} />
-            <DetailItem label="Lần thử kế" value={formatDateTime(message.nextAttemptAtUtc)} />
-            <DetailItem label="Đã gửi lúc" value={formatDateTime(message.publishedAtUtc)} />
-            <DetailItem label="Đang khóa bởi" value={message.lockedBy} />
-            <DetailItem label="Khóa đến" value={formatDateTime(message.lockedUntilUtc)} />
-            <DetailItem label="Lỗi gần nhất" value={message.lastError} wide />
-          </dl>
-          {message.payload ? (
-            <section className="mt-6">
-              <h3 className="text-sm font-bold text-slate-800">Payload</h3>
-              <pre className="mt-2 max-h-72 overflow-auto rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs text-slate-700">
-                {message.payload}
-              </pre>
-            </section>
-          ) : null}
-        </div>
+        <p className="text-xs text-slate-400">
+          Lỗi {stats.failed} · Chờ {stats.pending + stats.processing} · Đã gửi {stats.published}
+        </p>
       </div>
-    </div>
-  )
-}
 
-function DetailItem({ label, value, wide = false }) {
-  return (
-    <div className={wide ? 'md:col-span-2' : ''}>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-slate-800">{display(value)}</dd>
-    </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-slate-800">Danh sách</h2>
+            <Link to="/integrations" className="text-sm font-semibold text-[#356647] hover:underline">
+              Về tích hợp
+            </Link>
+          </div>
+
+          {isLoading ? (
+            <p className="py-10 text-center text-sm text-slate-500">Đang tải...</p>
+          ) : null}
+
+          {!isLoading && visible.length === 0 ? (
+            <div className="px-2 py-10 text-center">
+              <p className="font-semibold text-slate-800">
+                {status === 'Failed' ? 'Không có lỗi gửi kho' : 'Không có dòng trong bộ lọc này'}
+              </p>
+              <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500">
+                {status === 'Failed'
+                  ? 'Kho đang nhận được tin. Chọn tab Đã gửi hoặc Tất cả để xem đơn đã đồng bộ.'
+                  : 'Đổi tab trạng thái hoặc kênh.'}
+              </p>
+            </div>
+          ) : null}
+
+          {!isLoading && visible.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {paged.map((message, index) => {
+                const active = selected?.id === message.id
+                return (
+                  <button
+                    key={message.id}
+                    type="button"
+                    onClick={() => selectMessage(message)}
+                    className={`rounded-2xl border px-4 py-4 text-left transition ${
+                      active
+                        ? 'border-[#538463] bg-[#538463]/10'
+                        : 'border-slate-100 bg-[#fbf9f1]/70 hover:border-[#cfe0ce]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-bold text-slate-800">
+                        {message.orderCode || errorCode(message, index)}
+                      </p>
+                      <StatusPill status={statusLabel(message.status)} />
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {channelLabel(message.orderChannel)} · {eventActionLabel(message.eventType)}
+                    </p>
+                    {message.lastError && message.status === 'Failed' ? (
+                      <p className="mt-1 truncate text-xs text-rose-600">{message.lastError}</p>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            totalCount={visible.length}
+            itemLabel="tin đồng bộ"
+            disabled={isLoading}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(1)
+            }}
+          />
+
+          <div className="mt-4 rounded-2xl border border-slate-100 bg-[#fbf9f1]/80 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Action</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRetry()}
+                disabled={!canRetry || retrying}
+                className="rounded-full bg-[#2f5d3a] px-4 py-2 text-sm font-bold text-white hover:bg-[#274e31] disabled:opacity-50"
+              >
+                {retrying ? 'Đang gửi…' : 'Thử lại'}
+              </button>
+              <Link
+                to={createPath}
+                className="rounded-full bg-[#cfe0ce] px-4 py-2 text-sm font-bold text-[#2f5d3a] hover:bg-[#bfd6be]"
+              >
+                Mở đơn
+              </Link>
+              <button
+                type="button"
+                onClick={handleSkip}
+                disabled={!selected}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Bỏ qua
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="mb-4 text-lg font-bold text-slate-800">Chi tiết</h2>
+          {selected ? (
+            <div className="space-y-3">
+              <DetailBox label="Nguồn">{channelLabel(selected.orderChannel)}</DetailBox>
+              <DetailBox label="Việc">{eventActionLabel(selected.eventType)}</DetailBox>
+              <DetailBox label="Trạng thái">{statusLabel(selected.status)}</DetailBox>
+              <DetailBox label="Thời điểm">
+                {formatVietnamDateTimeMinute(selected.occurredAtUtc || selected.lastAttemptAtUtc)}
+              </DetailBox>
+              {selected.status === 'Failed' ? (
+                <DetailBox label="Gợi ý">{buildErrorHint(selected)}</DetailBox>
+              ) : null}
+              {selected.orderCode ? (
+                <DetailBox label="Mã đơn">{selected.orderCode}</DetailBox>
+              ) : null}
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ghi chú nháp</span>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-2xl border border-slate-200 bg-[#fbf9f1]/80 px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#538463]"
+                  placeholder="Ghi chú xử lý..."
+                />
+              </label>
+            </div>
+          ) : (
+            <p className="py-10 text-center text-sm text-slate-500">Chọn một dòng để xem chi tiết</p>
+          )}
+        </section>
+      </div>
+    </PageShell>
   )
 }
 

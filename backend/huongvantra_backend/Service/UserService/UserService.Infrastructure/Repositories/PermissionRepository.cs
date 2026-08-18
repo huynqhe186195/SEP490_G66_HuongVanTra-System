@@ -10,8 +10,19 @@ public class PermissionRepository(UserDbContext context) : IPermissionRepository
     public async Task<Permission?> GetByIdAsync(int id) =>
         await context.Permissions.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
 
+    public async Task<Permission?> GetByIdIncludingDeletedAsync(int id) =>
+        await context.Permissions.FirstOrDefaultAsync(p => p.Id == id);
+
     public async Task<Permission?> GetByNameAsync(string name) =>
         await context.Permissions.FirstOrDefaultAsync(p => p.PermissionName == name && !p.IsDeleted);
+
+    public async Task<bool> ExistsByCodeAsync(string code)
+    {
+        var normalized = code.Trim().ToUpperInvariant();
+        return await context.Permissions.AnyAsync(p =>
+            p.PermissionCode.ToUpper() == normalized
+            || p.PermissionName.ToUpper() == normalized);
+    }
 
     public async Task<IEnumerable<Permission>> GetAllAsync(bool onlyDeleted = false) =>
         await context.Permissions

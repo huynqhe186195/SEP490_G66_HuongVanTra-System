@@ -293,6 +293,10 @@ public class OrderLogic(
         return dtos;
     }
 
+    /// <summary>
+    /// Lập đơn. POS tiền mặt: preview tồn HTTP → lưu DB → trừ kệ HTTP (cùng request). Không bắn OrderPlaced.
+    /// QR: chưa trừ lúc create. COD: ReserveOnly. B2B: không HTTP trừ kệ, có OrderPlaced.
+    /// </summary>
     public async Task<OrderResponse> CreateAsync(
         CreateOrderRequest req,
         OrderAccessContext access,
@@ -479,6 +483,7 @@ public class OrderLogic(
             && item.PaymentStatus != PaymentStatus.Success);
         var hasCodPayment = paymentAllocations.Any(item => item.PaymentMethod == PaymentMethod.COD);
         var hasRecordedPayment = paymentAllocations.Any(item => item.PaymentStatus == PaymentStatus.Success);
+        // QR pending → false: đơn PendingPayment, không trừ kệ lúc create. Tiền mặt Success → true.
         var isPosCompletedOnCreate =
             req.OrderChannel == OrderChannel.POS
             && !hasPendingTransfer
@@ -665,6 +670,7 @@ public class OrderLogic(
             && (order.OrderDetails?.Count ?? 0) > 0)
         {
             order.FulfillmentPreference = req.FulfillmentPreference;
+            // Preview: hỏi kho, chưa trừ. BackorderRequired → 409, đơn chưa persist.
             stockPreview = await PreparePosStockHandlingAsync(
                 order,
                 req.AcceptBackorder,
@@ -754,6 +760,7 @@ public class OrderLogic(
 
         InventoryStockHandlingResponse? stockHandling = null;
         InventoryStockHandlingResponse? customMaterialsHandling = null;
+        // POS Completed / WaitingMaterials: trừ kệ HTTP ngay. QR chưa Complete thì không vào đây.
         if (ShouldHandlePosStockSynchronously(order))
         {
             stockHandling = await PreparePosStockHandlingAsync(
@@ -3153,6 +3160,7 @@ public class OrderLogic(
             ct);
     }
 
+    /// <summary>POS đã ghi nhận tiền (hoặc backorder): trừ kệ HTTP cùng request. QR pending thì false.</summary>
     private static bool ShouldHandlePosStockSynchronously(Order order) =>
         order.OrderChannel == OrderChannel.POS
         && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials

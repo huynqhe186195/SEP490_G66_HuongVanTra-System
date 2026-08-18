@@ -80,6 +80,7 @@ function AccessControlPage() {
 
   const [permissionModalOpen, setPermissionModalOpen] = useState(false)
   const [permissionFormName, setPermissionFormName] = useState('')
+  const [permissionFormCode, setPermissionFormCode] = useState('')
   const [isSavingPermission, setIsSavingPermission] = useState(false)
   const [permissionSearch, setPermissionSearch] = useState('')
   const [guideOpen, setGuideOpen] = useState(false)
@@ -123,8 +124,10 @@ function AccessControlPage() {
     const keyword = permissionSearch.trim().toLowerCase()
     if (!keyword) return permissions
     return permissions.filter((item) => {
-      const label = formatPermissionName(item.permissionName).toLowerCase()
-      return label.includes(keyword) || item.permissionName.toLowerCase().includes(keyword)
+      const label = formatPermissionName(item.permissionName, item.permissionCode).toLowerCase()
+      return label.includes(keyword)
+        || item.permissionName.toLowerCase().includes(keyword)
+        || String(item.permissionCode || '').toLowerCase().includes(keyword)
     })
   }, [permissions, permissionSearch])
 
@@ -132,8 +135,10 @@ function AccessControlPage() {
     const keyword = permissionSearch.trim().toLowerCase()
     if (!keyword) return deletedPermissions
     return deletedPermissions.filter((item) => {
-      const label = formatPermissionName(item.permissionName).toLowerCase()
-      return label.includes(keyword) || item.permissionName.toLowerCase().includes(keyword)
+      const label = formatPermissionName(item.permissionName, item.permissionCode).toLowerCase()
+      return label.includes(keyword)
+        || item.permissionName.toLowerCase().includes(keyword)
+        || String(item.permissionCode || '').toLowerCase().includes(keyword)
     })
   }, [deletedPermissions, permissionSearch])
 
@@ -182,13 +187,22 @@ function AccessControlPage() {
   }
 
   const handleSaveRole = async () => {
-    if (!roleForm.roleName.trim()) {
-      showError('Vui lòng nhập tên vai trò.')
+    const roleName = roleForm.roleName.trim()
+    if (!roleName) {
+      showError('Tên vai trò không được để trống')
+      return
+    }
+    if (roleName.length > 50 || !/^[\p{L}][\p{L}0-9]*(?: [\p{L}][\p{L}0-9]*)*$/u.test(roleName)) {
+      showError('Tên vai trò không hợp lệ')
+      return
+    }
+    if (!roleForm.permissionIds.length) {
+      showError('Quyền thao tác không được để trống')
       return
     }
 
     const payload = {
-      roleName: roleForm.roleName.trim(),
+      roleName,
       description: roleForm.description.trim() || null,
       permissionIds: roleForm.permissionIds,
     }
@@ -238,17 +252,23 @@ function AccessControlPage() {
   }
 
   const handleCreatePermission = async () => {
-    const code = permissionFormName.trim().toUpperCase().replace(/\s+/g, '_')
+    const name = permissionFormName.trim()
+    const code = permissionFormCode.trim().toUpperCase()
+    if (!name) {
+      showError('Vui lòng nhập tên quyền (ví dụ: Export Log).')
+      return
+    }
     if (!code) {
-      showError('Vui lòng nhập mã quyền (ví dụ: TAO_DON).')
+      showError('Vui lòng nhập mã quyền (ví dụ: EXPORT_LOG).')
       return
     }
 
     setIsSavingPermission(true)
     try {
-      await createPermission(code)
+      await createPermission({ permissionName: name, permissionCode: code })
       showSuccess('Đã thêm quyền mới.')
       setPermissionFormName('')
+      setPermissionFormCode('')
       setPermissionModalOpen(false)
       await loadData()
     } catch (error) {
@@ -259,7 +279,7 @@ function AccessControlPage() {
   }
 
   const handleSoftDeletePermission = async (permission) => {
-    const displayName = formatPermissionName(permission.permissionName)
+    const displayName = formatPermissionName(permission.permissionName, permission.permissionCode)
     if (!(await confirmDialog({ title: 'Ngừng sử dụng', message: SOFT_DELETE_CONFIRM.permission(displayName), tone: 'danger' }))) return
     try {
       await softDeletePermission(permission.id)
@@ -272,7 +292,7 @@ function AccessControlPage() {
   }
 
   const handleRestorePermission = async (permission) => {
-    const displayName = formatPermissionName(permission.permissionName)
+    const displayName = formatPermissionName(permission.permissionName, permission.permissionCode)
     if (!(await confirmDialog({ title: 'Khôi phục', message: RESTORE_CONFIRM.permission(displayName), tone: 'primary' }))) return
     try {
       await restorePermission(permission.id)
@@ -467,9 +487,9 @@ function AccessControlPage() {
                   >
                     <div>
                       <h3 className="text-lg font-bold text-[#414942]">
-                        {formatPermissionName(permission.permissionName)}
+                        {formatPermissionName(permission.permissionName, permission.permissionCode)}
                       </h3>
-                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionName}</p>
+                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionCode || permission.permissionName}</p>
                     </div>
                     <BigButton variant="secondary" className="mt-4 w-full" onClick={() => handleRestorePermission(permission)}>
                       <span className="material-symbols-outlined text-[24px]">restore</span>
@@ -494,10 +514,10 @@ function AccessControlPage() {
                     <span className="material-symbols-outlined text-[36px] text-[#356647]">key</span>
                     <div>
                       <h3 className="text-lg font-bold text-[#1b1c17]">
-                        {formatPermissionName(permission.permissionName)}
+                        {formatPermissionName(permission.permissionName, permission.permissionCode)}
                       </h3>
-                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionName}</p>
-                      <p className="mt-2 text-base text-[#414942]">{getPermissionHint(permission.permissionName)}</p>
+                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionCode || permission.permissionName}</p>
+                      <p className="mt-2 text-base text-[#414942]">{getPermissionHint(permission.permissionName, permission.permissionCode)}</p>
                     </div>
                   </div>
                   <BigButton
@@ -548,6 +568,7 @@ function AccessControlPage() {
 
               <fieldset>
                 <legend className="text-base font-bold text-[#1b1c17]">Chọn quyền cho vai trò này</legend>
+                <p className="mt-1 text-sm text-[#717971]">Bắt buộc chọn ít nhất một quyền thao tác.</p>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {permissions.map((permission) => {
                     const checked = roleForm.permissionIds.includes(permission.id)
@@ -566,10 +587,10 @@ function AccessControlPage() {
                         />
                         <span>
                           <span className="block text-base font-bold text-[#1b1c17]">
-                            {formatPermissionName(permission.permissionName)}
+                            {formatPermissionName(permission.permissionName, permission.permissionCode)}
                           </span>
                           <span className="mt-1 block text-sm text-[#414942]">
-                            {getPermissionHint(permission.permissionName)}
+                            {getPermissionHint(permission.permissionName, permission.permissionCode)}
                           </span>
                         </span>
                       </label>
@@ -594,15 +615,24 @@ function AccessControlPage() {
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
             <h2 className="text-2xl font-bold text-[#356647]">Thêm quyền mới</h2>
             <p className="mt-2 text-base text-[#414942]">
-              Nhập mã quyền bằng chữ in hoa, gạch dưới. Ví dụ: <strong>TAO_DON</strong>
+              Nhập tên quyền dễ đọc và mã quyền bằng chữ in hoa, gạch dưới. Ví dụ: <strong>Export Log</strong> / <strong>EXPORT_LOG</strong>
             </p>
             <label className="mt-6 block">
+              <span className="text-base font-bold text-[#1b1c17]">Tên quyền</span>
+              <input
+                className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base"
+                placeholder="Export Log"
+                value={permissionFormName}
+                onChange={(e) => setPermissionFormName(e.target.value)}
+              />
+            </label>
+            <label className="mt-4 block">
               <span className="text-base font-bold text-[#1b1c17]">Mã quyền</span>
               <input
                 className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base uppercase"
-                placeholder="TAO_DON"
-                value={permissionFormName}
-                onChange={(e) => setPermissionFormName(e.target.value)}
+                placeholder="EXPORT_LOG"
+                value={permissionFormCode}
+                onChange={(e) => setPermissionFormCode(e.target.value)}
               />
             </label>
             <div className="mt-8 flex flex-wrap justify-end gap-3">

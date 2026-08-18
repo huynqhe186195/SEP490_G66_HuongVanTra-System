@@ -5,6 +5,8 @@ namespace UserService.Application.Interfaces;
 public interface IRoleRepository
 {
     Task<Role?> GetByIdAsync(int id);
+    Task<Role?> GetByIdIncludingDeletedAsync(int id);
+    Task<bool> ExistsByNameAsync(string name, int? excludeId = null);
     Task<IEnumerable<Role>> GetAllAsync(bool onlyDeleted = false);
     Task<IEnumerable<Role>> GetByUserIdAsync(Guid userId);
     Task<bool> IsAssignedToUsersAsync(int roleId);

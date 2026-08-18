@@ -21,6 +21,7 @@ const ROLE_MODULE_MAP = {
     'membership_tiers_admin',
     'promotions_admin',
     'system_activity_log',
+    'integrations',
     'inventory_sync_monitor',
     'users_admin',
     'phan_quyen_admin',
@@ -34,7 +35,7 @@ const ROLE_MODULE_MAP = {
     'accounting_cost',
     'dashboard',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'customers', 'contracts', 'products', 'product_creation_requests', 'staff', 'accounting_cost', 'warehouse_daily_report', 'inventory_returns', 'dashboard'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'customers', 'contracts', 'products', 'product_creation_requests', 'staff', 'accounting_cost', 'warehouse_daily_report', 'inventory_returns', 'dashboard', 'integrations', 'inventory_sync_monitor'],
   salepos: ['pos', 'orders', 'customers', 'dashboard'],
   salecod: ['pos', 'cod_ops', 'customers', 'dashboard'],
   // Legacy single Sale → quầy (không COD ops).

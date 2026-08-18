@@ -138,14 +138,17 @@ export function formatRoleName(roleName) {
   return matched ? ROLE_LABELS[matched] : roleName
 }
 
-export function formatPermissionName(permissionName) {
-  if (!permissionName) return '—'
-  return PERMISSION_LABELS[permissionName]?.label
-    || String(permissionName).replace(/_/g, ' ').toLowerCase()
+export function formatPermissionName(permissionName, permissionCode) {
+  const code = permissionCode || permissionName
+  if (!permissionName && !code) return '—'
+  return PERMISSION_LABELS[code]?.label
+    || (permissionName && permissionName !== code ? permissionName : null)
+    || String(code).replace(/_/g, ' ')
 }
 
-export function getPermissionHint(permissionName) {
-  return PERMISSION_LABELS[permissionName]?.hint || 'Quyền thao tác trên hệ thống'
+export function getPermissionHint(permissionName, permissionCode) {
+  const code = permissionCode || permissionName
+  return PERMISSION_LABELS[code]?.hint || 'Quyền thao tác trên hệ thống'
 }
 
 /** Mô tả vai trò — ưu tiên mô tả từ API; dịch mô tả tiếng Anh phổ biến; fallback theo mã. */

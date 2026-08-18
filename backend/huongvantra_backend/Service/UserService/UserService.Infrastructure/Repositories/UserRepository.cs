@@ -27,6 +27,20 @@ public class UserRepository(UserDbContext context) : IUserRepository
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
 
+    public async Task<User?> GetByUsernameForAuthenticationAsync(string username)
+    {
+        var users = await context.Users
+            .Include(u => u.Employee)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
+            .Where(u => u.Username == username)
+            .ToListAsync();
+
+        return users.FirstOrDefault(u => !u.IsDeleted) ?? users.FirstOrDefault();
+    }
+
     public async Task<User?> GetByEmployeePhoneAsync(string phoneDigits)
     {
         if (string.IsNullOrWhiteSpace(phoneDigits))
@@ -72,8 +86,13 @@ public class UserRepository(UserDbContext context) : IUserRepository
             .OrderBy(u => u.Username)
             .ToListAsync();
 
-    public async Task<bool> ExistsAsync(string username) =>
-        await context.Users.AnyAsync(u => u.Username == username && !u.IsDeleted);
+    public async Task<bool> ExistsAsync(string username, Guid? exceptUserId = null)
+    {
+        var query = context.Users.Where(u => u.Username == username && !u.IsDeleted);
+        if (exceptUserId.HasValue)
+            query = query.Where(u => u.Id != exceptUserId.Value);
+        return await query.AnyAsync();
+    }
 
     public async Task<(IEnumerable<User> Items, int TotalCount)> GetAllAsync(int page, int pageSize, bool onlyDeleted = false)
     {

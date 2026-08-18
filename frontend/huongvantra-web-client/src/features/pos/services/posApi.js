@@ -421,12 +421,14 @@ export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   return `https://quickchart.io/qr?size=280&margin=1&text=${encodeURIComponent(qrPayload)}`
 }
 
+// Cửa chung POS/COD: đổi giỏ quầy → body BE rồi gọi ordersApi.createOrder (POST /api/v1/orders).
 async function submitPosOrder(payload, options, { idempotencyKey } = {}) {
   const body = buildOrderRequestFromPosPayload(payload, options)
   const order = await createOrder(body, { idempotencyKey })
   return mapOrderDetailToPosResult(order)
 }
 
+// QR quầy. paidAmount: 0 vì chưa có tiền; trừ kệ sau webhook, không lúc tạo đơn.
 export async function createPosOrderOnline(payload, { qrAmount = 0, idempotencyKey } = {}) {
   const transferPayment = findPaymentAllocation(
     payload,
@@ -479,6 +481,7 @@ export function buildTakeawayOrderPayload({
   }
 }
 
+// Tab COD trên PosPage. Channel COD → BE giữ chỗ (ReserveOnly), không trừ kệ lúc tạo.
 export function createTakeawayCodOrder(
   payload,
   expectedAmount = 0,
@@ -548,6 +551,7 @@ export async function createTakeawayVietQrOrder(
   return attachTransferQr(result, qrAmount)
 }
 
+// Tiền mặt quầy. Tên "Offline" lệch: checkout hiện bắt online; nhánh queue bên dưới không tới được từ nút Xác nhận.
 export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
