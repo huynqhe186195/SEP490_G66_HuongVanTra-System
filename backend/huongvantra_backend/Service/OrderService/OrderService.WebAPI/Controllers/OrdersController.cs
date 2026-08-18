@@ -79,6 +79,11 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
             id, request?.Reason, actorId, actorName, idempotencyKey, AccessContext(), ct));
     }
 
+    /// <summary>
+    /// Tạo đơn (POS / COD / B2B). FE POS: posApi → ordersApi.createOrder.
+    /// Quyền theo channel: CREATE_POS_ORDER / CREATE_COD_ORDER / CREATE_B2B_ORDER.
+    /// 409 requiresBackorderConfirmation = preview tồn, chưa lưu đơn, chưa trừ kệ.
+    /// </summary>
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)

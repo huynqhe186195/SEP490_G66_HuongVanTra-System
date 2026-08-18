@@ -39,6 +39,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         }
     }
 
+    /// <summary>
+    /// Order → Inventory HTTP nội bộ. previewOnly=true: kiểm tra; false: trừ kệ / reserve COD.
+    /// Không đi RabbitMQ.
+    /// </summary>
     public async Task<InventoryStockHandlingResponse> PreparePosStockDeductionAsync(
         InventoryStockHandlingRequest request,
         CancellationToken ct = default)

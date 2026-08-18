@@ -378,6 +378,7 @@ export function buildCreateOrderBody(payload) {
   }
 }
 
+// Cửa POST tạo đơn mọi kênh (POS/COD/B2B). POS gọi gián tiếp qua posApi.submitPosOrder; B2B gọi thẳng từ OrderCreatePage.
 export async function createOrder(payload, { idempotencyKey } = {}) {
   const data = await apiRequestAuth('/api/v1/orders', {
     method: 'POST',

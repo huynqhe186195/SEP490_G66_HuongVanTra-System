@@ -1666,6 +1666,7 @@ function PosPage() {
     const selectedPaymentMethodLabel =
         paymentMethods.find((method) => method.id === paymentMethod)?.label ?? paymentMethod;
 
+  // JSON giỏ quầy (POS/QR). Tab COD không dùng hàm này — dùng buildTakeawayOrderPayload trong posApi.js.
   const buildOrderPayload = (method, amount, debtSettlementJson = null) => {
     const storeId = resolvePosStoreId()
     // DiscountAmount chỉ mang giảm giá thủ công VIP; hạng thành viên do backend tự tính.
@@ -1846,6 +1847,7 @@ function PosPage() {
         });
     };
 
+  // Tiền mặt quầy (online). `createOrder` là callback — caller truyền createPosOrderOffline, không phải ordersApi.createOrder.
   const finalizeRecordedPayment = async ({
     method,
     createOrder,
@@ -1879,9 +1881,11 @@ function PosPage() {
     payload.pickupContactPhone = pickupContactPhone
     payload.depositAmount = depositAmount
     try {
+      // createPosOrderOffline → posApi.submitPosOrder → ordersApi.createOrder → POST /api/v1/orders
       const result = await createOrder(payload, { idempotencyKey })
 
     if (method === 'CASH' && collectedNow > 0) {
+      // Chỉ refresh quỹ trên UI. BE đã cộng CashSalesTotal trong RecordCashSaleAsync sau khi commit đơn.
       await recordCashSale()
     }
 
@@ -1984,6 +1988,7 @@ function PosPage() {
         return sessionSnapshot;
     };
 
+    // Nút Thanh toán trên sidebar — chỉ mở cột thu tiền, chưa gọi API.
     const openPaymentSidebar = () => {
         if (!hasCartItems) {
             showError("Giỏ hàng trống.");
@@ -1992,6 +1997,7 @@ function PosPage() {
         setIsPaymentSidebarOpen(true);
     };
 
+    // Tab COD/giao hàng → createTakeawayCodOrder (channel COD). Không dùng buildOrderPayload.
     const handleTakeawayPayment = async (
         debtSettlement = null,
         idempotencyKey,
@@ -2131,6 +2137,7 @@ function PosPage() {
         printReceiptFromData(receipt);
     };
 
+    // Rẽ 3 nhánh sau khi đã xác nhận: COD | QR quầy | tiền mặt. Đây mới là chỗ gọi API tạo đơn.
     const executePayment = async (
         debtSettlement = null,
         idempotencyKey,
@@ -2156,6 +2163,7 @@ function PosPage() {
             return;
         }
 
+        // QR quầy: tạo đơn chờ CK (chưa trừ kệ). Trừ tồn lúc SePay webhook Complete.
         if (isTransferPayment) {
             const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
             const backendDebtSettlementJson = debtApplyAmount > 0
@@ -2217,6 +2225,7 @@ function PosPage() {
             return;
         }
 
+        // Tên createPosOrderOffline lệch: checkout hiện bắt online; hàm này POST ngay khi có mạng.
         await finalizeRecordedPayment({
             method: "CASH",
             createOrder: createPosOrderOffline,
@@ -2232,6 +2241,7 @@ function PosPage() {
         });
     };
 
+    // Chống double-click: cùng payload thì tái sử dụng X-Idempotency-Key.
     const submitCheckoutAttempt = (
         activeDebtSettlement = null,
         acceptBackorder = false,
@@ -2309,6 +2319,7 @@ function PosPage() {
         return false;
     };
 
+    // Nút trên PosPaymentSidebar. Chỉ chặn nghiệp vụ rồi mở popup — chưa POST đơn.
     const handlePayment = async () => {
         setAcceptedBackorder(null);
         if (isRestoredCatalogValidating) {
@@ -2403,6 +2414,7 @@ function PosPage() {
         }
 
         try {
+            // Preview tồn (HTTP). Hết hàng / chờ kho → modal trước; đủ kệ → mở popup xác nhận.
             if (await previewSellFirstBeforePayment()) return;
             setIsPaymentConfirmOpen(true);
         } catch (error) {
@@ -2431,6 +2443,7 @@ function PosPage() {
         });
     };
 
+    // Nút Xác nhận trên popup. Bắt online rồi mới submitCheckoutAttempt → executePayment.
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         if (!navigator.onLine) {
@@ -2454,6 +2467,7 @@ function PosPage() {
             setIsPaymentConfirmOpen(false);
             setAcceptedBackorder(null);
         } catch (error) {
+            // 409 từ BE preview tồn: đơn chưa lưu, chưa trừ kệ. Hiện modal hỏi khách có chờ hàng không.
             if (error?.body?.requiresBackorderConfirmation) {
                 setIsPaymentConfirmOpen(false);
                 setBackorderPrompt({
@@ -3527,7 +3541,7 @@ function PosPage() {
         isPartialPayment={isPartialPayment}
         isTransferQrFlow={isTransferQrFlow}
         onQuickAmount={handleQuickAmount}
-        onConfirm={handlePayment}
+        onConfirm={handlePayment} // sidebar: validate + mở popup, chưa tạo đơn
         isSubmitting={isSubmitting}
         canPay={canPay}
         onOpenCustomerDetail={() => setOpenModal('customer-detail')}
@@ -3569,7 +3583,7 @@ function PosPage() {
       <PosPaymentConfirmModal
         isOpen={isPaymentConfirmOpen}
         onClose={() => setIsPaymentConfirmOpen(false)}
-        onConfirm={handleConfirmPayment}
+        onConfirm={handleConfirmPayment} // popup: mới POST /api/v1/orders
         isSubmitting={isSubmitting}
         formatMoney={formatMoney}
         cartItemLines={cartItemLines}
