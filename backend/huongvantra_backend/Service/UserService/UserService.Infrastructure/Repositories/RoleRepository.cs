@@ -13,6 +13,12 @@ public class RoleRepository(UserDbContext context) : IRoleRepository
                 .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
+    public async Task<Role?> GetByIdIncludingDeletedAsync(int id) =>
+        await context.Roles
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
     public async Task<bool> ExistsByNameAsync(string name, int? excludeId = null)
     {
         var normalized = name.Trim().ToUpperInvariant();

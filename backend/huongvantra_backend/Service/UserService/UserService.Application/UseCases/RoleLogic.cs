@@ -88,20 +88,26 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 
     public async Task DeleteAsync(int id)
     {
-        _ = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
+        var role = await roleRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new RoleNotFoundException(id);
+        if (role.IsDeleted)
+            throw new RoleAlreadyDeactivatedException(id);
+
         await roleRepo.SoftDeleteAsync(id);
     }
 
     public async Task RestoreAsync(int id)
     {
-        var roles = await roleRepo.GetAllAsync(onlyDeleted: true);
-        var target = roles.FirstOrDefault(r => r.Id == id)
+        var role = await roleRepo.GetByIdIncludingDeletedAsync(id)
             ?? throw new RoleNotFoundException(id);
-        if (RetiredRoleNames.Contains(target.RoleName))
+
+        if (!role.IsDeleted)
+            return;
+
+        if (RetiredRoleNames.Contains(role.RoleName))
             throw new UserValidationException("Vai trò này đã ngừng dùng và không thể khôi phục.");
 
         await roleRepo.RestoreAsync(id);
-        _ = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
     }
 
     public async Task AssignPermissionsAsync(int roleId, List<int> permissionIds)

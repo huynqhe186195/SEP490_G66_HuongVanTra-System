@@ -25,6 +25,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next)
             UserNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             UserNotFoundByUsernameException e => (StatusCodes.Status404NotFound, e.Message),
             RoleNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
+            RoleAlreadyDeactivatedException e => (StatusCodes.Status404NotFound, e.Message),
             PermissionNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             PermissionAlreadyDeactivatedException e => (StatusCodes.Status404NotFound, e.Message),
             EmployeeNotFoundException e => (StatusCodes.Status404NotFound, e.Message),

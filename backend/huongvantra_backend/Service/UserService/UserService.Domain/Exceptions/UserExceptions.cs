@@ -19,7 +19,10 @@ public class DuplicateUsernameException(string username)
     : Exception($"Username '{username}' already exists.");
 
 public class RoleNotFoundException(int id)
-    : Exception($"Role with id '{id}' was not found.");
+    : Exception($"Vai trò với ID '{id}' không tồn tại");
+
+public class RoleAlreadyDeactivatedException(int id)
+    : Exception($"Vai trò với ID '{id}' đã bị ngừng hoạt động");
 
 public class PermissionNotFoundException(int id)
     : Exception($"Quyền với ID '{id}' không tồn tại");
