@@ -31,6 +31,7 @@ public class NotificationLogic(ProductDbContext _db)
         "return_request_pending_approval",
         "low_stock_alert",
         "production_order_approved",
+        "stock_adjustment_request_created",
     };
 
     public async Task<PagedResponse<NotificationResponse>> GetPagedAsync(

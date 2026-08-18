@@ -14,14 +14,24 @@ public static class NotificationTypes
     public const string LowStockAlert = "low_stock_alert";
     public const string ProductionOrderApproved = "production_order_approved";
 
-    // Phase 2: Feedback Notifications (Reserved for future)
-    public const string ProductionOrderRejected = "production_order_rejected";
+    // Phase 2A: Manager feedback → Sale
     public const string OrderCancellationApproved = "order_cancellation_approved";
     public const string OrderCancellationRejected = "order_cancellation_rejected";
     public const string ReturnRequestApproved = "return_request_approved";
     public const string ReturnRequestRejected = "return_request_rejected";
 
-    // Phase 3: Extended Operations (Reserved for future)
+    // Phase 2B: Warehouse done → Sale
+    public const string StockQueueConfirmed = "stock_queue_confirmed";
+    public const string OrderReadyForPickup = "order_ready_for_pickup";
+
+    // Phase 2C: Stock adjustment request flow
+    public const string StockAdjustmentRequestCreated = "stock_adjustment_request_created";
+    public const string StockAdjustmentRequestReviewed = "stock_adjustment_request_reviewed";
+    public const string StockAdjustmentRequestRejected = "stock_adjustment_request_rejected";
+    public const string StockAdjustmentRequestClosed = "stock_adjustment_request_closed";
+
+    // Reserved for future
+    public const string ProductionOrderRejected = "production_order_rejected";
     public const string CodOrderReadyToShip = "cod_order_ready_to_ship";
     public const string BackorderItemAvailable = "backorder_item_available";
     public const string ReturnInspectionCompleted = "return_inspection_completed";

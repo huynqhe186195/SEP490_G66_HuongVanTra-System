@@ -1604,6 +1604,25 @@ public class OrderLogic(
             ct);
         await _orderRepo.SaveChangesAsync(ct);
 
+        if (request.Approved)
+        {
+            if (order.CancellationRequestedBy.HasValue)
+                _ = _notificationClient.SendDirectAsync(
+                    order.CancellationRequestedBy.Value,
+                    NotificationTypes.OrderCancellationApproved,
+                    $"Yêu cầu hủy đơn {order.OrderCode} đã được duyệt",
+                    $"/orders/{order.Id}");
+        }
+        else
+        {
+            if (order.CancellationRequestedBy.HasValue)
+                _ = _notificationClient.SendDirectAsync(
+                    order.CancellationRequestedBy.Value,
+                    NotificationTypes.OrderCancellationRejected,
+                    $"Yêu cầu hủy đơn {order.OrderCode} bị từ chối",
+                    $"/orders/{order.Id}");
+        }
+
         if (!request.Approved)
             await TryUnfreezeLinkedStockQueuesAsync(order.Id, ct);
 
@@ -2683,6 +2702,13 @@ public class OrderLogic(
 
         await _returnOrderRepo.SaveChangesAsync(ct);
 
+        if (!systemAutoAccept && order.EmployeeId.HasValue)
+            _ = _notificationClient.SendDirectAsync(
+                order.EmployeeId.Value,
+                NotificationTypes.ReturnRequestApproved,
+                $"Yêu cầu trả hàng {returnOrder.ReturnCode} cho đơn {order.OrderCode} đã được duyệt",
+                $"/orders/returns/{returnOrder.Id}");
+
         if (returnOrder.RefundAmount > 0
             && returnOrder.RefundMethod == PaymentMethod.Cash
             && order.OrderChannel == OrderChannel.POS)
@@ -2853,6 +2879,13 @@ public class OrderLogic(
 
         await _returnOrderRepo.SaveChangesAsync(ct);
 
+        if (order.EmployeeId.HasValue)
+            _ = _notificationClient.SendDirectAsync(
+                order.EmployeeId.Value,
+                NotificationTypes.ReturnRequestRejected,
+                $"Yêu cầu trả hàng {returnOrder.ReturnCode} cho đơn {order.OrderCode} bị từ chối",
+                $"/orders/returns/{returnOrder.Id}");
+
         return new ReturnOrderResponse(
             returnOrder.Id,
             returnOrder.ReturnCode,
@@ -2970,6 +3003,22 @@ public class OrderLogic(
         }
 
         await _orderRepo.SaveChangesAsync(ct);
+
+        if (order.EmployeeId.HasValue)
+        {
+            if (readyToDeliver)
+                _ = _notificationClient.SendDirectAsync(
+                    order.EmployeeId.Value,
+                    NotificationTypes.OrderReadyForPickup,
+                    $"Đơn {order.OrderCode} đã đủ hàng, chờ khách đến lấy",
+                    $"/orders/{order.Id}");
+            else
+                _ = _notificationClient.SendDirectAsync(
+                    order.EmployeeId.Value,
+                    NotificationTypes.StockQueueConfirmed,
+                    $"Kho đã xác nhận trừ tồn cho đơn {order.OrderCode}",
+                    $"/orders/{order.Id}");
+        }
 
         if (completedForPickup && order.CustomerId.HasValue)
             TrySendInvoiceEmail(order);

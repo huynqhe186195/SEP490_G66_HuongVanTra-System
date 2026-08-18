@@ -4074,6 +4074,13 @@ public class InventoryLogic(
         await ValidateShelfReplenishmentCatalogAsync(entity.Items, ct);
 
         await _adjustmentRequestRepo.AddWithGeneratedCodeAsync(entity, ct);
+
+        _ = _notificationClient.SendBroadcastAsync(
+            "Warehouse",
+            NotificationTypes.StockAdjustmentRequestCreated,
+            $"Yêu cầu bổ sung Kệ Hàng {entity.RequestCode} vừa được gửi",
+            $"/inventory/stock-adjustment-requests/{entity.Id}");
+
         return MapAdjustmentRequest(entity);
     }
 
@@ -4387,6 +4394,13 @@ public class InventoryLogic(
         entity.ReviewedAt = DateTime.UtcNow;
         entity.ReviewNote = request?.ReviewNote?.Trim() ?? entity.ReviewNote;
         await _adjustmentRequestRepo.SaveChangesAsync(ct);
+
+        _ = _notificationClient.SendDirectAsync(
+            entity.RequestedBy,
+            NotificationTypes.StockAdjustmentRequestReviewed,
+            $"Yêu cầu bổ sung Kệ Hàng {entity.RequestCode} đã được Thủ kho xử lý",
+            $"/inventory/stock-adjustment-requests/{entity.Id}");
+
         return MapAdjustmentRequest(entity);
     }
 
@@ -4428,6 +4442,13 @@ public class InventoryLogic(
         entity.ReviewedAt = DateTime.UtcNow;
         entity.ReviewNote = reason;
         await _adjustmentRequestRepo.SaveChangesAsync(ct);
+
+        _ = _notificationClient.SendDirectAsync(
+            entity.RequestedBy,
+            NotificationTypes.StockAdjustmentRequestClosed,
+            $"Yêu cầu bổ sung Kệ Hàng {entity.RequestCode} đã bị đóng phần còn lại",
+            $"/inventory/stock-adjustment-requests/{entity.Id}");
+
         return MapAdjustmentRequest(entity);
     }
 
@@ -4490,6 +4511,12 @@ public class InventoryLogic(
         entity.ReviewedAt = DateTime.UtcNow;
         entity.ReviewNote = reason;
         await _adjustmentRequestRepo.SaveChangesAsync(ct);
+
+        _ = _notificationClient.SendDirectAsync(
+            entity.RequestedBy,
+            NotificationTypes.StockAdjustmentRequestRejected,
+            $"Yêu cầu bổ sung Kệ Hàng {entity.RequestCode} bị từ chối",
+            $"/inventory/stock-adjustment-requests/{entity.Id}");
 
         return new StockAdjustmentReviewResponse(
             entity.Id,
