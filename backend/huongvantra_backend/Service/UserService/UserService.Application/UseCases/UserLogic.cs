@@ -18,16 +18,19 @@ public class UserLogic(
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
+        var username = UserInputValidator.NormalizeAndValidateUsername(request.Username);
+        UserInputValidator.ValidatePassword(request.Password);
+        var fullName = UserInputValidator.NormalizeAndValidateFullName(request.FullName);
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
 
-        if (await userRepo.ExistsAsync(request.Username))
-            throw new DuplicateUsernameException(request.Username);
+        if (await userRepo.ExistsAsync(username))
+            throw new DuplicateUsernameException(username);
 
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Username = request.Username,
+            Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsActive = true
         };
@@ -45,7 +48,7 @@ public class UserLogic(
         var employee = new Employee
         {
             UserId = user.Id,
-            FullName = request.FullName,
+            FullName = fullName,
             Department = request.Department,
             ActualSalary = request.ActualSalary,
             BankAccountInfo = request.BankAccountInfo,
@@ -147,6 +150,13 @@ public class UserLogic(
 
     public async Task UpdateAsync(Guid id, UpdateUserRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
+        if (request.Username is not null)
+            UserInputValidator.NormalizeAndValidateUsername(request.Username);
+        if (request.Password is not null)
+            UserInputValidator.ValidatePassword(request.Password);
+        if (request.FullName is not null)
+            UserInputValidator.NormalizeAndValidateFullName(request.FullName);
+
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
 
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
@@ -169,6 +179,27 @@ public class UserLogic(
             actorPermissions,
             currentRoles,
             nextRoleNames);
+
+        if (request.Username is not null)
+        {
+            var username = UserInputValidator.NormalizeAndValidateUsername(request.Username);
+            if (await userRepo.ExistsAsync(username, user.Id))
+                throw new DuplicateUsernameException(username);
+            user.Username = username;
+        }
+
+        if (request.Password is not null)
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+
+        if (request.FullName is not null)
+        {
+            var fullName = UserInputValidator.NormalizeAndValidateFullName(request.FullName);
+            var employee = user.Employee ?? await employeeRepo.GetByUserIdAsync(user.Id)
+                ?? throw new UserValidationException(UserInputValidator.EmptyFullNameMessage);
+            employee.FullName = fullName;
+            employee.UpdatedAt = DateTime.UtcNow;
+            employeeRepo.Update(employee);
+        }
 
         user.IsActive = request.IsActive;
         user.UpdatedAt = DateTime.UtcNow;

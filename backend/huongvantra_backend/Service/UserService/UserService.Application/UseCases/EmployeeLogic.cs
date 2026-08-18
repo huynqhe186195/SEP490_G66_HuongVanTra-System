@@ -18,11 +18,14 @@ public class EmployeeLogic(
         CreateEmployeeRequest request,
         IReadOnlyList<string>? actorPermissions = null)
     {
+        var username = UserInputValidator.NormalizeAndValidateUsername(request.Username);
+        UserInputValidator.ValidatePassword(request.Password);
+        var fullName = UserInputValidator.NormalizeAndValidateFullName(request.FullName);
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.PhoneNumber);
 
-        if (await userRepo.ExistsAsync(request.Username))
-            throw new DuplicateUsernameException(request.Username);
+        if (await userRepo.ExistsAsync(username))
+            throw new DuplicateUsernameException(username);
 
         var assignedRoles = new List<Role>();
         foreach (var roleId in roleIds)
@@ -37,7 +40,7 @@ public class EmployeeLogic(
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Username = request.Username,
+            Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsActive = true
         };
@@ -49,7 +52,7 @@ public class EmployeeLogic(
         var employee = new Employee
         {
             UserId = user.Id,
-            FullName = request.FullName,
+            FullName = fullName,
             Department = request.Department,
             ActualSalary = request.ActualSalary,
             PhoneNumber = request.PhoneNumber,
@@ -136,7 +139,8 @@ public class EmployeeLogic(
         if (actorPermissions is not null)
             StaffManagementScope.EnsureCanManageEmployee(actorPermissions, GetRoleNames(employee));
 
-        employee.FullName = request.FullName;
+        var fullName = UserInputValidator.NormalizeAndValidateFullName(request.FullName);
+        employee.FullName = fullName;
         employee.Department = request.Department;
         employee.ActualSalary = request.ActualSalary;
         employee.PhoneNumber = request.PhoneNumber;

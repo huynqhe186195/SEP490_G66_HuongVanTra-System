@@ -86,8 +86,13 @@ public class UserRepository(UserDbContext context) : IUserRepository
             .OrderBy(u => u.Username)
             .ToListAsync();
 
-    public async Task<bool> ExistsAsync(string username) =>
-        await context.Users.AnyAsync(u => u.Username == username && !u.IsDeleted);
+    public async Task<bool> ExistsAsync(string username, Guid? exceptUserId = null)
+    {
+        var query = context.Users.Where(u => u.Username == username && !u.IsDeleted);
+        if (exceptUserId.HasValue)
+            query = query.Where(u => u.Id != exceptUserId.Value);
+        return await query.AnyAsync();
+    }
 
     public async Task<(IEnumerable<User> Items, int TotalCount)> GetAllAsync(int page, int pageSize, bool onlyDeleted = false)
     {

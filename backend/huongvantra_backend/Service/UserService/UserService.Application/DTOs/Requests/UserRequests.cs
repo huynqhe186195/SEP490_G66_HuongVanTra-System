@@ -13,7 +13,10 @@ public record CreateUserRequest(
 public record UpdateUserRequest(
     bool IsActive,
     List<int>? RoleIds,
-    int? RoleId = null);
+    int? RoleId = null,
+    string? Username = null,
+    string? Password = null,
+    string? FullName = null);
 
 public record ChangePasswordRequest(
     string CurrentPassword,

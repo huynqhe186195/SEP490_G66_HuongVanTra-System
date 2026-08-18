@@ -9,7 +9,7 @@ public interface IUserRepository
     Task<User?> GetByUsernameForAuthenticationAsync(string username);
     Task<User?> GetByEmployeePhoneAsync(string phoneDigits);
     Task<IReadOnlyList<User>> GetLegacySaleUsersAsync();
-    Task<bool> ExistsAsync(string username);
+    Task<bool> ExistsAsync(string username, Guid? exceptUserId = null);
     Task<(IEnumerable<User> Items, int TotalCount)> GetAllAsync(int page, int pageSize, bool onlyDeleted = false);
     Task AddAsync(User user);
     void Update(User user);

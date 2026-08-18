@@ -16,7 +16,7 @@ public class UserInactiveException()
     : Exception("Tài khoản đã bị khoá.");
 
 public class DuplicateUsernameException(string username)
-    : Exception($"Username '{username}' already exists.");
+    : Exception($"Tên đăng nhập '{username}' đã tồn tại");
 
 public class RoleNotFoundException(int id)
     : Exception($"Vai trò với ID '{id}' không tồn tại");

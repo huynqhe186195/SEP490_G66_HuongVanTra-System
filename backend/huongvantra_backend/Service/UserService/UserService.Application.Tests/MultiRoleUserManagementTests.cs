@@ -24,7 +24,8 @@ public class MultiRoleUserManagementTests
     [Fact]
     public void ResolveRoleIds_rejects_empty_assignment()
     {
-        Assert.Throws<UserValidationException>(() => UserInputValidator.ResolveRoleIds(null));
+        var ex = Assert.Throws<UserValidationException>(() => UserInputValidator.ResolveRoleIds(null));
+        Assert.Equal(UserInputValidator.EmptyRolesMessage, ex.Message);
     }
 
     [Fact]
