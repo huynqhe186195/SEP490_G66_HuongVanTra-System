@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
@@ -237,7 +237,7 @@ function StockDeductQueuePage() {
   )
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Chờ đóng gói / trừ Kho"
@@ -256,9 +256,9 @@ function StockDeductQueuePage() {
         }}
       />
 
-      <OpsActionQueue items={actionItems} className="mb-3" />
+      <OpsActionQueue items={actionItems} layout="horizontal" />
 
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <StatusFilterChips
           options={tabChipOptions}
           value={activeTab}

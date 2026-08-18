@@ -1,4 +1,4 @@
-# OS / IDE
+﻿# OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
@@ -35,6 +35,9 @@ docker-compose.override.yml
 gemini.md
 .antigravityignore
 
+# Claude Code session data
+.claude/
+
 # Logs
 .antigravity/logs/
 *.ai.log
@@ -42,7 +45,7 @@ build-*.log
 [Ll]og/
 [Ll]ogs/
 
-# .NET / Visual Studio — build outputs
+# .NET / Visual Studio â€” build outputs
 [Bb]in/
 [Oo]bj/
 [Oo]ut/

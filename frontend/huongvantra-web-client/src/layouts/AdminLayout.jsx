@@ -264,7 +264,7 @@ function AdminLayout() {
                 ? 'overflow-hidden p-2 sm:p-3 lg:p-3'
                 : isInventoryCreatePage
                   ? 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-4 lg:overflow-hidden lg:p-3'
-                : 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-6 xl:p-8'
+                : 'custom-scrollbar overflow-y-auto overscroll-contain p-3 sm:p-3 lg:p-4 xl:p-5'
             }`}
           >
             <ModuleRouteGuard session={authSession} isLoadingAccess={isLoadingAccess}>

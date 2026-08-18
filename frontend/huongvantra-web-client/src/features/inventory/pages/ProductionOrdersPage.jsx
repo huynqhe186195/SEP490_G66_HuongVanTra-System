@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
@@ -275,7 +275,7 @@ function ProductionOrdersPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Quản lý lệnh sản xuất"
@@ -295,7 +295,7 @@ function ProductionOrdersPage() {
         }
       />
 
-      <div className="mb-3">
+      <div>
         <StatusFilterChips
           options={statusChipOptions}
           value={activeTab}

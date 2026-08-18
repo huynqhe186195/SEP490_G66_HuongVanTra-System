@@ -135,7 +135,7 @@ function OrdersPage() {
   const hasActiveFilters = filters.status || filters.fromDate || filters.toDate
 
   return (
-    <PageShell className="pb-8">
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Đơn hàng"
@@ -172,7 +172,7 @@ function OrdersPage() {
         }
       />
 
-      <section className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <StatusFilterChips
           options={statusChipOptions}
           value={filters.status}

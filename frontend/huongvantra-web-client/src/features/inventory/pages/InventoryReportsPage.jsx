@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -298,7 +298,7 @@ function InventoryReportsPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Báo cáo kho"
@@ -315,7 +315,7 @@ function InventoryReportsPage() {
         )}
       />
 
-      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-3">
+      <div className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-3">
         <select value={reportType} onChange={(event) => resetPageAndSet(setReportType, event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           {REPORT_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
