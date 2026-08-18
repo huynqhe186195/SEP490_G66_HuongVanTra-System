@@ -2,6 +2,7 @@ using UserService.Application.Authorization;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Exceptions;
 
@@ -11,13 +12,18 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 {
     public async Task<RoleResponse> CreateAsync(CreateRoleRequest request)
     {
-        await ValidatePermissionIdsAsync(request.PermissionIds);
+        var roleName = RoleInputValidator.NormalizeAndValidateName(request.RoleName);
+        var permissionIds = RoleInputValidator.NormalizePermissionIds(request.PermissionIds);
+        await ValidatePermissionIdsAsync(permissionIds);
+
+        if (await roleRepo.ExistsByNameAsync(roleName))
+            throw new DuplicateRoleException(roleName);
 
         var role = new Role
         {
-            RoleName = request.RoleName,
+            RoleName = roleName,
             Description = request.Description,
-            RolePermissions = request.PermissionIds
+            RolePermissions = permissionIds
                 .Select(pid => new RolePermission { PermissionId = pid })
                 .ToList()
         };
@@ -62,12 +68,17 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
     public async Task UpdateAsync(int id, UpdateRoleRequest request)
     {
         var role = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
-        await ValidatePermissionIdsAsync(request.PermissionIds);
+        var roleName = RoleInputValidator.NormalizeAndValidateName(request.RoleName);
+        var permissionIds = RoleInputValidator.NormalizePermissionIds(request.PermissionIds);
+        await ValidatePermissionIdsAsync(permissionIds);
 
-        role.RoleName = request.RoleName;
+        if (await roleRepo.ExistsByNameAsync(roleName, excludeId: id))
+            throw new DuplicateRoleException(roleName);
+
+        role.RoleName = roleName;
         role.Description = request.Description;
         role.UpdatedAt = DateTime.UtcNow;
-        role.RolePermissions = request.PermissionIds
+        role.RolePermissions = permissionIds
             .Select(pid => new RolePermission { RoleId = id, PermissionId = pid })
             .ToList();
 
@@ -96,9 +107,10 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
     public async Task AssignPermissionsAsync(int roleId, List<int> permissionIds)
     {
         var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
-        await ValidatePermissionIdsAsync(permissionIds);
+        var normalizedIds = (permissionIds ?? []).Distinct().ToList();
+        await ValidatePermissionIdsAsync(normalizedIds);
 
-        foreach (var permissionId in permissionIds)
+        foreach (var permissionId in normalizedIds)
         {
             if (role.RolePermissions.Any(rp => rp.PermissionId == permissionId)) continue;
             role.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permissionId });
@@ -133,13 +145,17 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
                 rp.Permission.IsDeleted));
     }
 
-    private async Task ValidatePermissionIdsAsync(IEnumerable<int> permissionIds)
+    private async Task ValidatePermissionIdsAsync(IReadOnlyList<int> permissionIds)
     {
+        var missing = new List<int>();
         foreach (var permissionId in permissionIds)
         {
-            _ = await permissionRepo.GetByIdAsync(permissionId)
-                ?? throw new PermissionNotFoundException(permissionId);
+            if (await permissionRepo.GetByIdAsync(permissionId) is null)
+                missing.Add(permissionId);
         }
+
+        if (missing.Count > 0)
+            throw new UserValidationException(RoleInputValidator.MissingPermissionsMessage(missing));
     }
 
     private static RoleResponse MapToResponse(Role role) => new(

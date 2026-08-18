@@ -187,13 +187,22 @@ function AccessControlPage() {
   }
 
   const handleSaveRole = async () => {
-    if (!roleForm.roleName.trim()) {
-      showError('Vui lòng nhập tên vai trò.')
+    const roleName = roleForm.roleName.trim()
+    if (!roleName) {
+      showError('Tên vai trò không được để trống')
+      return
+    }
+    if (roleName.length > 50 || !/^[\p{L}][\p{L}0-9]*(?: [\p{L}][\p{L}0-9]*)*$/u.test(roleName)) {
+      showError('Tên vai trò không hợp lệ')
+      return
+    }
+    if (!roleForm.permissionIds.length) {
+      showError('Quyền thao tác không được để trống')
       return
     }
 
     const payload = {
-      roleName: roleForm.roleName.trim(),
+      roleName,
       description: roleForm.description.trim() || null,
       permissionIds: roleForm.permissionIds,
     }
@@ -559,6 +568,7 @@ function AccessControlPage() {
 
               <fieldset>
                 <legend className="text-base font-bold text-[#1b1c17]">Chọn quyền cho vai trò này</legend>
+                <p className="mt-1 text-sm text-[#717971]">Bắt buộc chọn ít nhất một quyền thao tác.</p>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {permissions.map((permission) => {
                     const checked = roleForm.permissionIds.includes(permission.id)

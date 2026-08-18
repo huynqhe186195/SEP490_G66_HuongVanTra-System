@@ -40,12 +40,18 @@ public class PermissionLogic(IPermissionRepository permissionRepo)
 
     public async Task SoftDeleteAsync(int id)
     {
-        _ = await permissionRepo.GetByIdAsync(id) ?? throw new PermissionNotFoundException(id);
+        var permission = await permissionRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new PermissionNotFoundException(id);
+        if (permission.IsDeleted)
+            throw new PermissionAlreadyDeactivatedException(id);
+
         await permissionRepo.SoftDeleteAsync(id);
     }
 
     public async Task RestoreAsync(int id)
     {
+        _ = await permissionRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new PermissionNotFoundException(id);
         await permissionRepo.RestoreAsync(id);
         _ = await permissionRepo.GetByIdAsync(id) ?? throw new PermissionNotFoundException(id);
     }
