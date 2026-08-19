@@ -67,7 +67,11 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 
     public async Task UpdateAsync(int id, UpdateRoleRequest request)
     {
-        var role = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
+        var roleOrDeleted = await roleRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new RoleNotFoundException(id);
+        if (roleOrDeleted.IsDeleted)
+            throw new RoleAlreadyDeactivatedException(id);
+        var role = roleOrDeleted;
         var roleName = RoleInputValidator.NormalizeAndValidateName(request.RoleName);
         var permissionIds = RoleInputValidator.NormalizePermissionIds(request.PermissionIds);
         await ValidatePermissionIdsAsync(permissionIds);

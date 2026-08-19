@@ -18,6 +18,15 @@ public class UserRepository(UserDbContext context) : IUserRepository
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
 
+    public async Task<User?> GetByIdIncludingDeletedAsync(Guid id) =>
+        await context.Users
+            .Include(u => u.Employee)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
     public async Task<User?> GetByUsernameAsync(string username) =>
         await context.Users
             .Include(u => u.Employee)

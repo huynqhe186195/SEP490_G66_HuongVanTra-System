@@ -1,10 +1,16 @@
 namespace UserService.Domain.Exceptions;
 
 public class UserNotFoundException(Guid id)
-    : Exception($"User with id '{id}' was not found.");
+    : Exception($"Người dùng với ID '{id}' không tồn tại");
 
 public class UserNotFoundByUsernameException(string username)
     : Exception($"User with username '{username}' was not found.");
+
+public class UserDeactivatedByIdException(Guid id)
+    : Exception($"Người dùng với ID '{id}' đã bị ngừng hoạt động");
+
+public class UserAlreadyLockedByIdException(Guid id)
+    : Exception($"Người dùng với ID '{id}' đã bị khoá");
 
 public class InvalidCredentialsException()
     : Exception("Username or password is incorrect.");

@@ -111,6 +111,7 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
                 message = "Chỉ Sale COD / Quản lý mới được tạo đơn COD."
             });
 
+        // POS mặc định: không B2B, không COD → cần CREATE_POS_ORDER (SaleCod thiếu permission này → 403).
         if (!IsB2BCheckout(request) && !IsCodCheckout(request) && !CanOperatePosCounter())
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
@@ -128,6 +129,7 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
         }
         catch (OrderService.Application.Interfaces.BackorderConfirmationRequiredException ex)
         {
+            // HTTP 409. FE handleConfirmPayment đọc requiresBackorderConfirmation → BackorderConfirmModal.
             return Conflict(new
             {
                 requiresBackorderConfirmation = true,

@@ -9,8 +9,9 @@ public static class UserInputValidator
     public const string EmptyUsernameMessage = "Tên đăng nhập không được để trống";
     public const string InvalidUsernameMessage = "Tên đăng nhập không hợp lệ";
     public const string UsernameTooLongMessage = "Tên đăng nhập không được dài hơn 50 ký tự";
-    public const string EmptyPasswordMessage = "Tên mật khẩu không được để trống";
+    public const string EmptyPasswordMessage = "Mật khẩu không được để trống";
     public const string InvalidPasswordMessage = "Mật khẩu không hợp lệ";
+    public const int PasswordMinLength = 6;
     public const string EmptyFullNameMessage = "Họ và tên không được để trống";
     public const string InvalidFullNameMessage = "Họ và tên không hợp lệ";
     public const string EmptyRolesMessage = "Vui lòng chọn ít nhất một vai trò";
@@ -83,6 +84,15 @@ public static class UserInputValidator
             throw new UserValidationException(InvalidFullNameMessage);
 
         return value;
+    }
+
+    public static void ValidateNewPassword(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < PasswordMinLength)
+            throw new UserValidationException("Mật khẩu mới không được ngắn hơn 6 ký tự");
+
+        if (!PasswordRegex.IsMatch(password))
+            throw new UserValidationException("Mật khẩu mới không hợp lệ");
     }
 
     public static void ValidatePhoneIfProvided(string? phone)

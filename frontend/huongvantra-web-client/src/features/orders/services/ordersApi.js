@@ -322,6 +322,7 @@ export async function fetchOrder(idOrCode) {
   return mapOrderDetail(data)
 }
 
+// Chuẩn hóa JSON gửi BE (skuId, orderChannel, payments, CustomBundles). Dùng chung POS/COD/B2B.
 export function buildCreateOrderBody(payload) {
   return {
     customerId: payload.customerId || null,

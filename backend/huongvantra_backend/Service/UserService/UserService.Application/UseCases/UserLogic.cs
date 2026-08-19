@@ -159,7 +159,11 @@ public class UserLogic(
 
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
 
-        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var userOrDeleted = await userRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new UserNotFoundException(id);
+        if (userOrDeleted.IsDeleted)
+            throw new UserDeactivatedByIdException(id);
+        var user = userOrDeleted;
         var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
         StaffManagementScope.EnsureAdminAccountNotMutated(currentRoles);
 
@@ -211,7 +215,13 @@ public class UserLogic(
 
     public async Task LockAsync(Guid id, IReadOnlyList<string>? actorPermissions = null)
     {
-        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var userOrDeleted = await userRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new UserNotFoundException(id);
+        if (userOrDeleted.IsDeleted)
+            throw new UserDeactivatedByIdException(id);
+        var user = userOrDeleted;
+        if (!user.IsActive)
+            throw new UserAlreadyLockedByIdException(id);
         var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
         StaffManagementScope.EnsureAdminAccountNotDisabled(currentRoles);
         EnforceStaffScopeIfNeeded(actorPermissions, currentRoles);
@@ -223,7 +233,11 @@ public class UserLogic(
 
     public async Task UnlockAsync(Guid id, IReadOnlyList<string>? actorPermissions = null)
     {
-        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var userOrDeleted = await userRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new UserNotFoundException(id);
+        if (userOrDeleted.IsDeleted)
+            throw new UserDeactivatedByIdException(id);
+        var user = userOrDeleted;
         EnforceStaffScopeIfNeeded(
             actorPermissions,
             user.UserRoles.Select(ur => ur.Role.RoleName));
@@ -235,24 +249,34 @@ public class UserLogic(
 
     public async Task SoftDeleteAsync(Guid id)
     {
-        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var userOrDeleted = await userRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new UserNotFoundException(id);
+        if (userOrDeleted.IsDeleted)
+            throw new UserDeactivatedByIdException(id);
         StaffManagementScope.EnsureAdminAccountNotDisabled(
-            user.UserRoles.Select(ur => ur.Role.RoleName));
+            userOrDeleted.UserRoles.Select(ur => ur.Role.RoleName));
         await userRepo.SoftDeleteAsync(id);
     }
 
     public async Task RestoreAsync(Guid id)
     {
+        _ = await userRepo.GetByIdIncludingDeletedAsync(id)
+            ?? throw new UserNotFoundException(id);
         await userRepo.RestoreAsync(id);
-        _ = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
     }
 
     public async Task ChangePasswordAsync(Guid id, ChangePasswordRequest request)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
 
-        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new InvalidCredentialsException();
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword)
+            || !BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+            throw new UserValidationException("Mật khẩu cũ không khớp");
+
+        UserInputValidator.ValidateNewPassword(request.NewPassword);
+
+        if (BCrypt.Net.BCrypt.Verify(request.NewPassword, user.PasswordHash))
+            throw new UserValidationException("Mật khẩu mới không được trùng với mật khẩu cũ");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
