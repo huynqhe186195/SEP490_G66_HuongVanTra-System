@@ -42,7 +42,69 @@ $"/orders/stock-deduct"  // ✅ ĐÚNG
 
 ---
 
-## Bug 2: Phiếu điều chuyển tự động hoàn tất (NGHIÊM TRỌNG)
+## Bug 2: Đơn chuyển Completed sai thời điểm (ĐÃ SỬA)
+
+### Mô tả
+Khi Thủ kho xác nhận queue cho đơn WaitingTransfer/WaitingProduction, đơn chuyển thẳng sang `Completed` thay vì `ReadyToDeliver`. Điều này khiến giao diện hiển thị "Hoàn tất" trong trang `/orders/stock-deduct` ngay cả khi chưa giao hàng cho khách.
+
+### Nguyên nhân
+File `OrderService.Application/UseCases/OrderLogic.cs`, hàm `MarkInventorySyncedAsync`, line 2933-2952:
+
+```csharp
+// Code CŨ (SAI)
+if (order.OrderStatus is OrderStatus.WaitingMaterials
+    or OrderStatus.WaitingTransfer
+    or OrderStatus.WaitingProduction)
+{
+    var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
+    if (!pickupAtStore)
+    {
+        order.OrderStatus = OrderStatus.Processing;
+    }
+    else if (order.OrderStatus == OrderStatus.WaitingMaterials)
+    {
+        readyToDeliver = true;
+        order.OrderStatus = OrderStatus.ReadyToDeliver;
+    }
+    else
+    {
+        completedForPickup = true;
+        order.OrderStatus = OrderStatus.Completed;  // ❌ SAI: chuyển Completed ngay
+        order.CompletedAt ??= DateTime.UtcNow;
+    }
+}
+```
+
+### Đã sửa thành
+```csharp
+// Code MỚI (ĐÚNG)
+if (order.OrderStatus is OrderStatus.WaitingMaterials
+    or OrderStatus.WaitingTransfer
+    or OrderStatus.WaitingProduction)
+{
+    var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
+    if (!pickupAtStore)
+    {
+        order.OrderStatus = OrderStatus.Processing;
+    }
+    else
+    {
+        // ✅ ĐÚNG: Tất cả đơn pickup chuyển sang ReadyToDeliver
+        readyToDeliver = true;
+        order.OrderStatus = OrderStatus.ReadyToDeliver;
+    }
+}
+```
+
+### Nghiệp vụ đúng
+Sau khi Thủ kho xác nhận queue:
+1. Đơn chuyển sang `ReadyToDeliver` (sẵn sàng giao)
+2. Hiển thị "Sẵn sàng giao" trong trang `/orders/stock-deduct`
+3. Sale gọi khách đến lấy hàng
+4. Sale bấm "Đã giao hàng" trong chi tiết đơn
+5. Đơn chuyển sang `Completed`
+
+### Phiếu điều chuyển tự động hoàn tất (KHÔNG PHẢI BUG)
 
 ### Mô tả
 Khi Thủ kho xác nhận queue POS-06, hệ thống tự động tạo phiếu điều chuyển với trạng thái `Completed` ngay lập tức, bỏ qua bước xác nhận của Thủ kho.
