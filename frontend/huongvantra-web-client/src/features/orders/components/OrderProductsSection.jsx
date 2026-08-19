@@ -61,7 +61,7 @@ function OrderProductsSection({
                   colSpan={constrained ? 5 : 6}
                   className={`text-center text-slate-500 ${constrained ? 'px-2 py-6 text-xs' : 'px-4 py-8 text-sm'}`}
                 >
-                  Không có dòng sản phẩm hoặc gói custom trên đơn này.
+                  Không có dòng sản phẩm hoặc sản phẩm cá nhân trên đơn này.
                 </td>
               </tr>
             ) : (

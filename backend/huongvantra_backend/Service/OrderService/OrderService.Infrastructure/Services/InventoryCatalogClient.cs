@@ -18,6 +18,9 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         Guid? referenceId,
         string? referenceCode,
         string? note,
+        string? customBundleLabel = null,
+        Guid? sourceOrderId = null,
+        string? sourceOrderChannel = null,
         CancellationToken ct = default)
     {
         var body = new DeductMaterialsRequest(
@@ -25,7 +28,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
             referenceType,
             referenceId,
             referenceCode,
-            note);
+            note,
+            customBundleLabel,
+            sourceOrderId,
+            sourceOrderChannel);
 
         var response = await httpClient.PostAsJsonAsync("api/v1/inventory/deduct-materials", body, ct);
 
@@ -278,7 +284,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         string? ReferenceType,
         Guid? ReferenceId,
         string? ReferenceCode,
-        string? Note);
+        string? Note,
+        string? CustomBundleLabel,
+        Guid? SourceOrderId,
+        string? SourceOrderChannel);
 
     private sealed record DeductMaterialItem(
         Guid SkuId,

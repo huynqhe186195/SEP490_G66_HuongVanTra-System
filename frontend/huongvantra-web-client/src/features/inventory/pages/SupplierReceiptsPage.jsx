@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -163,62 +164,65 @@ function ReceiptRowActions({
         <span className="inline-block h-8 w-8" aria-hidden="true" />
       )}
 
-      {menuOpen && hasMenu ? (
-        <div
-          ref={menuRef}
-          role="menu"
-          style={{ top: menuPos.top, right: menuPos.right }}
-          className="fixed z-50 min-w-[11rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
-        >
-          {canEdit ? (
-            <Link
-              role="menuitem"
-              to={`/inventory/import/create?receiptId=${receipt.id}`}
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[16px] text-[#356647]">edit</span>
-              Chỉnh sửa
-            </Link>
-          ) : null}
-          {canDecide ? (
-            <>
+      {menuOpen && hasMenu
+        ? createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ top: menuPos.top, right: menuPos.right }}
+            className="fixed z-[9999] min-w-[11rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+          >
+            {canEdit ? (
+              <Link
+                role="menuitem"
+                to={`/inventory/import/create?receiptId=${receipt.id}`}
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[16px] text-[#356647]">edit</span>
+                Chỉnh sửa
+              </Link>
+            ) : null}
+            {canDecide ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={anyBusy}
+                  onClick={() => runAction(onApprove)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  Duyệt
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={anyBusy}
+                  onClick={() => runAction(onReject)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px]">cancel</span>
+                  Từ chối
+                </button>
+              </>
+            ) : null}
+            {canCancel ? (
               <button
                 type="button"
                 role="menuitem"
                 disabled={anyBusy}
-                onClick={() => runAction(onApprove)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                onClick={() => runAction(onCancel)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                Duyệt
+                <span className="material-symbols-outlined text-[16px]">delete</span>
+                Hủy
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={anyBusy}
-                onClick={() => runAction(onReject)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[16px]">cancel</span>
-                Từ chối
-              </button>
-            </>
-          ) : null}
-          {canCancel ? (
-            <button
-              type="button"
-              role="menuitem"
-              disabled={anyBusy}
-              onClick={() => runAction(onCancel)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-[16px]">delete</span>
-              Hủy
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+            ) : null}
+          </div>,
+          document.body,
+        )
+        : null}
     </div>
   )
 }

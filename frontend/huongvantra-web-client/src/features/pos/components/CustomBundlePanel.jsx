@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { fetchStoreSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'
@@ -344,7 +345,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
           <div className="rounded-xl border border-[#356647]/40 bg-[#f3f8f3] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-[#1b1c17]">
-                Gói đã chọn{currentBundle.label ? ` — ${currentBundle.label}` : ''}
+                {PERSONAL_PRODUCT_LABEL} đã chọn{currentBundle.label ? ` — ${currentBundle.label}` : ''}
               </p>
               <button
                 type="button"
@@ -435,7 +436,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
             <p className="py-6 text-center text-xs text-[#717971]">Đang tải...</p>
           ) : selectableMaterials.length === 0 ? (
             <div className="space-y-1 py-6 text-center text-xs text-[#717971]">
-              <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : 'Chưa có nguyên liệu được phép dùng trong Custom.'}</p>
+              <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : `Chưa có nguyên liệu được phép dùng cho ${PERSONAL_PRODUCT_LABEL.toLowerCase()}.`}</p>
               {!search.trim() ? (
                 <p className="text-[11px] text-[#9aa39a]">
                   Trên SKU loại Nguyên liệu / Bao bì, bật «Dùng trong custom» rồi đồng bộ cửa hàng.

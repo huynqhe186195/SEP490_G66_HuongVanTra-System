@@ -16,6 +16,7 @@ import { isSupplierReceiptEligibleSku } from '../../products/services/productsAp
 import {
   createSupplierReceipt,
   fetchSupplierReceiptById,
+  submitSupplierReceipt,
   updateSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
@@ -1182,10 +1183,11 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
         note: stripHtml(header.note),
         items: payloadLines,
       }
-      const receipt = editingReceiptId
+      const saved = editingReceiptId
         ? await updateSupplierReceipt(editingReceiptId, receiptPayload)
         : await createSupplierReceipt(receiptPayload)
-      showSuccess(`Đã nhập kho theo phiếu ${receipt.receiptCode}. Tồn Kho đã được cập nhật.`)
+      const submitted = await submitSupplierReceipt(saved.id)
+      showSuccess(`Đã gửi phiếu ${submitted.receiptCode} chờ Quản lý duyệt. Tồn Kho cập nhật sau khi duyệt.`)
       navigate('/inventory/supplier-receipts')
     } catch (error) {
       showError(error.message)
@@ -1203,7 +1205,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
     <PageShell>
       <PageHeader
         title={editingReceiptId ? 'CẬP NHẬT PHIẾU NHẬP KHO' : 'PHIẾU NHẬP KHO'}
-        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; tồn Kho và Giá vốn trung bình cập nhật ngay khi tạo phiếu."
+        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; sau khi gửi phiếu, Quản lý duyệt rồi tồn Kho và giá vốn mới cập nhật."
       />
 
       {!canManage ? (
@@ -1863,7 +1865,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
               disabled={isSaving || isEditLoading || !canManage}
               className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang xử lý...' : 'Nhập kho'}
+              {isSaving ? 'Đang xử lý...' : 'Gửi duyệt'}
             </button>
             <Link
               to="/inventory/supplier-receipts"

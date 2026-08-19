@@ -1,6 +1,8 @@
 // Nguồn duy nhất cho nhãn tiếng Việt của Yêu cầu bổ sung Kệ Hàng và Phiếu điều chuyển Kho → Kệ.
 // Không hiển thị enum tiếng Anh thô ra giao diện; giá trị lạ luôn rơi về "Không xác định".
 
+import { isPersonalProductSkuCode, PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
+
 const UNKNOWN_LABEL = 'Không xác định'
 const NEUTRAL_CLASS = 'bg-slate-100 text-slate-600'
 
@@ -101,6 +103,14 @@ export const STOCK_FLOW_TERMS = {
 
 export function getStockTransferTypeLabel(transfer) {
   if (!transfer || typeof transfer !== 'object') return '—'
+
+  const lines = transfer.lines ?? []
+  const isPersonalProductTransfer = lines.some((line) => isPersonalProductSkuCode(line.skuCode))
+    || String(transfer.note || '').toLowerCase().includes('sản phẩm cá nhân')
+
+  if (transfer.sourceOrderId && isPersonalProductTransfer) {
+    return PERSONAL_PRODUCT_LABEL
+  }
   if (transfer.sourceOrderId) {
     const channel = String(transfer.sourceOrderChannel || '').trim().toUpperCase()
     if (channel === 'POS') return 'Đơn hàng POS'

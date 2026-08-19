@@ -65,6 +65,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { canCreateCustomer, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import {
   getPosBaseUnitLabel,
   normalizePosBaseQuantity,
@@ -3049,7 +3050,7 @@ function PosPage() {
                                                     <div className="min-w-0 flex-1">
                                                         <p className="flex items-center gap-1.5 text-sm font-semibold text-[#1b1c17]">
                                                             <Icon className="text-[18px] text-[#356647]">blender</Icon>
-                                                            {bundle.label || "Gói trà tự chọn"}
+                                                            {bundle.label || PERSONAL_PRODUCT_LABEL}
                                                         </p>
                                                         <ul className="mt-1 space-y-0.5">
                                                             {(bundle.ingredients ?? []).map((ing, ingIndex) => (

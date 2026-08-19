@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatVnd, formatVndInput, parseVndInput } from '../../../utils/vietnamCurrency.js'
 import { fetchPosCustomers } from '../services/posApi.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 const toDateInputValue = (date) => {
   const pad = (value) => String(value).padStart(2, '0')
@@ -253,7 +254,7 @@ export default function BackorderConfirmModal({
 
             {forceCompleteDelivery ? (
               <p className="mt-3 rounded-xl border border-[#356647]/20 bg-[#356647]/5 px-3 py-2 text-sm text-[#356647]">
-                Đơn có gói custom: khách <span className="font-semibold">nhận một lần khi đủ hàng</span> (không giao từng phần).
+                Đơn có {PERSONAL_PRODUCT_LABEL.toLowerCase()}: khách <span className="font-semibold">nhận một lần khi đủ hàng</span> (không giao từng phần).
               </p>
             ) : null}
 

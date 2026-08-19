@@ -231,6 +231,9 @@ public sealed class MentorBackorderTests
                 It.IsAny<Guid?>(),
                 It.IsAny<string?>(),
                 It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -347,6 +350,9 @@ public sealed class MentorBackorderTests
                 It.IsAny<string?>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<Guid?>(),
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);

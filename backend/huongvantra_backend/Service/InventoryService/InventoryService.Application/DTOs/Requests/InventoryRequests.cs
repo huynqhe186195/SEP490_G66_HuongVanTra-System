@@ -165,7 +165,11 @@ public record DeductMaterialsRequest(
     string? ReferenceType = null,
     Guid? ReferenceId = null,
     string? ReferenceCode = null,
-    string? Note = null);
+    string? Note = null,
+    /// <summary>Tên gói sản phẩm cá nhân — hiển thị trên lệnh sản xuất đầu ra.</summary>
+    string? CustomBundleLabel = null,
+    Guid? SourceOrderId = null,
+    string? SourceOrderChannel = null);
 
 /// <summary>
 /// Kiểm tra tồn Kho NL/bao bì cho gói custom lúc tạo đơn POS/COD (sell-first).

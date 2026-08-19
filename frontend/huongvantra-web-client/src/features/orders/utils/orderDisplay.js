@@ -1,4 +1,5 @@
 import { B2B_CONTRACTS_ENABLED } from '../../../app/featureFlags.js'
+import { PERSONAL_PRODUCT_LABEL } from './personalProductLabels.js'
 
 export function formatVnd(amount) {
   const value = Number(amount) || 0
@@ -681,7 +682,8 @@ export function getStockStatusLabel(status) {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
     pending_warehouse_transfer: 'Chờ điều chuyển từ Kho',
-    pending_custom_pack: 'Gói custom chờ đóng gói',
+    pending_custom_pack: `${PERSONAL_PRODUCT_LABEL} chờ đóng gói`,
+    custom_packed: `Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`,
     deducted: 'Đã xử lý',
     synced: 'Đã xử lý',
     restored: 'Đã hoàn tồn',

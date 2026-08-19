@@ -3930,7 +3930,7 @@ public class OrderLogic(
             if (ingredient.Quantity <= 0 || !profile.CanUseInCustom
                 || !string.Equals(profile.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
                    && !string.Equals(profile.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase))
-                throw new OrderValidationException("SKU không còn được phép dùng trong Custom.");
+                throw new OrderValidationException("SKU không còn được phép dùng trong Sản phẩm cá nhân.");
         }
 
         List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
@@ -3950,7 +3950,10 @@ public class OrderLogic(
                 "CustomBundle",
                 bundle.Id,
                 referenceCode,
-                $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+                $"Dong goi san pham ca nhan {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+                bundle.Label?.Trim(),
+                bundle.OrderId != Guid.Empty ? bundle.OrderId : null,
+                bundle.Order?.OrderChannel.ToString(),
                 ct);
         }
         catch (InventoryStockHandlingException ex)
@@ -3972,7 +3975,7 @@ public class OrderLogic(
                 await RecordActivityAsync(
                     order.Id,
                     OrderActivityType.InventorySynced,
-                    $"Đã đóng gói gói custom{(string.IsNullOrWhiteSpace(bundle.Label) ? "" : $" «{bundle.Label.Trim()}»")} và trừ nguyên liệu / bao bì trên Kho.",
+                    $"Đã đóng gói sản phẩm cá nhân{(string.IsNullOrWhiteSpace(bundle.Label) ? "" : $" «{bundle.Label.Trim()}»")}, trừ nguyên liệu Kho, ghi lệnh sản xuất và phiếu điều chuyển lên Kệ.",
                     actorId: null,
                     actorName: "Thủ kho",
                     ct);

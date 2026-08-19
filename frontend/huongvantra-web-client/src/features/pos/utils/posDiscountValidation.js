@@ -2,6 +2,7 @@
  * Chuẩn hóa / kiểm tra chiết khấu đơn POS (%, VNĐ cố định).
  * CK đơn áp trên tổng sau CK từng dòng; không vượt số tiền còn lại của đơn.
  */
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 export function normalizeOrderDiscountInput({
   percent = 0,
@@ -137,7 +138,7 @@ export function validateZeroTotalCheckout({
   if (zeroPriceCustomIngredient) {
     return {
       ok: false,
-      error: 'Gói custom phải có đơn giá nguyên liệu lớn hơn 0. Cập nhật giá bán SKU nguyên liệu hoặc nhập giá trên POS.',
+      error: `${PERSONAL_PRODUCT_LABEL} phải có đơn giá nguyên liệu lớn hơn 0. Cập nhật giá bán SKU nguyên liệu hoặc nhập giá trên POS.`,
     }
   }
 

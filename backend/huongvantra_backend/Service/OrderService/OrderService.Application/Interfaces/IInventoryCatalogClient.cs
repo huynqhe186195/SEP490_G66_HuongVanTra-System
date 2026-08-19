@@ -8,6 +8,9 @@ public interface IInventoryCatalogClient
         Guid? referenceId,
         string? referenceCode,
         string? note,
+        string? customBundleLabel = null,
+        Guid? sourceOrderId = null,
+        string? sourceOrderChannel = null,
         CancellationToken ct = default);
     Task<InventoryStockHandlingResponse> PreparePosStockDeductionAsync(
         InventoryStockHandlingRequest request,

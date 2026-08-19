@@ -23,6 +23,7 @@ import {
   resolveStockDeductOrderStatusMeta,
   STOCK_DEDUCT_REMAINING_QTY_LABEL,
 } from '../../orders/utils/orderDisplay.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 const TABS = [
   { value: 'waiting', label: 'Chờ đóng gói', status: 'waiting' },
@@ -231,7 +232,7 @@ function StockDeductQueuePage() {
       {
         id: 'insufficient-material',
         title: 'Chờ hàng',
-        hint: 'Thiếu tồn Kệ/Kho / nguyên liệu custom, chưa thể trừ',
+        hint: `Thiếu tồn Kệ/Kho / nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}, chưa thể trừ`,
         icon: 'warning',
         iconBg: 'bg-amber-50',
         iconColor: 'text-amber-700',
@@ -257,7 +258,7 @@ function StockDeductQueuePage() {
         title="Chờ đóng gói / trừ Kho"
         titleInfo={
           canExecuteDeduct
-            ? 'Thủ kho xác nhận đóng gói thành phẩm (queue) và gói custom (trừ NL Kho).'
+            ? `Thủ kho xác nhận đóng gói thành phẩm (queue) và ${PERSONAL_PRODUCT_LABEL.toLowerCase()} (trừ NL Kho).`
             : canCancelQueue
               ? 'Theo dõi yêu cầu đóng gói; Quản lý hoặc Admin chỉ hủy khi xử lý ngoại lệ.'
               : 'Theo dõi yêu cầu đóng gói theo quyền được cấp.'
@@ -330,7 +331,7 @@ function StockDeductQueuePage() {
                     <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
                       {searchValue.trim() || activeTab !== 'waiting'
                         ? 'Thử đổi tab hoặc xóa mã đơn đang tìm.'
-                        : 'Đơn bán vượt tồn Kệ hoặc gói custom chờ đóng gói sẽ hiện tại đây.'}
+                        : `Đơn bán vượt tồn Kệ hoặc ${PERSONAL_PRODUCT_LABEL.toLowerCase()} chờ đóng gói sẽ hiện tại đây.`}
                     </p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                       {searchValue.trim() || activeTab !== 'waiting' ? (
@@ -384,7 +385,7 @@ function StockDeductQueuePage() {
                         )}
                         {row.rowKind === 'custom' ? (
                           <span className="ml-2 inline-flex rounded-full bg-[#e8f0e9] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#356647]">
-                            Custom{row.label ? ` · ${row.label}` : ''}
+                            {PERSONAL_PRODUCT_LABEL}{row.label ? ` · ${row.label}` : ''}
                           </span>
                         ) : null}
                         {row.lines?.length ? (
@@ -404,10 +405,10 @@ function StockDeductQueuePage() {
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                           {row.rowKind === 'custom'
                             ? (row.queueStatus === 'Confirmed'
-                              ? 'Đã đóng gói custom'
+                              ? `Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
                               : row.queueStatus === 'Insufficient'
-                                ? 'Chờ hàng (custom)'
-                                : 'Chờ đóng gói custom')
+                                ? `Chờ hàng (${PERSONAL_PRODUCT_LABEL.toLowerCase()})`
+                                : `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`)
                             : getQueueStatusLabel(row.queueStatus)}
                         </span>
                         {row.isReserved ? (
@@ -424,9 +425,9 @@ function StockDeductQueuePage() {
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(row.orderStockStatus)}`}
                         >
                           {row.rowKind === 'custom' && row.orderStockStatus === 'pending_custom_pack'
-                            ? 'Gói custom'
+                            ? PERSONAL_PRODUCT_LABEL
                             : row.rowKind === 'custom' && row.orderStockStatus === 'custom_packed'
-                              ? 'Đã trừ NL custom'
+                              ? `Đã trừ NL ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
                               : getStockStatusLabel(row.orderStockStatus)}
                         </span>
                       </td>

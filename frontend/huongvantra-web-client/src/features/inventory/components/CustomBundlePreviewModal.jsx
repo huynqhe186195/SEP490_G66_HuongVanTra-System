@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getOrderStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import { confirmPacking, fetchCustomBundles } from '../../orders/services/customBundleApi.js'
 import {
   buildWarehouseStockBySkuIdMap,
@@ -10,7 +11,7 @@ import {
 } from '../services/inventoryStockApi.js'
 
 /**
- * Modal «Xem & xác nhận» đóng gói custom — cùng pattern StockDeductPreviewModal.
+ * Modal «Xem & xác nhận» đóng gói sản phẩm cá nhân — cùng pattern StockDeductPreviewModal.
  */
 function CustomBundlePreviewModal({
   bundleId,
@@ -69,7 +70,7 @@ function CustomBundlePreviewModal({
         if (!cancelled) {
           setBundle(null)
           setItems([])
-          showError(error.message || 'Không tải được preview gói custom.')
+          showError(error.message || `Không tải được preview ${PERSONAL_PRODUCT_LABEL.toLowerCase()}.`)
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -95,7 +96,7 @@ function CustomBundlePreviewModal({
     setShowConfirmDialog(false)
     try {
       await confirmPacking(bundleId)
-      showSuccess('Đã xác nhận đóng gói custom và trừ nguyên liệu Kho.')
+      showSuccess(`Đã xác nhận đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}, trừ nguyên liệu Kho, ghi lệnh sản xuất và phiếu điều chuyển lên Kệ.`)
       onConfirmed?.()
       onClose?.()
     } catch (error) {
@@ -117,7 +118,7 @@ function CustomBundlePreviewModal({
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 id="custom-pack-preview-title" className="text-lg font-bold text-slate-800">
-              Xem trước đóng gói custom
+              Xem trước đóng gói {PERSONAL_PRODUCT_LABEL.toLowerCase()}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {displayOrderCode ? (
@@ -169,7 +170,7 @@ function CustomBundlePreviewModal({
                   Đơn: {getOrderStatusLabel(orderStatus || bundle.orderStatus)}
                 </span>
                 <span className="rounded-full bg-[#e8f0e9] px-3 py-1 text-xs font-semibold text-[#356647]">
-                  Gói custom
+                  {PERSONAL_PRODUCT_LABEL}
                 </span>
               </div>
 
@@ -238,19 +239,12 @@ function CustomBundlePreviewModal({
                 </div>
               ) : null}
 
-              {!canConfirm ? (
-                <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Bạn chỉ có quyền xem. Thủ kho là người xác nhận đóng gói và trừ NL Kho.
-                </p>
-              ) : null}
-
               {showConfirmDialog ? (
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-900">Xác nhận đóng gói custom?</p>
+                  <p className="font-semibold text-slate-900">Xác nhận đóng gói {PERSONAL_PRODUCT_LABEL.toLowerCase()}?</p>
                   <p className="mt-1">
-                    Hệ thống sẽ trừ nguyên liệu / bao bì trên Kho theo danh sách gói, ghi phiếu xuất Kho
-                    và đánh dấu đã đóng gói. Gói custom không có SKU thành phẩm chuẩn nên không sinh lệnh sản xuất
-                    hay phiếu điều chuyển Kho → Kệ (khác với bán thành phẩm có BOM).
+                    Hệ thống sẽ trừ nguyên liệu / bao bì trên Kho, ghi phiếu xuất, tạo lệnh sản xuất
+                    (Hoàn thành), nhập thành phẩm vào Kho và tự động sinh phiếu điều chuyển Kho → Kệ.
                   </p>
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <button
@@ -276,7 +270,7 @@ function CustomBundlePreviewModal({
 
           {!isLoading && !bundle ? (
             <p className="py-8 text-center text-sm text-slate-500">
-              Không tìm thấy gói custom chờ đóng gói (có thể đã được đóng gói).
+              Không tìm thấy {PERSONAL_PRODUCT_LABEL.toLowerCase()} chờ đóng gói (có thể đã được đóng gói).
             </p>
           ) : null}
         </div>
