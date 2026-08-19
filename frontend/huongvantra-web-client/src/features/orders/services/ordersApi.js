@@ -1,5 +1,9 @@
-import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, downloadBlob, toPagedResult } from '../../../lib/apiClient.js'
 import { mapCustomBundle } from './customBundleApi.js'
+import {
+  exportOrdersExcelClient,
+  exportReturnSlipsExcelClient,
+} from '../utils/exportOrdersExcel.js'
 
 function normalizeEnum(value) {
   return String(value || '').trim()
@@ -210,6 +214,68 @@ function buildOrdersQuery(params = {}) {
   search.set('page', String(page))
   search.set('pageSize', String(pageSize))
   return search.toString()
+}
+
+function buildOrdersExportQuery(params = {}) {
+  const search = new URLSearchParams()
+  if (params.search?.trim()) search.set('search', params.search.trim())
+  if (params.customerId && isValidGuid(params.customerId)) {
+    search.set('customerId', String(params.customerId).trim())
+  }
+  if (params.status) search.set('status', params.status)
+  if (params.channel) search.set('channel', params.channel)
+  if (params.excludeChannel) search.set('excludeChannel', params.excludeChannel)
+  if (params.codTab) search.set('codTab', params.codTab)
+  if (params.returnableOnly) search.set('returnableOnly', 'true')
+  if (params.orderKind) search.set('orderKind', params.orderKind)
+  if (params.excludeOrderKind) search.set('excludeOrderKind', params.excludeOrderKind)
+  if (params.fromDate) search.set('fromDate', params.fromDate)
+  if (params.toDate) search.set('toDate', params.toDate)
+  if (params.employeeId && isValidGuid(params.employeeId)) {
+    search.set('employeeId', String(params.employeeId).trim())
+  }
+  if (params.hasActiveReservation) search.set('hasActiveReservation', 'true')
+  return search.toString()
+}
+
+export async function exportOrdersToExcel(params = {}, filePrefix = 'Don_Hang') {
+  const suffix = buildOrdersExportQuery(params)
+  try {
+    const blob = await apiRequestAuth(`/api/v1/orders/export${suffix ? `?${suffix}` : ''}`, {
+      method: 'GET',
+      responseType: 'blob',
+    })
+    const timestamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+    downloadBlob(blob, `${filePrefix}_${timestamp}.xlsx`)
+    return
+  } catch (error) {
+    if (error?.statusCode !== 404) throw error
+  }
+
+  await exportOrdersExcelClient(
+    (page, pageSize) => fetchOrders({ ...params, page, pageSize }),
+    filePrefix,
+  )
+}
+
+export async function exportReturnSlipsToExcel(params = {}, filePrefix = 'Phieu_Tra_Hang') {
+  const query = buildReturnsExportQuery(params)
+  try {
+    const blob = await apiRequestAuth(
+      `/api/v1/orders/return-slips/export${query ? `?${query}` : ''}`,
+      { method: 'GET', responseType: 'blob' },
+    )
+    const timestamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+    downloadBlob(blob, `${filePrefix}_${timestamp}.xlsx`)
+    return
+  } catch (error) {
+    if (error?.statusCode !== 404) throw error
+  }
+
+  await exportReturnSlipsExcelClient(
+    (page, pageSize) => fetchReturns({ ...params, page, pageSize }),
+    filePrefix,
+  )
 }
 
 export async function fetchOrders(params = {}) {
@@ -569,6 +635,13 @@ export function mapReturnOrderResult(item) {
     acceptanceStatus: normalizeEnum(item.acceptanceStatus ?? item.AcceptanceStatus ?? 'Accepted'),
     acceptedAt: item.acceptedAt ?? item.AcceptedAt ?? null,
   }
+}
+
+function buildReturnsExportQuery(params = {}) {
+  const search = new URLSearchParams()
+  if (params.search?.trim()) search.set('search', params.search.trim())
+  if (params.channel) search.set('channel', params.channel)
+  return search.toString()
 }
 
 function buildReturnsQuery(params = {}) {

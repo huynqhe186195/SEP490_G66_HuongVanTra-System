@@ -8,11 +8,11 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { canViewStockDeductOps } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
-import { showError } from '../../../app/toast.js'
+import { showError, showSuccess } from '../../../app/toast.js'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
-import { fetchOrders } from '../services/ordersApi.js'
+import { exportOrdersToExcel, fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
   resolveInventorySyncMeta,
@@ -69,6 +69,7 @@ function OrdersPage() {
   const [page, setPage] = useState(1)
   const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
   const [isLoading, setIsLoading] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
@@ -134,6 +135,26 @@ function OrdersPage() {
 
   const hasActiveFilters = filters.status || filters.fromDate || filters.toDate
 
+  async function handleExportOrders() {
+    if (isExporting) return
+    try {
+      setIsExporting(true)
+      await exportOrdersToExcel({
+        search: filters.search.trim() || undefined,
+        status: filters.status || undefined,
+        excludeChannel: 'COD',
+        excludeOrderKind: 'Exchange',
+        fromDate: toLocalDayStartIso(filters.fromDate),
+        toDate: toLocalDayEndIso(filters.toDate),
+      })
+      showSuccess('Đã tải file export đơn hàng.')
+    } catch (error) {
+      showError(error.message || 'Export đơn hàng thất bại.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
@@ -145,6 +166,17 @@ function OrdersPage() {
         onSearchChange={setSearchInput}
         rightContent={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={isExporting || isLoading}
+              onClick={handleExportOrders}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+                ios_share
+              </span>
+              Export Excel
+            </button>
             <Link
               className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               to="/orders/exchange"

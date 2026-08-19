@@ -6,13 +6,13 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
-import { showError } from '../../../app/toast.js'
+import { showError, showSuccess } from '../../../app/toast.js'
 import { canAccessModule } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodShiftReportPanel from '../components/CodShiftReportPanel.jsx'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
-import { fetchOrders } from '../services/ordersApi.js'
+import { exportOrdersToExcel, fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
   getCodDaysPending,
@@ -56,6 +56,7 @@ function CodOrdersPage() {
     if (page > totalPages) setPage(totalPages)
   }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
 
   const setActiveView = (view) => {
     const next = new URLSearchParams(searchParams)
@@ -172,6 +173,25 @@ function CodOrdersPage() {
     setSearchParams(next, { replace: true })
   }
 
+  async function handleExportCodOrders() {
+    if (isExporting || activeView !== 'list') return
+    try {
+      setIsExporting(true)
+      await exportOrdersToExcel(
+        {
+          codTab: activeTab !== 'all' ? activeTab : undefined,
+          search: searchValue.trim() || undefined,
+        },
+        'Don_Hang_COD',
+      )
+      showSuccess('Đã tải file export đơn COD.')
+    } catch (error) {
+      showError(error.message || 'Export đơn COD thất bại.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
@@ -207,7 +227,29 @@ function CodOrdersPage() {
           </div>
         }
         rightContent={
-          canOpenGeneralOrders ? (
+          activeView === 'list' ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isExporting || isLoading}
+                onClick={handleExportCodOrders}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+                  ios_share
+                </span>
+                Export Excel
+              </button>
+              {canOpenGeneralOrders ? (
+                <Link
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  to="/orders"
+                >
+                  Đơn hàng khác
+                </Link>
+              ) : null}
+            </div>
+          ) : canOpenGeneralOrders ? (
             <Link
               className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               to="/orders"

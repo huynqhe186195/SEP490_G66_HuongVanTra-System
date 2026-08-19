@@ -14,6 +14,7 @@ import ReturnOrderSidebar from '../components/ReturnOrderSidebar.jsx'
 import ReturnPolicyPanel from '../components/ReturnPolicyPanel.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 const MAX_EVIDENCE_IMAGES = 5
 const MAX_EVIDENCE_IMAGE_BYTES = 5 * 1024 * 1024
@@ -534,7 +535,7 @@ function ReturnOrderPage() {
 
     const policy = policyContext.policy
     if (policyContext.customReturnBlocked && !(canManagerOverride && managerOverride)) {
-      showError('Đơn chỉ gồm gói custom không được trả theo chính sách.')
+      showError(`Đơn chỉ gồm ${PERSONAL_PRODUCT_LABEL.toLowerCase()} không được trả theo chính sách.`)
       return
     }
     if (policyContext.channelAllowed === false && !(canManagerOverride && managerOverride)) {

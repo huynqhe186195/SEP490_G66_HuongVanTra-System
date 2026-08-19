@@ -1,4 +1,5 @@
 import { B2B_CONTRACTS_ENABLED } from '../../../app/featureFlags.js'
+import { PERSONAL_PRODUCT_LABEL } from './personalProductLabels.js'
 
 export function formatVnd(amount) {
   const value = Number(amount) || 0
@@ -348,7 +349,7 @@ export function getInventorySyncLabel(status) {
   const map = {
     Synced: 'Đã đồng bộ kho',
     PendingDeduction: 'Chờ trừ tồn quầy',
-    Cancelled: 'Không trừ tồn quầy (đã hủy)',
+    Cancelled: 'Không trừ tồn kho (đã hủy)',
   }
   return map[key] || status || '—'
 }
@@ -370,7 +371,7 @@ export function resolveInventorySyncMeta(order) {
 
   if (orderStatus === 'Cancelled' || syncStatus === 'Cancelled') {
     return {
-      label: 'Không trừ tồn quầy (đã hủy)',
+      label: 'Không trừ tồn kho (đã hủy)',
       className: 'bg-slate-100 text-slate-500',
     }
   }
@@ -667,7 +668,7 @@ export function calcOrderFinalAmount(lines = [], discountAmount = 0) {
 // Legacy helpers still used by inventory stock-deduct pages
 export const STOCK_STATUS_OPTIONS = [
   { value: 'pending_deduct', label: 'Chờ trừ tồn quầy' },
-  { value: 'deducted', label: 'Đã trừ tồn quầy' },
+  { value: 'deducted', label: 'Đã xử lý' },
   { value: 'waiting_stock', label: 'Chờ hàng' },
   { value: 'cancelled', label: 'Đã hủy (kho)' },
 ]
@@ -681,12 +682,13 @@ export function getStockStatusLabel(status) {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
     pending_warehouse_transfer: 'Chờ điều chuyển từ Kho',
-    pending_custom_pack: 'Gói custom chờ đóng gói',
-    deducted: 'Đã trừ tồn quầy',
-    synced: 'Đã trừ tồn quầy',
+    pending_custom_pack: `${PERSONAL_PRODUCT_LABEL} chờ đóng gói`,
+    custom_packed: `Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`,
+    deducted: 'Đã xử lý',
+    synced: 'Đã xử lý',
     restored: 'Đã hoàn tồn',
     waiting_stock: 'Chờ hàng',
-    cancelled: 'Đã hủy',
+    cancelled: 'Không trừ tồn kho (đã hủy)',
     cancelled_after_shipping: 'Đã hủy sau khi giao',
   }
   return map[key] || status || '—'
@@ -706,11 +708,85 @@ export function getQueueStatusLabel(status) {
 export function getStockStatusClass(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'deducted' || key === 'synced') return 'bg-[#b9d4b0]/30 text-[#538463]'
-  if (key === 'pending_bom_reconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
+  if (key === 'pending_bom_reconciliation' || key === 'pendingreconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
   if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
   if (key === 'pending_warehouse_transfer') return 'bg-sky-50 text-sky-700'
   if (key === 'cancellation_requested') return 'bg-rose-50 text-rose-700'
   if (key === 'restored') return 'bg-slate-100 text-slate-600'
   if (key === 'cancelled' || key === 'cancelled_after_shipping') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'
+}
+
+/** Nhãn cột số lượng thành phẩm còn phải xử lý BOM/đóng gói trên màn trừ kho. */
+export const STOCK_DEDUCT_REMAINING_QTY_LABEL = 'Còn thiếu'
+
+/**
+ * Trên màn trừ kho, đơn có thể đã Completed (khách đã trả tiền) nhưng kho vẫn chờ xử lý.
+ * Ưu tiên hiển thị trạng thái nghiệp vụ kho thay vì "Hoàn tất" gây hiểu nhầm.
+ */
+export function resolveStockDeductOrderStatusMeta(orderPaymentStatus, orderStockStatus) {
+  const stockKey = String(orderStockStatus || '').toLowerCase()
+  const paymentKey = String(orderPaymentStatus || '').toLowerCase()
+
+  if (stockKey === 'cancellation_requested') {
+    return {
+      label: getOrderStatusLabel('CancellationRequested'),
+      className: getOrderStatusClass('CancellationRequested'),
+    }
+  }
+  if (stockKey === 'pending_bom_reconciliation' || stockKey === 'pendingreconciliation') {
+    return {
+      label: getOrderStatusLabel('WaitingProduction'),
+      className: getOrderStatusClass('WaitingProduction'),
+    }
+  }
+  if (stockKey === 'pending_warehouse_transfer') {
+    return {
+      label: getOrderStatusLabel('WaitingTransfer'),
+      className: getOrderStatusClass('WaitingTransfer'),
+    }
+  }
+  if (stockKey === 'waiting_materials') {
+    return {
+      label: getOrderStatusLabel('WaitingMaterials'),
+      className: getOrderStatusClass('WaitingMaterials'),
+    }
+  }
+  if (stockKey === 'waiting_stock') {
+    return {
+      label: getStockStatusLabel('waiting_stock'),
+      className: getStockStatusClass('waiting_stock'),
+    }
+  }
+  if (stockKey === 'pending_deduct' || stockKey === 'pendingdeduction') {
+    return {
+      label: getStockStatusLabel('pending_deduct'),
+      className: getStockStatusClass('pending_deduct'),
+    }
+  }
+
+  if (stockKey === 'pending_custom_pack') {
+    return {
+      label: getOrderStatusLabel('WaitingProduction'),
+      className: getOrderStatusClass('WaitingProduction'),
+    }
+  }
+  if (stockKey === 'custom_packed') {
+    return {
+      label: getOrderStatusLabel('ReadyToDeliver'),
+      className: getOrderStatusClass('ReadyToDeliver'),
+    }
+  }
+
+  if (paymentKey === 'cancelled') {
+    return {
+      label: getOrderStatusLabel('Cancelled'),
+      className: getOrderStatusClass('Cancelled'),
+    }
+  }
+
+  return {
+    label: getOrderStatusLabel(orderPaymentStatus),
+    className: getOrderStatusClass(orderPaymentStatus),
+  }
 }

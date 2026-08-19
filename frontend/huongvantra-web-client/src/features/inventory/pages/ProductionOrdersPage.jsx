@@ -7,6 +7,7 @@ import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
+import { isPersonalProductSkuCode, PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -128,7 +129,9 @@ function getOutputName(line, fallback = '-') {
 }
 
 function getOutputSku(line, fallback = '-') {
-  return line?.finishedSkuCode || fallback
+  const code = line?.finishedSkuCode || fallback
+  if (isPersonalProductSkuCode(code)) return PERSONAL_PRODUCT_LABEL
+  return code
 }
 
 function formatDestinationLocation(value) {

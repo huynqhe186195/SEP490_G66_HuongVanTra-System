@@ -80,6 +80,8 @@ public class InventoryLogic(
     private const string ReferenceStocktake = "Stocktake";
     private const string ReferenceOrder = "Order";
     private const string ReferenceCustomBundle = "CustomBundle";
+    private const string CustomBundleOutputSkuCode = "SP-CA-NHAN";
+    private const string ExportTypeCustomBundleMaterial = "custom_bundle_material_export";
     private const string ReferenceCustomerReturn = "CustomerReturn";
     private const int SupplierCodeMaxLength = 50;
     private const string SupplierCodeDuplicateMessage = "Mã Nhà Cung Cấp đã tồn tại.";
@@ -463,6 +465,7 @@ public class InventoryLogic(
                             : decisions.Any(d => d.WarehouseDeductedQuantity > 0)
                                 ? "pending_warehouse_transfer"
                                 : "pending_deduct",
+                    OrderChannelSnapshot = request.OrderChannel,
                     QueueStatus = shortages.Count > 0 ? QueueStatus.Insufficient : QueueStatus.Waiting,
                     TotalAmount = request.TotalAmount,
                     IsDeducted = false,
@@ -753,6 +756,9 @@ public class InventoryLogic(
         if (queue.IsDeducted)
             return;
 
+        // Đồng bộ snapshot trạng thái đơn cho màn Warehouse; nếu chỉ đổi
+        // OrderStockStatus thì cột "Trạng thái đơn" sẽ giữ WaitingTransfer cũ.
+        queue.OrderPaymentStatus = "cancellationrequested";
         queue.OrderStockStatus = OrderStockStatusCancellationRequested;
         queue.CancelReason = string.IsNullOrWhiteSpace(reason)
             ? "Đơn đang chờ duyệt hủy / hoàn tiền"
@@ -809,6 +815,14 @@ public class InventoryLogic(
 
         if (queue.QueueStatus == QueueStatus.Cancelled)
         {
+            // Queue hủy từ phiên bản trước có thể còn snapshot WaitingTransfer.
+            // Đồng bộ lại để Warehouse không hiển thị trạng thái đơn đã lỗi thời.
+            if (!string.Equals(queue.OrderPaymentStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                queue.OrderPaymentStatus = "cancelled";
+                await _queueRepo.SaveChangesAsync(innerCt);
+            }
+
             // Reconcile dữ liệu dở dang từ phiên bản cũ: queue đã bị đánh dấu Cancelled
             // nhưng release trước đó lỗi nên IsReserved/ReservedQuantity chưa được nhả.
             // Không trả về sớm trước khi xử lý hết stock effect.
@@ -891,6 +905,9 @@ public class InventoryLogic(
         await ReleaseOrRestoreQueueHoldAsync(queue, innerCt);
 
         queue.QueueStatus = QueueStatus.Cancelled;
+        // Queue là projection phía Kho, vì vậy cần phản ánh kết quả hủy cuối
+        // cùng của đơn thay vì để lại trạng thái chờ điều chuyển trước đó.
+        queue.OrderPaymentStatus = "cancelled";
         queue.OrderStockStatus = "cancelled";
         queue.ConfirmedAt ??= DateTime.UtcNow;
         queue.CancelledAt = DateTime.UtcNow;
@@ -2079,6 +2096,256 @@ public class InventoryLogic(
     }
 
     /// <summary>
+    /// Sản phẩm cá nhân: lệnh sản xuất Completed, nhập 1 đơn vị vào Kho rồi điều chuyển lên Kệ (giống sell-first).
+    /// </summary>
+    private async Task<ProductionOrder> CreateCompletedProductionOrderAndTransferForCustomBundleAsync(
+        Guid bundleId,
+        string orderCode,
+        string? bundleLabel,
+        Guid? sourceOrderId,
+        string? sourceOrderChannel,
+        IReadOnlyList<DeductMaterialItem> materials,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var effectiveCreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy;
+        var productionCountToday = await _productionOrderRepo.CountCreatedSinceAsync(now.Date, ct);
+        var productionOrderId = Guid.NewGuid();
+        var outputName = NormalizeSnapshotText(bundleLabel) ?? "Sản phẩm cá nhân";
+        var productionOrder = new ProductionOrder
+        {
+            Id = productionOrderId,
+            ProductionCode = $"SX-{now:yyyyMMdd}-{(productionCountToday + 1):D4}",
+            Note = $"Sản phẩm cá nhân đơn {orderCode} — {outputName}. Đã trừ NL/bao bì, nhập thành phẩm Kho và điều chuyển lên Kệ.",
+            Status = ProductionOrderStatus.Completed,
+            CreatedBy = effectiveCreatedBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            UpdatedAt = now,
+            CompletedAt = now,
+        };
+
+        foreach (var item in materials)
+        {
+            var skuCode = item.SkuCode ?? item.SkuId.ToString("N")[..8];
+            var skuName = item.SkuName ?? skuCode;
+            productionOrder.Lines.Add(new ProductionOrderLine
+            {
+                Id = Guid.NewGuid(),
+                ProductionOrderId = productionOrderId,
+                MaterialSkuId = item.SkuId,
+                MaterialSkuCode = skuCode,
+                MaterialSnapshotName = skuName,
+                PlannedQuantity = item.Quantity,
+                CreatedAt = now,
+            });
+        }
+
+        var outputLine = new ProductionOrderOutputLine
+        {
+            Id = Guid.NewGuid(),
+            ProductionOrderId = productionOrderId,
+            FinishedSkuId = bundleId,
+            FinishedSkuCode = CustomBundleOutputSkuCode,
+            FinishedSkuSnapshotName = outputName,
+            PlannedQuantity = 1,
+            DestinationLocation = LocationShelf,
+            CreatedAt = now,
+        };
+        productionOrder.OutputLines.Add(outputLine);
+
+        var finishedStock = await GetOrCreateSkuStockAsync(bundleId, CustomBundleOutputSkuCode, ct);
+        var warehouseBefore = _inventoryOptions.SimulateWarehouse
+            ? finishedStock.WarehouseQuantityOnHand
+            : await _batchRepo.SumQuantityOnHandAsync(bundleId, LocationWarehouse, ct);
+        var storeBefore = finishedStock.QuantityOnHand;
+        var importSlipId = Guid.NewGuid();
+        var ledgerEntries = new List<InventoryLedgerEntry>();
+        var transactionGroupId = Guid.NewGuid();
+
+        Guid? batchId = null;
+        string? batchLotCode = null;
+        if (_inventoryOptions.SimulateWarehouse)
+        {
+            finishedStock.WarehouseQuantityOnHand += 1;
+            finishedStock.UpdatedAt = now;
+        }
+        else
+        {
+            var finishedBatch = await CreateWarehouseBatchInternalAsync(
+                lotCode: BuildProductionFinishedLotCode(now, productionOrder, 0),
+                supplier: null,
+                expiresAt: null,
+                note: $"Lệnh sản xuất {productionOrder.ProductionCode} — {outputName}",
+                items: [new CreateWarehouseBatchItemRequest(
+                    bundleId, CustomBundleOutputSkuCode, outputName, 1, null)],
+                createdBy: effectiveCreatedBy,
+                ct: ct,
+                sourceType: "production_finished_goods",
+                sourceReferenceId: productionOrderId,
+                sourceReferenceCode: productionOrder.ProductionCode,
+                location: LocationWarehouse);
+            batchId = finishedBatch.Id;
+            batchLotCode = finishedBatch.LotCode;
+            outputLine.WarehouseBatchId = finishedBatch.Id;
+            outputLine.WarehouseBatchLotCode = finishedBatch.LotCode;
+            await SyncWarehouseQtyFromBatchesAsync(finishedStock, ct);
+        }
+
+        var warehouseAfter = finishedStock.WarehouseQuantityOnHand;
+        var importLine = new StockImportSlipLine
+        {
+            Id = Guid.NewGuid(),
+            StockImportSlipId = importSlipId,
+            SkuId = bundleId,
+            SkuCode = CustomBundleOutputSkuCode,
+            ProductSnapshotName = outputName,
+            Quantity = 1,
+            WarehouseQtyBefore = warehouseBefore,
+            WarehouseQtyAfter = warehouseAfter,
+            StoreQtyBefore = storeBefore,
+            StoreQtyAfter = finishedStock.QuantityOnHand,
+            DestinationLocation = LocationWarehouse,
+            WarehouseBatchId = batchId,
+            WarehouseBatchLotCode = batchLotCode,
+            ProductionOrderOutputLineId = outputLine.Id,
+            Note = $"Nhập sản phẩm cá nhân từ lệnh {productionOrder.ProductionCode}",
+            CreatedAt = now,
+        };
+
+        ledgerEntries.Add(CreateLedgerEntry(
+            transactionGroupId,
+            bundleId,
+            CustomBundleOutputSkuCode,
+            outputName,
+            LocationWarehouse,
+            warehouseBefore,
+            1,
+            warehouseAfter,
+            TransactionProductionFinishedReceipt,
+            null,
+            LocationWarehouse,
+            ReferenceProductionOrder,
+            productionOrderId,
+            productionOrder.ProductionCode,
+            batchId,
+            batchLotCode,
+            effectiveCreatedBy,
+            creator,
+            $"Nhập sản phẩm cá nhân từ lệnh sản xuất {productionOrder.ProductionCode}",
+            importLine.Note));
+
+        await _productionOrderRepo.AddAsync(productionOrder, ct);
+        await _productionOrderRepo.SaveChangesAsync(ct);
+
+        var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        await _importSlipRepo.AddAsync(new StockImportSlip
+        {
+            Id = importSlipId,
+            ImportCode = $"PN-{now:yyyyMMdd}-{(importCountToday + 1):D4}",
+            ImportType = "production_finished_goods_receipt",
+            SkuId = bundleId,
+            SkuCode = CustomBundleOutputSkuCode,
+            ProductSnapshotName = outputName,
+            Quantity = 1,
+            WarehouseQtyBefore = warehouseBefore,
+            WarehouseQtyAfter = warehouseAfter,
+            StoreQtyBefore = storeBefore,
+            StoreQtyAfter = finishedStock.QuantityOnHand,
+            WarehouseBatchId = batchId,
+            WarehouseBatchLotCode = batchLotCode,
+            ProductionOrderId = productionOrderId,
+            ProductionCode = productionOrder.ProductionCode,
+            ReferenceType = ReferenceProductionOrder,
+            ReferenceId = productionOrderId,
+            ReferenceCode = productionOrder.ProductionCode,
+            Note = $"Nhập sản phẩm cá nhân từ lệnh {productionOrder.ProductionCode} cho đơn {orderCode}",
+            CreatedBy = effectiveCreatedBy,
+            CreatedById = effectiveCreatedBy == Guid.Empty ? null : effectiveCreatedBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            Lines = [importLine],
+        }, ct);
+        await _importSlipRepo.SaveChangesAsync(ct);
+
+        if (ledgerEntries.Count > 0)
+        {
+            await _ledgerRepo.AddRangeAsync(ledgerEntries, ct);
+            await _ledgerRepo.SaveChangesAsync(ct);
+        }
+
+        if (sourceOrderId.HasValue && sourceOrderId.Value != Guid.Empty)
+        {
+            var decision = new PosStockDecision
+            {
+                SkuId = bundleId,
+                SkuCode = CustomBundleOutputSkuCode,
+                SkuName = outputName,
+                OrderedQuantity = 1,
+                WarehouseDeductedQuantity = 1,
+                Stock = finishedStock,
+            };
+
+            var (exportSlipId, shelfImportSlipId) = await TransferWarehouseFinishedStockToShelfAsync(
+                sourceOrderId.Value,
+                orderCode,
+                [decision],
+                createdBy,
+                creator,
+                now,
+                ct);
+
+            var transferId = Guid.NewGuid();
+            var transfer = new StockTransfer
+            {
+                Id = transferId,
+                TransferCode = $"DC-{now:yyyyMMddHHmmss}-{transferId.ToString("N")[..6].ToUpperInvariant()}",
+                SourceLocation = LocationWarehouse,
+                DestinationLocation = LocationShelf,
+                Status = StockTransferStatus.Completed,
+                Note = $"Tự động điều chuyển sản phẩm cá nhân lên Kệ cho đơn {orderCode}",
+                ExportSlipId = exportSlipId,
+                ImportSlipId = shelfImportSlipId,
+                SourceOrderId = sourceOrderId,
+                SourceOrderCode = orderCode,
+                SourceOrderChannel = NormalizeSnapshotText(sourceOrderChannel),
+                CreatedBy = effectiveCreatedBy,
+                CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+                CreatedAt = now,
+                UpdatedAt = now,
+                CompletedBy = effectiveCreatedBy == Guid.Empty ? null : effectiveCreatedBy,
+                CompletedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CompletedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+                CompletedAt = now,
+            };
+
+            await _stockTransferRepo.AddAsync(transfer, ct);
+            await _stockTransferRepo.SaveChangesAsync(ct);
+            await _stockTransferRepo.AddLinesAsync(
+            [
+                new StockTransferLine
+                {
+                    Id = Guid.NewGuid(),
+                    StockTransferId = transferId,
+                    SkuId = bundleId,
+                    SkuCode = CustomBundleOutputSkuCode,
+                    SkuNameSnapshot = outputName,
+                    Quantity = 1,
+                    CreatedAt = now,
+                }
+            ], ct);
+            await _stockTransferRepo.SaveChangesAsync(ct);
+        }
+
+        return productionOrder;
+    }
+
+    /// <summary>
     /// POS-06 (KB2/KB3/KB4): đưa toàn bộ phần hàng còn nằm ở Kho thành phẩm lên Kệ và sinh
     /// Phiếu điều chuyển ở trạng thái đã hoàn thành, trỏ sang cặp phiếu xuất/nhập vừa tạo.
     /// </summary>
@@ -2122,6 +2389,9 @@ public class InventoryLogic(
             Note = $"Tự động sinh khi Thủ kho xác nhận bán trước trừ sau cho đơn {queue.OrderCode}",
             ExportSlipId = exportSlipId,
             ImportSlipId = importSlipId,
+            SourceOrderId = queue.OrderId,
+            SourceOrderCode = queue.OrderCode,
+            SourceOrderChannel = queue.OrderChannelSnapshot,
             CreatedBy = effectiveConfirmedBy,
             CreatedByName = NormalizeSnapshotText(confirmer?.CreatedByName),
             CreatedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName),
@@ -3853,7 +4123,7 @@ public class InventoryLogic(
     private static StockDeductQueueResponse MapQueue(StockDeductQueue q) => new(
         q.Id, q.OrderId, q.OrderCode,
         q.QueueStatus.ToString().ToLowerInvariant(),
-        q.OrderPaymentStatus,
+        q.QueueStatus == QueueStatus.Cancelled ? "cancelled" : q.OrderPaymentStatus,
         q.OrderStockStatus,
         q.TotalAmount,
         q.CreatedAt,
@@ -4708,8 +4978,6 @@ public class InventoryLogic(
             CreatedBy = createdBy,
             CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
             CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
-            SubmittedBy = createdBy,
-            SubmittedAt = now,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -7842,6 +8110,8 @@ public class InventoryLogic(
             UpdatedAt = DateTime.UtcNow
         };
         await _skuStockRepo.AddAsync(stock, ct);
+        // Flush để lần GetOrCreate tiếp theo (vd CreateWarehouseBatchInternalAsync) không tạo bản ghi trùng SkuId.
+        await _skuStockRepo.SaveChangesAsync(ct);
         return stock;
     }
 
@@ -9157,6 +9427,24 @@ public class InventoryLogic(
         await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
             var now = DateTime.UtcNow;
+            var referenceType = NormalizeSnapshotText(request.ReferenceType) ?? ReferenceCustomBundle;
+            var referenceId = request.ReferenceId ?? Guid.Empty;
+            var referenceCode = NormalizeSnapshotText(request.ReferenceCode) ?? referenceId.ToString();
+            var note = NormalizeSnapshotText(request.Note) ?? $"Xuat nguyen lieu {referenceCode}";
+            var isCustomBundlePack = string.Equals(referenceType, ReferenceCustomBundle, StringComparison.OrdinalIgnoreCase)
+                && referenceId != Guid.Empty;
+
+            if (isCustomBundlePack)
+            {
+                var existingSlip = await _exportSlipRepo.GetByReferenceAsync(
+                    ReferenceCustomBundle,
+                    referenceId,
+                    ExportTypeCustomBundleMaterial,
+                    innerCt);
+                if (existingSlip != null)
+                    return true;
+            }
+
             var stockBySku = new Dictionary<Guid, SkuStock>();
             var shortages = new List<string>();
 
@@ -9187,10 +9475,6 @@ public class InventoryLogic(
                     + string.Join("\n", shortages)
                     + "\nNhập thêm hàng rồi thử đóng gói lại.");
 
-            var referenceType = NormalizeSnapshotText(request.ReferenceType) ?? ReferenceCustomBundle;
-            var referenceId = request.ReferenceId ?? Guid.Empty;
-            var referenceCode = NormalizeSnapshotText(request.ReferenceCode) ?? referenceId.ToString();
-            var note = NormalizeSnapshotText(request.Note) ?? $"Xuat nguyen lieu {referenceCode}";
             var slipId = Guid.NewGuid();
             var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
             var slipLines = new List<StockExportSlipLine>();
@@ -9270,17 +9554,35 @@ public class InventoryLogic(
             }
 
             var firstLine = slipLines[0];
+            ProductionOrder? customProductionOrder = null;
+            if (isCustomBundlePack)
+            {
+                customProductionOrder = await CreateCompletedProductionOrderAndTransferForCustomBundleAsync(
+                    referenceId,
+                    referenceCode,
+                    request.CustomBundleLabel,
+                    request.SourceOrderId,
+                    request.SourceOrderChannel,
+                    itemList,
+                    createdBy,
+                    creator,
+                    now,
+                    innerCt);
+            }
+
             var exportSlip = new StockExportSlip
             {
                 Id = slipId,
                 ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
-                ExportType = "custom_bundle_material_export",
+                ExportType = ExportTypeCustomBundleMaterial,
+                ProductionOrderId = customProductionOrder?.Id,
+                ProductionCode = customProductionOrder?.ProductionCode,
                 ReferenceType = referenceType,
                 ReferenceId = referenceId == Guid.Empty ? null : referenceId,
                 ReferenceCode = referenceCode,
                 SkuId = slipLines.Count == 1 ? firstLine.SkuId : Guid.Empty,
                 SkuCode = slipLines.Count == 1 ? firstLine.SkuCode : "MULTI",
-                SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dong nguyen lieu goi custom",
+                SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dong nguyen lieu san pham ca nhan",
                 Quantity = slipLines.Sum(l => l.Quantity),
                 WarehouseQtyBefore = slipLines.Sum(l => l.WarehouseQtyBefore),
                 WarehouseQtyAfter = slipLines.Sum(l => l.WarehouseQtyAfter),
@@ -9983,4 +10285,25 @@ public class InventoryLogic(
             p.IsActive,
             p.CreatedAt,
             p.UpdatedAt);
+
+    /// <summary>
+    /// Đồng bộ OrderStatus resolved từ OrderService vào queue để frontend hiển thị đúng.
+    /// OrderService gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// </summary>
+    public async Task UpdateQueueOrderStatusAsync(Guid orderId, string orderStatus, CancellationToken ct = default)
+    {
+        if (orderId == Guid.Empty || string.IsNullOrWhiteSpace(orderStatus))
+            return;
+
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue == null)
+            return;
+
+        var normalized = orderStatus.Trim().ToLowerInvariant();
+        if (queue.OrderPaymentStatus != normalized)
+        {
+            queue.OrderPaymentStatus = normalized;
+            await _queueRepo.SaveChangesAsync(ct);
+        }
+    }
 }

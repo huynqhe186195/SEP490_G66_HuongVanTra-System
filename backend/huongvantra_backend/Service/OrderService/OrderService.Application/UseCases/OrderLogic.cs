@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
+using OrderService.Application.Export;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
 using OrderService.Application.Services;
@@ -45,6 +46,7 @@ public class OrderLogic(
     private readonly ReturnPolicyLogic? _returnPolicyLogic = returnPolicyLogic;
     private const int MaxActivities = 100;
     private const int OverdueDepositCancelDays = 7;
+    private const int MaxOrderExportRows = 10_000;
 
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
         GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
@@ -106,6 +108,59 @@ public class OrderLogic(
             dtos, page, pageSize, total,
             (int)Math.Ceiling((double)total / pageSize),
             statusCounts);
+    }
+
+    public async Task<OrderExcelFileResponse> ExportToExcelAsync(
+        GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
+    {
+        var customerId = ParseOptionalGuid(req.CustomerId);
+        var employeeFilter = access.EmployeeFilter ?? ParseOptionalGuid(req.EmployeeId);
+        var fromDate = ParseOptionalDate(req.FromDate);
+        var toDate = ParseOptionalDate(req.ToDate);
+        var channel = access.CodOrdersOnly ? "COD" : req.Channel;
+        var excludeChannel = access.CodOrdersOnly ? null : req.ExcludeChannel;
+
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null;
+        if (req.HasActiveReservation)
+        {
+            restrictToOrderIds = await _inventoryCatalogClient
+                .GetOrderIdsWithActiveReservationAsync([], ct);
+        }
+
+        var orders = await _orderRepo.GetAllForExportAsync(
+            req.Search, customerId, req.Status, channel,
+            excludeChannel, req.CodTab, req.ReturnableOnly,
+            req.OrderKind, req.ExcludeOrderKind,
+            fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
+            MaxOrderExportRows, ct, restrictToOrderIds);
+
+        var isCodExport = access.CodOrdersOnly
+            || string.Equals(channel, "COD", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(req.CodTab);
+        var prefix = isCodExport ? "Don_Hang_COD" : "Don_Hang";
+        return OrderExportExcelBuilder.Build(orders, prefix);
+    }
+
+    public async Task<OrderExcelFileResponse> ExportReturnSlipsToExcelAsync(
+        string? search, string? sourceChannel, OrderAccessContext access, CancellationToken ct = default)
+    {
+        var channel = access.CodOrdersOnly ? "COD" : sourceChannel;
+        var items = await _returnOrderRepo.GetAllForExportAsync(
+            search, channel, access.EmployeeFilter, access.IncludeAllCodOrders,
+            MaxOrderExportRows, ct);
+
+        var rows = new List<(ReturnOrder Item, OrderChannel SourceChannel, string? ExchangeOrderCode)>(items.Count);
+        foreach (var (item, sourceOrderChannel) in items)
+        {
+            string? exchangeCode = null;
+            if (item.ExchangeOrderId.HasValue)
+                exchangeCode = await _returnOrderRepo.GetExchangeOrderCodeAsync(item.ExchangeOrderId.Value, ct);
+
+            rows.Add((item, sourceOrderChannel, exchangeCode));
+        }
+
+        var prefix = access.CodOrdersOnly ? "Phieu_Tra_Hang_COD" : "Phieu_Tra_Hang";
+        return OrderExportExcelBuilder.BuildReturnSlips(rows, prefix);
     }
 
     private static int ParsePositiveInt(string? value, int fallback)
@@ -490,6 +545,8 @@ public class OrderLogic(
             && !hasPendingTransfer
             && !hasCodPayment
             && (finalAmount <= 0 || hasRecordedPayment || req.PaymentMethod == PaymentMethod.Cash);
+        var isCustomOnlyOrder = (req.CustomBundles?.Any(b => b.Ingredients?.Count > 0) ?? false)
+            && detailInputs.Count == 0;
 
         var ownerId = access.CanViewAllOrders ? (req.EmployeeId ?? actorId) : actorId;
         if (!access.CanViewAllOrders
@@ -510,7 +567,9 @@ public class OrderLogic(
             EmployeeSnapshotName = string.IsNullOrWhiteSpace(actorName) ? null : actorName.Trim(),
             OrderChannel = req.OrderChannel,
             OrderKind = req.OrderKind,
-            OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
+            OrderStatus = isPosCompletedOnCreate
+                ? (isCustomOnlyOrder ? OrderStatus.WaitingProduction : OrderStatus.Completed)
+                : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
             DiscountAmount = totalDiscount,
@@ -783,6 +842,12 @@ public class OrderLogic(
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
+
+            // Đồng bộ OrderStatus resolved vào InventoryService queue để frontend hiển thị đúng.
+            if (stockHandling.HasPendingStockReconciliation)
+            {
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
+            }
         }
         // COD: cùng HTTP pos-stock-handling nhưng ReserveOnly=true (giữ chỗ, trừ lúc ship).
         else if (ShouldHandleCodStockSynchronously(order))
@@ -807,7 +872,7 @@ public class OrderLogic(
         }
         else
         {
-            MarkCustomOnlyInventorySyncedIfApplicable(order);
+            ApplyCustomOnlyInventoryStatus(order);
         }
 
         if ((order.OrderChannel is OrderChannel.POS or OrderChannel.COD)
@@ -823,17 +888,7 @@ public class OrderLogic(
             if (customMaterialsHandling.BackorderRequired)
                 throw new BackorderConfirmationRequiredException(customMaterialsHandling);
 
-            if (string.Equals(
-                    customMaterialsHandling.StockHandlingMode,
-                    "BackorderAccepted",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                order.OrderStatus = PreferHeavierOrderStatus(
-                    order.OrderStatus,
-                    OrderStatus.WaitingMaterials);
-            }
-
-            MarkCustomOnlyInventorySyncedIfApplicable(order);
+            ApplyCustomMaterialsHandlingToOrder(order, customMaterialsHandling);
         }
 
         await RecordActivityAsync(
@@ -1916,6 +1971,9 @@ public class OrderLogic(
         order.DeliveredByName = actorName;
         order.UpdatedAt = deliveredAt;
 
+        // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+        await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, OrderStatus.Completed.ToString(), ct);
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Completed,
@@ -2302,7 +2360,7 @@ public class OrderLogic(
         }
         else
         {
-            MarkCustomOnlyInventorySyncedIfApplicable(order);
+            ApplyCustomOnlyInventoryStatus(order);
         }
 
         if (order.OrderChannel == OrderChannel.POS && HasCustomIngredients(order))
@@ -2319,17 +2377,7 @@ public class OrderLogic(
                 throw new OrderValidationException(
                     "Tồn nguyên liệu gói custom đã thay đổi và khách chưa xác nhận chờ hàng.");
 
-            if (string.Equals(
-                    customHandling.StockHandlingMode,
-                    "BackorderAccepted",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                order.OrderStatus = PreferHeavierOrderStatus(
-                    order.OrderStatus,
-                    OrderStatus.WaitingMaterials);
-            }
-
-            MarkCustomOnlyInventorySyncedIfApplicable(order);
+            ApplyCustomMaterialsHandlingToOrder(order, customHandling);
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.InventorySynced,
@@ -2927,8 +2975,8 @@ public class OrderLogic(
         order.UpdatedAt = DateTime.UtcNow;
 
         var completedForPickup = false;
-        // POS-06: KB2/KB3 khách đang chờ tại quầy nên hoàn thành luôn;
-        // KB4 khách đã về nên chỉ sẵn sàng giao, chờ Sale bấm "Đã giao hàng".
+        // POS-06: Tất cả các trường hợp bán trước trừ sau (KB2/KB3/KB4) đều chuyển sang
+        // ReadyToDeliver sau khi Thủ kho xác nhận, chờ Sale bấm "Đã giao hàng" để Completed.
         var readyToDeliver = false;
         if (order.OrderStatus is OrderStatus.WaitingMaterials
             or OrderStatus.WaitingTransfer
@@ -2939,16 +2987,14 @@ public class OrderLogic(
             {
                 order.OrderStatus = OrderStatus.Processing;
             }
-            else if (order.OrderStatus == OrderStatus.WaitingMaterials)
-            {
-                readyToDeliver = true;
-                order.OrderStatus = OrderStatus.ReadyToDeliver;
-            }
             else
             {
-                completedForPickup = true;
-                order.OrderStatus = OrderStatus.Completed;
-                order.CompletedAt ??= DateTime.UtcNow;
+                // Tất cả đơn pickup tại store chuyển sang ReadyToDeliver
+                readyToDeliver = true;
+                order.OrderStatus = OrderStatus.ReadyToDeliver;
+
+                // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
             }
 
             foreach (var detail in order.OrderDetails ?? [])
@@ -2976,7 +3022,9 @@ public class OrderLogic(
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.Updated,
-                "Đã đủ hàng; đơn sẵn sàng giao, chờ khách quay lại lấy.",
+                order.OrderStatus == OrderStatus.WaitingMaterials
+                    ? "Đã đủ hàng; đơn sẵn sàng giao, chờ khách quay lại lấy."
+                    : "Đã điều chuyển hàng từ Kho lên Kệ; đơn sẵn sàng giao cho khách.",
                 actorId: null,
                 actorName: "Hệ thống",
                 ct);
@@ -3170,20 +3218,60 @@ public class OrderLogic(
         && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials
         && (order.OrderDetails?.Count ?? 0) > 0;
 
+    private static bool IsCustomOnlyOrder(Order order) =>
+        (order.OrderDetails?.Count ?? 0) == 0
+        && (order.CustomBundles?.Any(b => (b.Ingredients?.Count ?? 0) > 0) ?? false);
+
+    /// <summary>
+    /// Áp kết quả kiểm tra NL custom sau thanh toán: WaitingMaterials (backorder) hoặc WaitingProduction (đủ NL).
+    /// </summary>
+    private static void ApplyCustomMaterialsHandlingToOrder(
+        Order order,
+        InventoryStockHandlingResponse customMaterialsHandling)
+    {
+        if (string.Equals(
+                customMaterialsHandling.StockHandlingMode,
+                "BackorderAccepted",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            order.OrderStatus = PreferHeavierOrderStatus(
+                order.OrderStatus,
+                OrderStatus.WaitingMaterials);
+        }
+        else if (string.Equals(
+                     customMaterialsHandling.StockHandlingMode,
+                     "Immediate",
+                     StringComparison.OrdinalIgnoreCase)
+                 && IsCustomOnlyOrder(order))
+        {
+            order.OrderStatus = PreferHeavierOrderStatus(
+                order.OrderStatus,
+                OrderStatus.WaitingProduction);
+        }
+
+        ApplyCustomOnlyInventoryStatus(order);
+    }
+
     /// <summary>
     /// Đơn chỉ có gói custom: không trừ thành phẩm Kệ qua PreparePosStockDeduction.
-    /// Nguyên liệu trừ lúc đóng gói (PackCustomBundle). Tránh kẹt PendingDeduction / badge «Chờ trừ tồn quầy».
+    /// Nguyên liệu trừ lúc đóng gói (PackCustomBundle). Còn gói Pending → PendingReconciliation.
     /// </summary>
-    private static void MarkCustomOnlyInventorySyncedIfApplicable(Order order)
+    private static void ApplyCustomOnlyInventoryStatus(Order order)
     {
-        if (order.InventorySyncStatus != InventorySyncStatus.PendingDeduction)
-            return;
         if ((order.OrderDetails?.Count ?? 0) > 0)
             return;
         if (!(order.CustomBundles?.Any(b => (b.Ingredients?.Count ?? 0) > 0) ?? false))
             return;
 
-        order.InventorySyncStatus = InventorySyncStatus.Synced;
+        var hasPendingPack = order.CustomBundles!.Any(b => b.PackingStatus == PackingStatus.Pending);
+        if (hasPendingPack)
+        {
+            order.InventorySyncStatus = InventorySyncStatus.PendingReconciliation;
+            return;
+        }
+
+        if (order.InventorySyncStatus == InventorySyncStatus.PendingDeduction)
+            order.InventorySyncStatus = InventorySyncStatus.Synced;
     }
 
     /// <summary>
@@ -3274,7 +3362,8 @@ public class OrderLogic(
                     order.FulfillmentPreference?.ToString(),
                     order.PickupDate,
                     order.PickupNote,
-                    ReserveOnly: order.OrderChannel == OrderChannel.COD),
+                    ReserveOnly: order.OrderChannel == OrderChannel.COD,
+                    OrderChannel: order.OrderChannel.ToString()),
                 ct);
         }
         catch (InventoryStockHandlingException ex)
@@ -3797,17 +3886,22 @@ public class OrderLogic(
         return Task.FromResult(true);
     }
 
-    public async Task<PagedResponse<CustomBundleResponse>> GetPendingCustomBundlesAsync(
-        int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResponse<CustomBundleResponse>> GetCustomBundlesAsync(
+        int page, int pageSize, PackingStatus? packingStatus = null, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var (items, total) = await _customBundleRepo.GetPagedByStatusAsync(PackingStatus.Pending, page, pageSize, ct);
+        var status = packingStatus ?? PackingStatus.Pending;
+        var (items, total) = await _customBundleRepo.GetPagedByStatusAsync(status, page, pageSize, ct);
         var dtos = items.Select(MapBundle).ToList();
         return new PagedResponse<CustomBundleResponse>(
             dtos, page, pageSize, total,
             (int)Math.Ceiling((double)total / pageSize));
     }
+
+    public Task<PagedResponse<CustomBundleResponse>> GetPendingCustomBundlesAsync(
+        int page, int pageSize, CancellationToken ct = default) =>
+        GetCustomBundlesAsync(page, pageSize, PackingStatus.Pending, ct);
 
     public async Task<CustomBundleResponse> PackCustomBundleAsync(Guid bundleId, CancellationToken ct = default)
     {
@@ -3836,7 +3930,7 @@ public class OrderLogic(
             if (ingredient.Quantity <= 0 || !profile.CanUseInCustom
                 || !string.Equals(profile.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
                    && !string.Equals(profile.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase))
-                throw new OrderValidationException("SKU không còn được phép dùng trong Custom.");
+                throw new OrderValidationException("SKU không còn được phép dùng trong Sản phẩm cá nhân.");
         }
 
         List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
@@ -3856,7 +3950,10 @@ public class OrderLogic(
                 "CustomBundle",
                 bundle.Id,
                 referenceCode,
-                $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+                $"Dong goi san pham ca nhan {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+                bundle.Label?.Trim(),
+                bundle.OrderId != Guid.Empty ? bundle.OrderId : null,
+                bundle.Order?.OrderChannel.ToString(),
                 ct);
         }
         catch (InventoryStockHandlingException ex)
@@ -3873,20 +3970,31 @@ public class OrderLogic(
         if (bundle.OrderId != Guid.Empty)
         {
             var order = await _orderRepo.GetByIdAsync(bundle.OrderId, ct);
-            if (order is not null && await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
-                await _orderRepo.SaveChangesAsync(ct);
+            if (order is not null)
+            {
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.InventorySynced,
+                    $"Đã đóng gói sản phẩm cá nhân{(string.IsNullOrWhiteSpace(bundle.Label) ? "" : $" «{bundle.Label.Trim()}»")}, trừ nguyên liệu Kho, ghi lệnh sản xuất và phiếu điều chuyển lên Kệ.",
+                    actorId: null,
+                    actorName: "Thủ kho",
+                    ct);
+
+                if (await TryAdvanceOrderAfterAllCustomBundlesPackedAsync(order, ct))
+                    await _orderRepo.SaveChangesAsync(ct);
+            }
         }
 
         return MapBundle(bundle);
     }
 
     /// <summary>
-    /// Sau khi mọi gói custom đã đóng gói (đã trừ NL Kho): thoát WaitingMaterials.
+    /// Sau khi mọi gói custom đã đóng gói (đã trừ NL Kho): thoát WaitingMaterials / WaitingProduction.
     /// Nhận tại quầy → ReadyToDeliver (chờ «Đã giao»); giao đi → Processing.
     /// </summary>
     private async Task<bool> TryAdvanceOrderAfterAllCustomBundlesPackedAsync(Order order, CancellationToken ct)
     {
-        if (order.OrderStatus != OrderStatus.WaitingMaterials)
+        if (order.OrderStatus is not (OrderStatus.WaitingMaterials or OrderStatus.WaitingProduction))
             return false;
 
         var bundles = order.CustomBundles ?? [];
@@ -3898,8 +4006,9 @@ public class OrderLogic(
         // Còn dòng thành phẩm chờ nguyên liệu / chờ Thủ kho → chưa advance.
         if ((order.OrderDetails ?? []).Any(d => d.BackorderQuantity > 0))
             return false;
-        if (order.InventorySyncStatus is InventorySyncStatus.PendingDeduction
-            or InventorySyncStatus.PendingReconciliation)
+        if (order.OrderStatus == OrderStatus.WaitingMaterials
+            && order.InventorySyncStatus is InventorySyncStatus.PendingDeduction
+                or InventorySyncStatus.PendingReconciliation)
             return false;
 
         var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
@@ -3907,6 +4016,7 @@ public class OrderLogic(
         OrderStatusTransition.EnsureValidTransition(order.OrderStatus, nextStatus, order.Id);
 
         order.OrderStatus = nextStatus;
+        order.InventorySyncStatus = InventorySyncStatus.Synced;
         order.UpdatedAt = DateTime.UtcNow;
 
         await RecordActivityAsync(
@@ -3918,6 +4028,12 @@ public class OrderLogic(
             actorId: null,
             actorName: "Hệ thống",
             ct);
+
+        _ = _notificationClient.SendBroadcastAsync(
+            "Sale",
+            NotificationTypes.StockQueueConfirmed,
+            $"Gói custom đơn {order.OrderCode} đã đóng gói — sẵn sàng bàn giao khách.",
+            $"/orders/{order.Id}");
 
         return true;
     }

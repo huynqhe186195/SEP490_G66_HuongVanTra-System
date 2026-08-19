@@ -35,7 +35,11 @@ public record PreparePosStockDeductionRequest(
     /// COD: không trừ Kệ ngay — chỉ phân loại 3 kịch bản, reserve phần Kệ, tạo queue
     /// (WH transfer / BOM / backorder) giống POS.
     /// </summary>
-    bool ReserveOnly = false);
+    bool ReserveOnly = false,
+    /// <summary>
+    /// POS-06: kênh đơn hàng (POS/COD/...) để gắn vào queue và phiếu điều chuyển sinh ra.
+    /// </summary>
+    string? OrderChannel = null);
 
 public record ReplaceCodReservationItemRequest(
     Guid SkuId,
@@ -161,7 +165,11 @@ public record DeductMaterialsRequest(
     string? ReferenceType = null,
     Guid? ReferenceId = null,
     string? ReferenceCode = null,
-    string? Note = null);
+    string? Note = null,
+    /// <summary>Tên gói sản phẩm cá nhân — hiển thị trên lệnh sản xuất đầu ra.</summary>
+    string? CustomBundleLabel = null,
+    Guid? SourceOrderId = null,
+    string? SourceOrderChannel = null);
 
 /// <summary>
 /// Kiểm tra tồn Kho NL/bao bì cho gói custom lúc tạo đơn POS/COD (sell-first).
@@ -315,4 +323,10 @@ public record ImportSupplierProductRow(
 
 public record ImportSupplierProductsRequest(
     List<ImportSupplierProductRow> Rows);
+
+/// <summary>
+/// OrderService gọi để đồng bộ OrderStatus resolved vào queue sau khi resolve
+/// WaitingTransfer/WaitingProduction/WaitingMaterials.
+/// </summary>
+public record UpdateQueueOrderStatusRequest(string OrderStatus);
 

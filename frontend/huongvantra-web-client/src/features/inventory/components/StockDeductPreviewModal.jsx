@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { getStockStatusLabel, resolveStockDeductOrderStatusMeta, STOCK_DEDUCT_REMAINING_QTY_LABEL } from '../../orders/utils/orderDisplay.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   cancelStockDeductQueue,
@@ -10,7 +10,7 @@ import {
   previewStockDeductQueue,
 } from '../services/stockDeductQueueApi.js'
 
-function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCancel = false, onClose, onConfirmed }) {
+function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canConfirm = false, canCancel = false, onClose, onConfirmed }) {
   const [preview, setPreview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isConfirming, setIsConfirming] = useState(false)
@@ -126,6 +126,9 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
   ].filter(Boolean)
   const operationLabel = isBomReconciliation ? 'đóng gói và trừ Kho' : 'trừ tồn Kệ Hàng'
   const stockLocationLabel = isBomReconciliation ? 'Kho' : 'Kệ Hàng'
+  const orderStatusMeta = preview
+    ? resolveStockDeductOrderStatusMeta(orderPaymentStatus ?? preview.orderPaymentStatus, preview.orderStockStatus)
+    : null
 
   return (
     <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -185,6 +188,11 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                   Trạng thái tồn: {getStockStatusLabel(preview.orderStockStatus)}
                 </span>
+                {orderStatusMeta ? (
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${orderStatusMeta.className}`}>
+                    Trạng thái đơn: {orderStatusMeta.label}
+                  </span>
+                ) : null}
               </div>
 
               {isCancellationRequested ? (
@@ -215,7 +223,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                         <th className="px-4 py-3">Sản Phẩm</th>
                         <th className="px-4 py-3 text-right">Đã bán</th>
                         <th className="whitespace-nowrap px-4 py-3 text-right">Đã trừ thành phẩm</th>
-                        <th className="whitespace-nowrap px-4 py-3 text-right" title="Chờ xử lý BOM">Chờ BOM</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-right">{STOCK_DEDUCT_REMAINING_QTY_LABEL}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">

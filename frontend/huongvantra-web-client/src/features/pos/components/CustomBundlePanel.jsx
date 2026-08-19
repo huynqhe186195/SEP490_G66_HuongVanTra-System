@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { fetchStoreSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'
@@ -187,6 +188,28 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     return Number(override) || 0
   }
 
+  const ensureSelected = (skuId, material) => {
+    setSelected((prev) => {
+      if (prev[skuId]) return prev
+      const next = { ...prev, [skuId]: true }
+      if (!qtyMap[skuId]) setQtyMap((q) => ({ ...q, [skuId]: 1 }))
+      if (material && priceMap[skuId] === undefined) {
+        setPriceMap((p) => ({ ...p, [skuId]: Number(material.unitPrice) || 0 }))
+      }
+      return next
+    })
+  }
+
+  const adjustQty = (skuId, delta) => {
+    const material = materials.find((m) => m.skuId === skuId)
+    if (material) ensureSelected(skuId, material)
+    setQtyMap((prev) => {
+      const current = Math.floor(Number(prev[skuId]))
+      const base = Number.isFinite(current) && current >= 1 ? current : 1
+      return { ...prev, [skuId]: Math.max(1, base + delta) }
+    })
+  }
+
   const toggleRow = (skuId) => {
     const material = materials.find((m) => m.skuId === skuId)
     if (material && isDefaultStickerSku(material)) return
@@ -294,6 +317,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     const newBundle = {
       label: label.trim() || null,
       note: null,
+      bundleQuantity: 1,
       ingredients,
     }
     onChange([newBundle])
@@ -321,7 +345,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
           <div className="rounded-xl border border-[#356647]/40 bg-[#f3f8f3] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-[#1b1c17]">
-                Gói đã chọn{currentBundle.label ? ` — ${currentBundle.label}` : ''}
+                {PERSONAL_PRODUCT_LABEL} đã chọn{currentBundle.label ? ` — ${currentBundle.label}` : ''}
               </p>
               <button
                 type="button"
@@ -412,7 +436,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
             <p className="py-6 text-center text-xs text-[#717971]">Đang tải...</p>
           ) : selectableMaterials.length === 0 ? (
             <div className="space-y-1 py-6 text-center text-xs text-[#717971]">
-              <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : 'Chưa có nguyên liệu được phép dùng trong Custom.'}</p>
+              <p>{search.trim() ? 'Không tìm thấy nguyên liệu khớp từ khóa.' : `Chưa có nguyên liệu được phép dùng cho ${PERSONAL_PRODUCT_LABEL.toLowerCase()}.`}</p>
               {!search.trim() ? (
                 <p className="text-[11px] text-[#9aa39a]">
                   Trên SKU loại Nguyên liệu / Bao bì, bật «Dùng trong custom» rồi đồng bộ cửa hàng.
@@ -519,18 +543,38 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                           className="w-28 px-3 py-2.5 text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="inline-flex items-center justify-center gap-1">
+                          <div className="inline-flex items-center justify-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => adjustQty(m.skuId, -1)}
+                              className="flex size-7 items-center justify-center rounded-md border border-[#c1c9c0] text-[#356647] hover:bg-[#f0f5f1] disabled:opacity-40"
+                              disabled={!isSelected || qtyOf(m.skuId) <= 1}
+                              aria-label="Giảm số lượng"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">remove</span>
+                            </button>
                             <input
                               type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
                               value={isSelected ? qtyValue : ''}
-                              disabled={!isSelected}
                               placeholder="—"
-                              onChange={(e) => setQty(m.skuId, e.target.value)}
+                              onFocus={() => ensureSelected(m.skuId, m)}
+                              onChange={(e) => {
+                                ensureSelected(m.skuId, m)
+                                setQty(m.skuId, e.target.value)
+                              }}
                               onBlur={() => commitQty(m.skuId)}
-                              className="w-14 rounded border border-[#c1c9c0] px-2 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-[#356647] disabled:cursor-default disabled:bg-transparent disabled:text-[#c1c9c0] disabled:placeholder-[#c1c9c0]"
+                              className="w-12 rounded border border-[#c1c9c0] px-1 py-1 text-center text-sm focus:outline-none focus:ring-1 focus:ring-[#356647]"
                             />
+                            <button
+                              type="button"
+                              onClick={() => adjustQty(m.skuId, 1)}
+                              className="flex size-7 items-center justify-center rounded-md border border-[#c1c9c0] text-[#356647] hover:bg-[#f0f5f1]"
+                              aria-label="Tăng số lượng"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">add</span>
+                            </button>
                             {m.unitName ? (
                               <span className="min-w-[1.5rem] text-left text-xs font-medium text-[#717971]">
                                 {m.unitName}

@@ -18,6 +18,9 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         Guid? referenceId,
         string? referenceCode,
         string? note,
+        string? customBundleLabel = null,
+        Guid? sourceOrderId = null,
+        string? sourceOrderChannel = null,
         CancellationToken ct = default)
     {
         var body = new DeductMaterialsRequest(
@@ -25,7 +28,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
             referenceType,
             referenceId,
             referenceCode,
-            note);
+            note,
+            customBundleLabel,
+            sourceOrderId,
+            sourceOrderChannel);
 
         var response = await httpClient.PostAsJsonAsync("api/v1/inventory/deduct-materials", body, ct);
 
@@ -219,6 +225,34 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         }
     }
 
+    public async Task UpdateQueueOrderStatusAsync(
+        Guid orderId,
+        string orderStatus,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var body = new { OrderStatus = orderStatus };
+            var response = await httpClient.PatchAsJsonAsync(
+                $"api/stock-deduct-queue/update-order-status/{orderId}",
+                body,
+                ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning(
+                    "Inventory update-queue-order-status failed {Status}: {Error}",
+                    response.StatusCode,
+                    error);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Không cập nhật OrderStatus cho queue của đơn {OrderId}.", orderId);
+        }
+    }
+
     private static string? ExtractErrorMessage(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -250,7 +284,10 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         string? ReferenceType,
         Guid? ReferenceId,
         string? ReferenceCode,
-        string? Note);
+        string? Note,
+        string? CustomBundleLabel,
+        Guid? SourceOrderId,
+        string? SourceOrderChannel);
 
     private sealed record DeductMaterialItem(
         Guid SkuId,

@@ -4,13 +4,18 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
-import { showError } from '../../../app/toast.js'
+import { showError, showSuccess } from '../../../app/toast.js'
 import { canAccessModule } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewOnlyCodOrders } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
-import { fetchOrders, fetchReturns } from '../services/ordersApi.js'
+import {
+  exportOrdersToExcel,
+  exportReturnSlipsToExcel,
+  fetchOrders,
+  fetchReturns,
+} from '../services/ordersApi.js'
 import {
   formatVnd,
   resolveInventorySyncMeta,
@@ -50,6 +55,7 @@ function ExchangeOrdersPage() {
     if (page > totalPages) setPage(totalPages)
   }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
 
   const queryParams = useMemo(
     () => ({
@@ -136,6 +142,39 @@ function ExchangeOrdersPage() {
     }
   }, [queryParams, returnQueryParams, viewTab])
 
+  async function handleExport() {
+    if (isExporting) return
+    try {
+      setIsExporting(true)
+      if (viewTab === 'returns') {
+        await exportReturnSlipsToExcel(
+          {
+            search: search.trim() || undefined,
+            channel: codOnly ? 'COD' : (returnChannel || undefined),
+          },
+          codOnly ? 'Phieu_Tra_Hang_COD' : 'Phieu_Tra_Hang',
+        )
+        showSuccess('Đã tải file export phiếu trả hàng.')
+        return
+      }
+
+      await exportOrdersToExcel(
+        {
+          search: search.trim() || undefined,
+          status: status || undefined,
+          orderKind: 'Exchange',
+          channel: codOnly ? 'COD' : (channel || undefined),
+        },
+        codOnly ? 'Don_Doi_COD' : 'Don_Doi',
+      )
+      showSuccess('Đã tải file export đơn đổi.')
+    } catch (error) {
+      showError(error.message || 'Export thất bại.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
@@ -154,21 +193,34 @@ function ExchangeOrdersPage() {
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          canOpenGeneralOrders ? (
-            <Link
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              to="/orders"
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={isExporting || isLoading}
+              onClick={handleExport}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              ← Đơn bán hàng
-            </Link>
-          ) : (
-            <Link
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              to="/orders/cod"
-            >
-              ← Quản lý đơn COD
-            </Link>
-          )
+              <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+                ios_share
+              </span>
+              Export Excel
+            </button>
+            {canOpenGeneralOrders ? (
+              <Link
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                to="/orders"
+              >
+                ← Đơn bán hàng
+              </Link>
+            ) : (
+              <Link
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                to="/orders/cod"
+              >
+                ← Quản lý đơn COD
+              </Link>
+            )}
+          </div>
         }
       />
 

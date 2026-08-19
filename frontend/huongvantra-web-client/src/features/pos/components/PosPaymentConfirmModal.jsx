@@ -1,4 +1,5 @@
 import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -125,7 +126,7 @@ export default function PosPaymentConfirmModal({
                             <tr key={`bundle-${idx}`} className="border-t-2 border-[#f0eee6]">
                               <td className="min-w-0 px-3 py-3" colSpan="4">
                                 <p className="font-bold text-[#1b1c17]">
-                                  🎁 {bundle.label || `Gói custom #${idx + 1}`}
+                                  🎁 {bundle.label || `${PERSONAL_PRODUCT_LABEL} #${idx + 1}`}
                                 </p>
                                 {bundle.note && (
                                   <p className="mt-0.5 text-xs text-[#717971]">{bundle.note}</p>

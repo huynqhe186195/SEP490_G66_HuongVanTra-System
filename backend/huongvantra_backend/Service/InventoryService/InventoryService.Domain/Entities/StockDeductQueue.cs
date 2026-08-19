@@ -15,6 +15,11 @@ public class StockDeductQueue
     /// từ màn hình SKU mà không truy vấn chéo database của OrderService/CustomerService.
     /// </summary>
     public string? CustomerSnapshotName { get; set; }
+
+    /// <summary>
+    /// POS-06: snapshot kênh đơn hàng (POS/COD/...) để phân loại phiếu điều chuyển sinh ra.
+    /// </summary>
+    public string? OrderChannelSnapshot { get; set; }
     public QueueStatus QueueStatus { get; set; } = QueueStatus.Waiting;
     public decimal TotalAmount { get; set; }
     public bool IsDeducted { get; set; }

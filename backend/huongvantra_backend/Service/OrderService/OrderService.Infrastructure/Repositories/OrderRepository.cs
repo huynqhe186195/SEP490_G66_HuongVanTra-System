@@ -48,6 +48,30 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         return (items, total);
     }
 
+    public async Task<List<Order>> GetAllForExportAsync(
+        string? search, Guid? customerId, string? status, string? channel,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
+        int maxRows, CancellationToken ct = default,
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null)
+    {
+        var query = BuildListQuery(
+            search, customerId, status, channel,
+            excludeChannel, codTab, returnableOnly,
+            orderKind, excludeOrderKind,
+            fromDate, toDate, employeeId, includeAllCodOrders,
+            restrictToOrderIds);
+
+        var take = Math.Clamp(maxRows, 1, 10_000);
+        return await query
+            .AsSplitQuery()
+            .Include(o => o.OrderDetails)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
     public async Task<Dictionary<string, int>> CountByStatusAsync(
         string? search, Guid? customerId, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,

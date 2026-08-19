@@ -2,6 +2,7 @@ using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.UseCases;
+using OrderService.Domain.Enums;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -15,8 +16,18 @@ public class CustomBundlesController(OrderLogic orderLogic) : ControllerBase
     public async Task<IActionResult> GetPending(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        CancellationToken ct = default) =>
-        Ok(await orderLogic.GetPendingCustomBundlesAsync(page, pageSize, ct));
+        [FromQuery] string? packingStatus = null,
+        CancellationToken ct = default)
+    {
+        PackingStatus? status = null;
+        if (!string.IsNullOrWhiteSpace(packingStatus)
+            && Enum.TryParse<PackingStatus>(packingStatus, ignoreCase: true, out var parsed))
+        {
+            status = parsed;
+        }
+
+        return Ok(await orderLogic.GetCustomBundlesAsync(page, pageSize, status, ct));
+    }
 
     [HttpPatch("{id:guid}/pack")]
     [Authorize(Roles = "Warehouse")]

@@ -79,6 +79,7 @@ import {
 import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchStoreProducts } from '../../products/services/productsApi.js'
 import { fetchCustomerById } from '../../customers/services/customersApi.js'
+import { PERSONAL_PRODUCT_LABEL } from '../utils/personalProductLabels.js'
 import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
@@ -277,8 +278,8 @@ function OrderDetailPage() {
           ? 'Đã đóng gói'
           : 'Chờ đóng gói'
       const bundleTag = bundle.label?.trim()
-        ? `Gói custom — ${bundle.label.trim()}`
-        : 'Gói custom'
+        ? `${PERSONAL_PRODUCT_LABEL} — ${bundle.label.trim()}`
+        : PERSONAL_PRODUCT_LABEL
 
       return (bundle.ingredients ?? []).map((ing, index) => ({
         line: {
@@ -293,7 +294,7 @@ function OrderDetailPage() {
           isGift: false,
         },
         display: {
-          productName: ing.materialSnapshotName || 'Nguyên liệu custom',
+          productName: ing.materialSnapshotName || `Nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`,
           skuCode: ing.materialSkuCode || '',
           categoryName: bundleTag,
           packagingType: `${bundleTag} · ${packingLabel}`,

@@ -15,6 +15,9 @@ public interface IReturnOrderRepository
     Task<(List<(ReturnOrder Item, OrderChannel SourceChannel)> Items, int Total)> GetPagedAsync(
         string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,
         int page, int pageSize, CancellationToken ct = default);
+    Task<List<(ReturnOrder Item, OrderChannel SourceChannel)>> GetAllForExportAsync(
+        string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,
+        int maxRows, CancellationToken ct = default);
     Task<string?> GetExchangeOrderCodeAsync(Guid exchangeOrderId, CancellationToken ct = default);
     Task AddAsync(ReturnOrder returnOrder, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);

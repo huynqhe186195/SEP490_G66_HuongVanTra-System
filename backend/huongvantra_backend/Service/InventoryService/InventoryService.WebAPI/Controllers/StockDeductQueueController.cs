@@ -102,4 +102,19 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
         var result = await _logic.GetOrderIdsWithActiveReservationAsync(orderIds, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Đồng bộ OrderStatus resolved từ OrderService vào queue để frontend hiển thị đúng.
+    /// OrderService gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// </summary>
+    [HttpPatch("update-order-status/{orderId:guid}")]
+    [AllowAnonymous] // Internal service-to-service call
+    public async Task<IActionResult> UpdateOrderStatus(
+        Guid orderId,
+        [FromBody] UpdateQueueOrderStatusRequest request,
+        CancellationToken ct)
+    {
+        await _logic.UpdateQueueOrderStatusAsync(orderId, request.OrderStatus, ct);
+        return NoContent();
+    }
 }

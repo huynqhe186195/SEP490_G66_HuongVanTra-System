@@ -26,10 +26,29 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     public async Task<IActionResult> GetPaged([FromQuery] GetOrdersRequest request, CancellationToken ct) =>
         Ok(await orderLogic.GetPagedAsync(request, AccessContext(), ct));
 
+    [HttpGet("export")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> ExportOrders([FromQuery] GetOrdersRequest request, CancellationToken ct)
+    {
+        var result = await orderLogic.ExportToExcelAsync(request, AccessContext(), ct);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
+
     [HttpGet("by-code/{orderCode}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetByCode(string orderCode, CancellationToken ct) =>
         Ok(await orderLogic.GetByCodeAsync(orderCode, AccessContext(), ct));
+
+    [HttpGet("return-slips/export")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> ExportReturnSlips(
+        [FromQuery] string? search,
+        [FromQuery] string? channel,
+        CancellationToken ct = default)
+    {
+        var result = await orderLogic.ExportReturnSlipsToExcelAsync(search, channel, AccessContext(), ct);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
 
     [HttpGet("return-slips")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
