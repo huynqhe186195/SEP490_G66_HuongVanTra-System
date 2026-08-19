@@ -2,10 +2,13 @@ import { Link } from 'react-router-dom'
 
 /**
  * Hàng «Việc cần làm» — Link (`to`) hoặc button (`onClick`).
+ * layout="horizontal" → các item xếp ngang thành một hàng.
  */
-export default function OpsActionQueue({ items = [], title = 'Việc cần làm', className = '' }) {
+export default function OpsActionQueue({ items = [], title = 'Việc cần làm', className = '', layout = 'vertical' }) {
   const visible = items.filter((item) => item && (item.count == null || item.count > 0 || item.alwaysShow))
   if (!visible.length) return null
+
+  const isHorizontal = layout === 'horizontal'
 
   return (
     <section className={`rounded-2xl border border-[#c1c9c0]/50 bg-white p-4 shadow-sm ${className}`.trim()}>
@@ -15,7 +18,7 @@ export default function OpsActionQueue({ items = [], title = 'Việc cần làm'
           Tiếp theo nên xử lý
         </span>
       </div>
-      <ul className="divide-y divide-slate-100">
+      <ul className={isHorizontal ? 'flex divide-x divide-slate-100' : 'divide-y divide-slate-100'}>
         {visible.map((item) => {
           const body = (
             <>
@@ -37,11 +40,13 @@ export default function OpsActionQueue({ items = [], title = 'Việc cần làm'
             </>
           )
 
-          const rowClass = 'flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-[#f6f4ec]/80'
+          const rowClass = isHorizontal
+            ? 'flex flex-1 items-center gap-3 px-3 py-2 text-left transition hover:bg-[#f6f4ec]/80 first:pl-0 last:pr-0'
+            : 'flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-[#f6f4ec]/80'
 
           if (item.to) {
             return (
-              <li key={item.id}>
+              <li key={item.id} className={isHorizontal ? 'flex flex-1 min-w-0' : ''}>
                 <Link to={item.to} className={rowClass}>
                   {body}
                 </Link>
@@ -50,7 +55,7 @@ export default function OpsActionQueue({ items = [], title = 'Việc cần làm'
           }
 
           return (
-            <li key={item.id}>
+            <li key={item.id} className={isHorizontal ? 'flex flex-1 min-w-0' : ''}>
               <button type="button" onClick={item.onClick} className={rowClass}>
                 {body}
               </button>

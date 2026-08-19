@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
@@ -221,7 +221,7 @@ function ReturnInspectionsPage() {
   )
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Kiểm tra hàng trả"
@@ -238,9 +238,9 @@ function ReturnInspectionsPage() {
         }}
       />
 
-      <OpsActionQueue items={actionItems} className="mb-3" />
+      <OpsActionQueue items={actionItems} />
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {TABS.map((tab) => (
           <button
             key={tab.key}

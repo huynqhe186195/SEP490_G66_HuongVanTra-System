@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -192,7 +192,7 @@ function InventoryStockPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Kho"
@@ -202,7 +202,7 @@ function InventoryStockPage() {
         onSearchChange={setSearchInput}
       />
 
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3">
         {canWrite ? (
           <Link
             to="/inventory/import/create"
