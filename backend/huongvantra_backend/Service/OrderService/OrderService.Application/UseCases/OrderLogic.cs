@@ -305,6 +305,7 @@ public class OrderLogic(
         string? idempotencyKey = null,
         CancellationToken ct = default)
     {
+        // Header X-Idempotency-Key scoped theo actor — double-click / retry cùng key trả đúng đơn đã tạo.
         var effectiveIdempotencyKey = OrderIdempotency.BuildActorScopedKey(idempotencyKey, actorId);
         if (effectiveIdempotencyKey is not null)
         {
@@ -732,6 +733,7 @@ public class OrderLogic(
             }
         }
 
+        // Gắn entity vào DbContext. Commit thật ở SaveChanges bên dưới (sau trừ tồn / Outbox).
         await _orderRepo.AddAsync(order, ct);
 
         if (effectiveIdempotencyKey is not null)
@@ -782,6 +784,7 @@ public class OrderLogic(
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
         }
+        // COD: cùng HTTP pos-stock-handling nhưng ReserveOnly=true (giữ chỗ, trừ lúc ship).
         else if (ShouldHandleCodStockSynchronously(order))
         {
             stockHandling = await PreparePosStockHandlingAsync(
@@ -950,6 +953,7 @@ public class OrderLogic(
                 ct);
         }
 
+        // POS skip OrderPlaced. Có khách + Completed → Outbox OrderCompleted (cộng điểm), không trừ kệ.
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             await EnqueueOrderCompletedAsync(order, debtAmount, ct);
 

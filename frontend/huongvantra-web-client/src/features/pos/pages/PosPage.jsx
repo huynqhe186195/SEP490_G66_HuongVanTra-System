@@ -1927,7 +1927,7 @@ function PosPage() {
             }),
         ];
 
-        resetCheckoutState();
+        resetCheckoutState(); // xóa giỏ / tab hiện tại sau 201
         setCatalogReloadKey((key) => key + 1);
         await printReceiptSequence(receipts);
     } catch (error) {
@@ -2276,7 +2276,7 @@ function PosPage() {
                 pickupContactPhone,
                 depositAmount,
             },
-            (idempotencyKey) => executePayment(
+            (idempotencyKey) => executePayment( // key gắn header X-Idempotency-Key lúc POST
                 activeDebtSettlement,
                 idempotencyKey,
                 acceptBackorder,

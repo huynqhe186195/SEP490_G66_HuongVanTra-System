@@ -5,6 +5,7 @@ namespace UserService.Application.Interfaces;
 public interface IUserRepository
 {
     Task<User?> GetByIdAsync(Guid id);
+    Task<User?> GetByIdIncludingDeletedAsync(Guid id);
     Task<User?> GetByUsernameAsync(string username);
     Task<User?> GetByUsernameForAuthenticationAsync(string username);
     Task<User?> GetByEmployeePhoneAsync(string phoneDigits);

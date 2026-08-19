@@ -59,7 +59,6 @@ import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
-import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
 import EndOfDayReportPage from '../features/reports/pages/EndOfDayReportPage.jsx'
 import StaffCreatePage from '../features/staff/pages/StaffCreatePage.jsx'
 import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
@@ -101,7 +100,6 @@ function App() {
         <Route path="/orders/create" element={<OrderCreatePage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/inventory/products" element={<ProductsListPage />} />
-        <Route path="/products/pricing" element={<ProductsPricingPage />} />
         <Route path="/products/categories" element={<ProductsCategoriesPage />} />
         <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />

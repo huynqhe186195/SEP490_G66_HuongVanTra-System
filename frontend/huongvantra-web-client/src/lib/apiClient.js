@@ -6,6 +6,7 @@ import {
 } from '../features/auth/services/authSession.js'
 import { showError } from '../app/toast.js'
 
+// Cổng ra duy nhất của FE. Docker/dev: Gateway :5000 — không gọi thẳng OrderService :5004.
 export const DEFAULT_API_BASE_URL = 'http://localhost:5000'
 
 export function getApiBaseUrl() {
@@ -131,6 +132,7 @@ function handleAuthFailure(message, status) {
   }
 }
 
+// Chưa cần JWT. Dùng lúc login / refresh / forgot-password.
 export async function apiRequest(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers = {
@@ -157,6 +159,7 @@ export async function apiRequest(path, options = {}) {
   return response.text()
 }
 
+// Mọi API sau login (kể cả tạo đơn POS). Gắn Bearer, 401 thì refresh rồi retry một lần.
 export async function apiRequestAuth(path, options = {}, retry = true) {
   const silentAuthErrors = Boolean(options.silentAuthErrors)
   const { silentAuthErrors: _silent, responseType, ...fetchOptions } = options
@@ -176,6 +179,7 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
     Authorization: `Bearer ${session.accessToken}`,
   }
 
+  // path ví dụ /api/v1/orders → http://localhost:5000/api/v1/orders (YARP → OrderService).
   let response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...fetchOptions,
     headers,

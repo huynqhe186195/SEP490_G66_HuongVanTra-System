@@ -136,6 +136,7 @@ function mapPosLineItem(item) {
   }
 }
 
+// Giỏ POS (productId, qty) → CreateOrderRequest. skuId = Guid biến thể (productId trên giỏ), không phải SkuCode.
 function buildOrderRequestFromPosPayload(
   payload,
   { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
@@ -191,7 +192,7 @@ function buildOrderRequestFromPosPayload(
     })),
     codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
-      skuId: line.productId,
+      skuId: line.productId, // Guid SKU; BE OrderLogic lấy profile THANH_PHAM từ đây.
       skuSnapshotName: formatPosDisplayName(
         line.productName,
         line.packagingType,
@@ -208,6 +209,7 @@ function buildOrderRequestFromPosPayload(
   })
 }
 
+// OrderResponse BE → object PosPage dùng (orderCode, stockHandlingSummary, …).
 function mapOrderDetailToPosResult(order) {
   return {
     orderId: order.id,
@@ -443,6 +445,7 @@ export async function createPosOrderOnline(payload, { qrAmount = 0, idempotencyK
   return attachTransferQr(result, qrAmount)
 }
 
+// Payload tab COD trên PosPage. Không dùng buildOrderPayload của PosPage.
 export function buildTakeawayOrderPayload({
   storeId,
   customerId,
