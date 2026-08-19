@@ -1,7 +1,9 @@
+import { CORPORATE_CUSTOMERS_ENABLED } from './featureFlags.js'
+
 export const CUSTOMER_SIDEBAR_SECTIONS = [
   { key: 'general', label: 'Phổ thông' },
   { key: 'vip', label: 'VIP' },
-  { key: 'corporate', label: 'Doanh nghiệp' },
+  ...(CORPORATE_CUSTOMERS_ENABLED ? [{ key: 'corporate', label: 'Doanh nghiệp' }] : []),
   { key: 'debts', label: 'Công nợ' },
   { key: 'inactive', label: 'Ngừng hoạt động' },
 ]

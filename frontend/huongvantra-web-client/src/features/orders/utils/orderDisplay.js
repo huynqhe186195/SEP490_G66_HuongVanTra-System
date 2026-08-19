@@ -1,3 +1,5 @@
+import { B2B_CONTRACTS_ENABLED } from '../../../app/featureFlags.js'
+
 export function formatVnd(amount) {
   const value = Number(amount) || 0
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 2 }).format(value)
@@ -32,7 +34,7 @@ export const ORDER_CHANNEL_OPTIONS = [
   { value: '', label: 'Tất cả kênh' },
   { value: 'POS', label: 'Bán trực tiếp tại quầy' },
   { value: 'COD', label: 'COD (giao hàng thu tiền)' },
-  { value: 'B2B', label: 'Doanh nghiệp (hợp đồng)' },
+  ...(B2B_CONTRACTS_ENABLED ? [{ value: 'B2B', label: 'Doanh nghiệp (hợp đồng)' }] : []),
   { value: 'Website', label: 'Website' },
   { value: 'Zalo', label: 'Zalo' },
   { value: 'Phone', label: 'Điện thoại' },

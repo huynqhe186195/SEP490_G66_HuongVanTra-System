@@ -13,6 +13,7 @@ import {
   canViewAllCustomers,
   canViewCustomer,
 } from '../../auth/utils/permissions.js'
+import { B2B_CONTRACTS_ENABLED } from '../../../app/featureFlags.js'
 import { fetchManagerAssignees, fetchSalesAssignees } from '../../iam/services/employeesApi.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
@@ -869,7 +870,7 @@ function CustomerFormPage() {
                 { key: 'overview', label: 'Tổng quan' },
                 { key: 'orders', label: 'Lịch sử đơn' },
                 { key: 'debts', label: 'Lịch sử công nợ' },
-                ...(form.type === 'corporate' ? [{ key: 'contracts', label: 'Hợp đồng' }] : []),
+                ...(B2B_CONTRACTS_ENABLED && form.type === 'corporate' ? [{ key: 'contracts', label: 'Hợp đồng' }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -902,7 +903,7 @@ function CustomerFormPage() {
               <CustomerDebtHistory customerId={customerId} />
             ) : null}
 
-            {profileTab === 'contracts' && form.type === 'corporate' ? (
+            {profileTab === 'contracts' && B2B_CONTRACTS_ENABLED && form.type === 'corporate' ? (
               <CustomerContractsPanel customerId={customerId} />
             ) : null}
           </section>

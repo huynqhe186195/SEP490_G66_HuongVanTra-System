@@ -1,3 +1,5 @@
+import { CORPORATE_CUSTOMERS_ENABLED } from '../../../app/featureFlags.js'
+
 export const CUSTOMER_TYPE_BY_TAB = {
   general: 'GENERAL',
   vip: 'VIP',
@@ -5,7 +7,7 @@ export const CUSTOMER_TYPE_BY_TAB = {
 }
 
 /** Bật module khách doanh nghiệp — chỉ Admin được tạo/sửa (xem: mọi role có VIEW_CUSTOMER). */
-export const CUSTOMER_CORPORATE_ENABLED = true
+export const CUSTOMER_CORPORATE_ENABLED = CORPORATE_CUSTOMERS_ENABLED
 
 export const CUSTOMER_LIST_TABS = [
   { key: 'general', label: 'Phổ thông', shortLabel: 'Phổ thông' },

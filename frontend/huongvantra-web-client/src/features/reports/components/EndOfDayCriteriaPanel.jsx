@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { B2B_CONTRACTS_ENABLED } from '../../../app/featureFlags.js'
 import {
   CONCERNS,
   LAYOUTS,
@@ -26,7 +27,7 @@ const CHANNEL_OPTIONS = [
   { value: 'Zalo', label: 'Zalo' },
   { value: 'Phone', label: 'Điện thoại' },
   { value: 'COD', label: 'Giao hàng COD' },
-  { value: 'B2B', label: 'Khách sỉ B2B' },
+  ...(B2B_CONTRACTS_ENABLED ? [{ value: 'B2B', label: 'Khách sỉ B2B' }] : []),
 ]
 
 const ORDER_STATUS_OPTIONS = [
