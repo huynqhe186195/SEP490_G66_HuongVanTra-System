@@ -99,6 +99,28 @@ export const STOCK_FLOW_TERMS = {
   shelf: 'Kệ Hàng',
 }
 
+export function getStockTransferTypeLabel(transfer) {
+  if (!transfer || typeof transfer !== 'object') return '—'
+  if (transfer.sourceOrderId) {
+    const channel = String(transfer.sourceOrderChannel || '').trim().toUpperCase()
+    if (channel === 'POS') return 'Đơn hàng POS'
+    if (channel === 'COD') return 'Đơn hàng COD'
+    if (channel) return `Đơn hàng ${channel}`
+    return 'Đơn hàng bán'
+  }
+  if (transfer.sourceRequestId) return 'Yêu cầu bổ sung'
+  if (transfer.sourceSuggestionId) return 'Từ gợi ý'
+  return 'Không có nguồn (cũ)'
+}
+
+export function getStockTransferSourceRef(transfer) {
+  if (!transfer || typeof transfer !== 'object') return '—'
+  return transfer.sourceOrderCode
+    || transfer.sourceRequestCode
+    || transfer.sourceSuggestionCode
+    || '—'
+}
+
 /**
  * Chuyển lỗi API thành thông điệp tiếng Việt.
  * Lỗi nghiệp vụ (4xx) đã có message tiếng Việt từ backend nên giữ nguyên;

@@ -217,13 +217,19 @@ function getPromotionApplyErrorMessage(error) {
 // Bundle (bộ nguyên liệu tự chọn) cộng thêm vào grossSubtotal nhưng không có CK dòng.
 // Kết quả trả về gồm: grossSubtotal, itemDiscountTotal, subtotalAfterItemDiscount,
 // orderDiscountAmount, couponDiscountAmount, membershipDiscountAmount, total, totalDiscount.
+function bundleLineTotal(bundle) {
+  const base = (bundle.ingredients ?? []).reduce(
+    (s, ing) => s + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0),
+    0,
+  )
+  const qty = Math.max(1, Math.floor(Number(bundle.bundleQuantity) || 1))
+  return base * qty
+}
+
 function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent, appliedPromotion = null, customBundles = []) {
     const items = Array.isArray(cartItems) ? cartItems : [];
     const bundles = Array.isArray(customBundles) ? customBundles : [];
-    const bundlesTotal = bundles.reduce(
-        (sum, bundle) => sum + (bundle.ingredients ?? []).reduce((s, ing) => s + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0), 0),
-        0,
-    );
+    const bundlesTotal = bundles.reduce((sum, bundle) => sum + bundleLineTotal(bundle), 0);
     const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0) + bundlesTotal;
     const itemDiscountTotal = items.reduce((sum, item) => sum + getLineDiscount(item), 0);
     const subtotalAfterItemDiscount = items.reduce((sum, item) => sum + getLineTotal(item), 0) + bundlesTotal;
@@ -1771,17 +1777,27 @@ function PosPage() {
       payments: paymentAllocations,
       customBundles: (customBundles || [])
         .filter((bundle) => (bundle.ingredients || []).length > 0)
-        .map((bundle) => ({
-          label: bundle.label || null,
-          note: bundle.note || null,
-          ingredients: (bundle.ingredients || []).map((ing) => ({
-            materialSkuId: ing.materialSkuId,
-            materialSkuCode: ing.materialSkuCode,
-            materialSnapshotName: ing.materialSnapshotName,
-            quantity: ing.quantity,
-            unitPrice: ing.unitPrice,
-          })),
-        })),
+        .map((bundle) => {
+          const bundleQty = Math.max(1, Math.floor(Number(bundle.bundleQuantity) || 1))
+          const baseLabel = String(bundle.label || '').trim() || null
+          const label = bundleQty > 1
+            ? (baseLabel ? `${baseLabel} (×${bundleQty} gói)` : `×${bundleQty} gói`)
+            : baseLabel
+          return {
+            label,
+            note: bundle.note || null,
+            ingredients: (bundle.ingredients || []).map((ing) => {
+              const unitQty = Math.max(1, Math.floor(Number(ing.quantity) || 1))
+              return {
+                materialSkuId: ing.materialSkuId,
+                materialSkuCode: ing.materialSkuCode,
+                materialSnapshotName: ing.materialSnapshotName,
+                quantity: unitQty * bundleQty,
+                unitPrice: ing.unitPrice,
+              }
+            }),
+          }
+        }),
     }
   }
 
@@ -3015,10 +3031,16 @@ function PosPage() {
                                 </div>
                             :   <div className="space-y-2">
                                     {customBundles.map((bundle, bundleIndex) => {
-                                        const bundleTotal = (bundle.ingredients ?? []).reduce(
-                                            (s, ing) => s + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0),
-                                            0,
-                                        );
+                                        const bundleQty = Math.max(1, Math.floor(Number(bundle.bundleQuantity) || 1));
+                                        const bundleTotal = bundleLineTotal(bundle);
+                                        const updateBundleQty = (delta) => {
+                                            const nextQty = Math.max(1, bundleQty + delta);
+                                            updateActiveSession({
+                                                customBundles: customBundles.map((b, i) =>
+                                                    i === bundleIndex ? { ...b, bundleQuantity: nextQty } : b,
+                                                ),
+                                            });
+                                        };
                                         return (
                                             <div
                                                 key={`bundle-${bundleIndex}`}
@@ -3032,12 +3054,30 @@ function PosPage() {
                                                         <ul className="mt-1 space-y-0.5">
                                                             {(bundle.ingredients ?? []).map((ing, ingIndex) => (
                                                                 <li key={`bundle-${bundleIndex}-ing-${ingIndex}`} className="truncate text-xs text-[#717971]">
-                                                                    {ing.materialSnapshotName} × {ing.quantity} — {formatMoney(Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0)} đ
+                                                                    {ing.materialSnapshotName} × {ing.quantity * bundleQty} — {formatMoney(Number(ing.subTotal) * bundleQty || Number(ing.unitPrice) * Number(ing.quantity) * bundleQty || 0)} đ
                                                                 </li>
                                                             ))}
                                                         </ul>
                                                     </div>
                                                     <div className="flex shrink-0 flex-col items-end gap-1">
+                                                        <div className="flex items-center gap-1 rounded-lg border border-[#c1c9c0]/80 bg-white px-1 py-0.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => updateBundleQty(-1)}
+                                                                disabled={bundleQty <= 1}
+                                                                className="flex size-7 items-center justify-center rounded-md text-[#356647] hover:bg-[#f0f5f1] disabled:opacity-40"
+                                                                aria-label="Giảm số gói">
+                                                                <Icon className="text-[18px]">remove</Icon>
+                                                            </button>
+                                                            <span className="min-w-[1.25rem] text-center text-sm font-bold text-[#1b1c17]">{bundleQty}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => updateBundleQty(1)}
+                                                                className="flex size-7 items-center justify-center rounded-md text-[#356647] hover:bg-[#f0f5f1]"
+                                                                aria-label="Tăng số gói">
+                                                                <Icon className="text-[18px]">add</Icon>
+                                                            </button>
+                                                        </div>
                                                         <span className="text-sm font-bold text-[#356647]">{formatMoney(bundleTotal)} đ</span>
                                                         <button
                                                             type="button"

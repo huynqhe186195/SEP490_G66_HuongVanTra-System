@@ -3,6 +3,7 @@ import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
+import { getStockTransferSourceRef, getStockTransferTypeLabel } from '../utils/stockFlowLabels.js'
 
 export function SlipPrintStyles() {
   return (
@@ -421,19 +422,11 @@ export function StockTransferDocument({ transfer, statusLabel }) {
         <HeaderField label="Trạng thái" value={statusLabel} />
         <HeaderField
           label="Loại phiếu"
-          value={
-            transfer?.sourceOrderId && transfer?.sourceOrderChannel === 'POS'
-              ? 'Đơn hàng POS'
-              : transfer?.sourceOrderId && transfer?.sourceOrderChannel === 'COD'
-                ? 'Đơn hàng COD'
-                : transfer?.sourceRequestCode
-                  ? 'Yêu cầu bổ sung'
-                  : '—'
-          }
+          value={getStockTransferTypeLabel(transfer)}
         />
         <HeaderField
           label="Yêu cầu nguồn"
-          value={transfer?.sourceOrderCode || transfer?.sourceRequestCode || '—'}
+          value={getStockTransferSourceRef(transfer)}
         />
         <HeaderField label="Người yêu cầu" value={transfer?.sourceRequestedByName} />
         <HeaderField label="Thời gian tạo" value={transfer?.createdAt ? formatVietnamDateTime(transfer.createdAt) : '-'} />

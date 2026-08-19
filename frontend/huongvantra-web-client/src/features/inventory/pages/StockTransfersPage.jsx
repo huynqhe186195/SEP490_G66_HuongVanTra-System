@@ -29,6 +29,8 @@ import {
   getStockFlowErrorMessage,
   getStockFlowStatusClass,
   getStockTransferStatusLabel,
+  getStockTransferSourceRef,
+  getStockTransferTypeLabel,
   STOCK_FLOW_TERMS,
 } from '../utils/stockFlowLabels.js'
 import {
@@ -375,7 +377,11 @@ function TransferDetailModal({ transfer, canOperate, isCompleting, onClose, onEd
             </div>
             <p className="mt-1 text-sm text-slate-500">
               {STOCK_FLOW_TERMS.warehouse} → {STOCK_FLOW_TERMS.shelf}
-              {transfer.sourceRequestCode ? ` · ${STOCK_FLOW_TERMS.request}: ${transfer.sourceRequestCode}` : ''}
+              {' · '}
+              {getStockTransferTypeLabel(transfer)}
+              {getStockTransferSourceRef(transfer) !== '—'
+                ? `: ${getStockTransferSourceRef(transfer)}`
+                : ''}
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
@@ -957,18 +963,10 @@ function StockTransfersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-4 text-slate-600">
-                    {transfer.sourceOrderId && transfer.sourceOrderChannel === 'POS'
-                      ? 'Đơn hàng POS'
-                      : transfer.sourceOrderId && transfer.sourceOrderChannel === 'COD'
-                        ? 'Đơn hàng COD'
-                        : transfer.sourceRequestId
-                          ? 'Yêu cầu bổ sung'
-                          : transfer.sourceSuggestionId
-                            ? 'Từ gợi ý'
-                            : 'Không có nguồn (cũ)'}
+                    {getStockTransferTypeLabel(transfer)}
                   </td>
                   <td className="px-4 py-4 font-mono text-xs text-slate-600">
-                    {transfer.sourceOrderCode || transfer.sourceRequestCode || transfer.sourceSuggestionCode || '—'}
+                    {getStockTransferSourceRef(transfer)}
                   </td>
                   <td className="px-4 py-4">{transfer.createdByName || '—'}</td>
                   <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(transfer.createdAt)}</td>

@@ -110,6 +110,46 @@ public class ReturnOrderRepository(OrderDbContext _db) : IReturnOrderRepository
         return (items, total);
     }
 
+    public async Task<List<(ReturnOrder Item, OrderChannel SourceChannel)>> GetAllForExportAsync(
+        string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,
+        int maxRows, CancellationToken ct = default)
+    {
+        var query =
+            from r in _db.ReturnOrders.AsNoTracking()
+            join o in _db.Orders.AsNoTracking() on r.SourceOrderId equals o.Id
+            select new { Return = r, SourceChannel = o.OrderChannel, SourceEmployeeId = o.EmployeeId };
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(x =>
+                (includeAllCodOrders && x.SourceChannel == OrderChannel.COD)
+                || (x.SourceChannel != OrderChannel.COD && x.SourceEmployeeId == employeeId.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToUpperInvariant();
+            query = query.Where(x =>
+                x.Return.ReturnCode.ToUpper().Contains(term)
+                || x.Return.SourceOrderCode.ToUpper().Contains(term)
+                || (x.Return.CustomerSnapshotName != null
+                    && x.Return.CustomerSnapshotName.ToUpper().Contains(term)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceChannel)
+            && Enum.TryParse<OrderChannel>(sourceChannel, true, out var parsedChannel))
+        {
+            query = query.Where(x => x.SourceChannel == parsedChannel);
+        }
+
+        var take = Math.Clamp(maxRows, 1, 10_000);
+        return await query
+            .OrderByDescending(x => x.Return.CreatedAt)
+            .Take(take)
+            .Select(x => new ValueTuple<ReturnOrder, OrderChannel>(x.Return, x.SourceChannel))
+            .ToListAsync(ct);
+    }
+
     public async Task<string?> GetExchangeOrderCodeAsync(Guid exchangeOrderId, CancellationToken ct = default) =>
         await _db.Orders
             .AsNoTracking()

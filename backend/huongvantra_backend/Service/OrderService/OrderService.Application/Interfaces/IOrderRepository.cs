@@ -14,6 +14,13 @@ public interface IOrderRepository
         DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
         int page, int pageSize, CancellationToken ct = default,
         IReadOnlyCollection<Guid>? restrictToOrderIds = null);
+    Task<List<Order>> GetAllForExportAsync(
+        string? search, Guid? customerId, string? status, string? channel,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
+        int maxRows, CancellationToken ct = default,
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null);
     Task<Dictionary<string, int>> CountByStatusAsync(
         string? search, Guid? customerId, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getOrderStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
-import { confirmPacking, fetchPendingCustomBundles } from '../../orders/services/customBundleApi.js'
+import { confirmPacking, fetchCustomBundles } from '../../orders/services/customBundleApi.js'
 import {
   buildWarehouseStockBySkuIdMap,
   fetchSkuStocks,
@@ -38,12 +38,17 @@ function CustomBundlePreviewModal({
       setConfirmError(null)
       try {
         const [bundlesPage, stocks] = await Promise.all([
-          fetchPendingCustomBundles({ page: 1, pageSize: 100 }),
+          fetchCustomBundles({ page: 1, pageSize: 100, packingStatus: 'Pending' }),
           fetchSkuStocks().catch(() => fetchStoreSkuStocks().catch(() => [])),
         ])
         if (cancelled) return
 
-        const found = (bundlesPage.items || []).find((b) => b.id === bundleId) || null
+        let found = (bundlesPage.items || []).find((b) => b.id === bundleId) || null
+        if (!found) {
+          const packedPage = await fetchCustomBundles({ page: 1, pageSize: 100, packingStatus: 'Packed' })
+          if (cancelled) return
+          found = (packedPage.items || []).find((b) => b.id === bundleId) || null
+        }
         setBundle(found)
         const stockBySkuId = buildWarehouseStockBySkuIdMap(stocks)
         const previewItems = (found?.ingredients || []).map((ing) => {
@@ -243,8 +248,9 @@ function CustomBundlePreviewModal({
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">Xác nhận đóng gói custom?</p>
                   <p className="mt-1">
-                    Hệ thống sẽ trừ nguyên liệu / bao bì trên Kho theo danh sách gói và đánh dấu đã đóng gói.
-                    Không sinh lệnh sản xuất hay phiếu điều chuyển.
+                    Hệ thống sẽ trừ nguyên liệu / bao bì trên Kho theo danh sách gói, ghi phiếu xuất Kho
+                    và đánh dấu đã đóng gói. Gói custom không có SKU thành phẩm chuẩn nên không sinh lệnh sản xuất
+                    hay phiếu điều chuyển Kho → Kệ (khác với bán thành phẩm có BOM).
                   </p>
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <button

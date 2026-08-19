@@ -34,8 +34,9 @@ export function mapCustomBundle(item) {
   }
 }
 
-export async function fetchPendingCustomBundles({ page = 1, pageSize = 20 } = {}) {
+export async function fetchCustomBundles({ page = 1, pageSize = 20, packingStatus } = {}) {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (packingStatus) query.set('packingStatus', packingStatus)
   const data = await apiRequestAuth(`/api/v1/orders/custom-bundles?${query.toString()}`, {
     method: 'GET',
   })
@@ -44,6 +45,10 @@ export async function fetchPendingCustomBundles({ page = 1, pageSize = 20 } = {}
     ...paged,
     items: paged.items.map(mapCustomBundle).filter(Boolean),
   }
+}
+
+export async function fetchPendingCustomBundles({ page = 1, pageSize = 20 } = {}) {
+  return fetchCustomBundles({ page, pageSize, packingStatus: 'Pending' })
 }
 
 export async function confirmPacking(bundleId) {
