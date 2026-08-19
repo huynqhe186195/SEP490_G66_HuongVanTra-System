@@ -1,5 +1,6 @@
 import { buildDashboardPath, DASHBOARD_SECTIONS, getDashboardSectionFromSearch } from './dashboardSections.js'
 import { buildCustomerPath, CUSTOMER_SIDEBAR_SECTIONS, getCustomerSectionFromSearch } from './customerSections.js'
+import { B2B_CONTRACTS_ENABLED } from './featureFlags.js'
 
 const ROLE_GROUPS = {
   admin: ['admin'],
@@ -15,6 +16,7 @@ const ROLE_GROUPS = {
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng / khi đã tách rõ với kiểm kê. */
 const SIDEBAR_DISABLED_MODULES = new Set([
   'inventory_reports',
+  ...(B2B_CONTRACTS_ENABLED ? [] : ['contracts']),
 ])
 
 const HOME_MODULE_PRIORITY = [
@@ -709,6 +711,20 @@ function groupAdminManagerSidebar(items, isAdmin) {
   return [...result, ...rest]
 }
 
+function applyFeatureFlagFilters(items) {
+  if (B2B_CONTRACTS_ENABLED) return items
+
+  return items
+    .filter((item) => item.module !== 'contracts')
+    .map((item) => {
+      if (!item.children?.length) return item
+      const children = item.children.filter((child) => child.path !== '/orders/create')
+      if (!children.length) return null
+      return { ...item, children, path: children[0].path || item.path }
+    })
+    .filter(Boolean)
+}
+
 function isSidebarModuleEnabled(module) {
   return !SIDEBAR_DISABLED_MODULES.has(String(module || '').toLowerCase())
 }
@@ -758,7 +774,7 @@ export function getNavigationItemsForModules(modules = [], roles = []) {
     modules.map((module) => module.toLowerCase()).filter(isSidebarModuleEnabled),
   )
 
-  return navigationItems
+  const filtered = navigationItems
     .map((item) => {
       if (!isSidebarModuleEnabled(item.module)) return null
 
@@ -777,6 +793,8 @@ export function getNavigationItemsForModules(modules = [], roles = []) {
       return null
     })
     .filter(Boolean)
+
+  return applyFeatureFlagFilters(filtered)
 }
 
 export function getNavigationItemsForRoles(roles = []) {
@@ -784,7 +802,7 @@ export function getNavigationItemsForRoles(roles = []) {
     return []
   }
 
-  return navigationItems
+  const filtered = navigationItems
     .map((item) => {
       if (!isSidebarModuleEnabled(item.module)) return null
       if (!hasAnyRoleGroup(roles, item.roles)) return null
@@ -799,6 +817,8 @@ export function getNavigationItemsForRoles(roles = []) {
       return item
     })
     .filter(Boolean)
+
+  return applyFeatureFlagFilters(filtered)
 }
 
 function withRoleAwareProductLabel(items, roles = []) {
@@ -1130,6 +1150,12 @@ export function canAccessModule(session, module) {
 
 export function canAccessPath(session, pathname, search = '') {
   const path = (pathname || '').toLowerCase()
+
+  if (!B2B_CONTRACTS_ENABLED) {
+    if (path === '/contracts' || path.startsWith('/contracts/')) return false
+    if (path === '/orders/create' || path.startsWith('/orders/create/')) return false
+  }
+
   const orderDetailContext = getOrderDetailContext(pathname, search)
 
   if (orderDetailContext === 'cod' && canAccessModule(session, 'cod_ops')) {
@@ -1274,6 +1300,12 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'inventory_sync_monitor' || module === 'integrations') {
     return 'Chỉ Quản lý hoặc Admin được xem trang đồng bộ bán hàng sang kho.'
+  }
+  if (module === 'contracts') {
+    return 'Module hợp đồng B2B đang tạm ẩn.'
+  }
+  if (pathname === '/orders/create' || pathname?.startsWith('/orders/create/')) {
+    return 'Module bán theo hợp đồng đang tạm ẩn.'
   }
   if (module === 'users_admin' || module === 'phan_quyen_admin') {
     return 'Chỉ Quản trị viên mới được quản lý tài khoản và phân quyền.'

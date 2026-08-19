@@ -6,9 +6,6 @@ import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage.jsx'
-import ContractsPage from '../features/contracts/pages/ContractsPage.jsx'
-import ContractFormPage from '../features/contracts/pages/ContractFormPage.jsx'
-import ContractDetailPage from '../features/contracts/pages/ContractDetailPage.jsx'
 import CustomerFormPage from '../features/customers/pages/CustomerFormPage.jsx'
 import CustomerAddressesPage from '../features/customers/pages/CustomerAddressesPage.jsx'
 import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
@@ -50,7 +47,6 @@ import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPa
 import SuppliersPage from '../features/inventory/pages/SuppliersPage.jsx'
 import SupplierProductsPage from '../features/inventory/pages/SupplierProductsPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
-import OrderCreatePage from '../features/orders/pages/OrderCreatePage.jsx'
 import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosCashSessionsPage from '../features/pos/pages/PosCashSessionsPage.jsx'
@@ -97,7 +93,6 @@ function App() {
         <Route path="/orders/cod" element={<CodOrdersPage />} />
         <Route path="/orders/cod/shift-report" element={<Navigate to="/orders/cod?view=report" replace />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
-        <Route path="/orders/create" element={<OrderCreatePage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/inventory/products" element={<ProductsListPage />} />
         <Route path="/products/categories" element={<ProductsCategoriesPage />} />
@@ -161,10 +156,6 @@ function App() {
         <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />
         <Route path="/admin/permissions" element={<Navigate to="/admin/phan-quyen?tab=quyen" replace />} />
-        <Route path="/contracts" element={<ContractsPage />} />
-        <Route path="/contracts/new" element={<ContractFormPage />} />
-        <Route path="/contracts/:id" element={<ContractDetailPage />} />
-        <Route path="/contracts/:id/edit" element={<ContractFormPage />} />
         <Route path="/reports" element={<Navigate to="/reports/end-of-day" replace />} />
         <Route path="/reports/end-of-day" element={<EndOfDayReportPage />} />
       </Route>

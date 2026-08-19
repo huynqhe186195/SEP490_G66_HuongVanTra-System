@@ -89,6 +89,8 @@ import {
   subscribeCashSession,
 } from '../utils/posCashSessionStore.js'
 
+// ─── Hằng số cấu hình POS ────────────────────────────────────────────────────
+// Hai chế độ bán: counter = bán tại quầy (TM/QR), takeaway = tạo đơn COD/giao hàng.
 const ALL_SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
     { id: "takeaway", label: "Bán COD", icon: "local_shipping" },
@@ -123,6 +125,8 @@ const PRICE_FILTER_OPTIONS = [
 
 const POS_PRODUCT_PAGE_SIZE = 18;
 
+// Mỗi salesMode có workspace riêng (tabs + sessions).
+// Mỗi tab là một giỏ hàng độc lập; cho phép phục vụ nhiều khách cùng lúc.
 function createWorkspace(mode = "counter") {
     const empty = () => createEmptySession(mode);
     if (mode === "takeaway") {
@@ -147,6 +151,10 @@ function Icon({ children, className = "", filled = false }) {
     );
 }
 
+// ─── Hàm tính tiền theo dòng ──────────────────────────────────────────────────
+// getLineGross: thành tiền trước CK; quà tặng (isGift) = 0 đ.
+// getLineDiscount: CK dòng (% hoặc số tiền cố định), không vượt gross.
+// getLineTotal: thành tiền sau CK dòng.
 function getLineGross(item) {
     if (item.isGift) return 0;
     return item.qty * item.price;
@@ -166,6 +174,8 @@ function getLineTotal(item) {
     return Math.max(getLineGross(item) - getLineDiscount(item), 0);
 }
 
+// clampLineDiscountItem: đảm bảo CK dòng không vượt thành tiền; gọi lại sau mỗi thay đổi giỏ.
+// clampCartLineDiscounts: áp dụng clamp cho toàn bộ mảng cartItems.
 /** Chuẩn hóa CK dòng — không vượt thành tiền dòng. */
 function clampLineDiscountItem(item) {
     const gross = getLineGross(item);
@@ -202,6 +212,11 @@ function getPromotionApplyErrorMessage(error) {
     return message || "Có lỗi xảy ra.";
 }
 
+// ─── Tính tổng đơn hàng (pure function, chạy mỗi render) ─────────────────────
+// Thứ tự áp CK: dòng sản phẩm → đơn hàng (VIP) → coupon → hạng thành viên.
+// Bundle (bộ nguyên liệu tự chọn) cộng thêm vào grossSubtotal nhưng không có CK dòng.
+// Kết quả trả về gồm: grossSubtotal, itemDiscountTotal, subtotalAfterItemDiscount,
+// orderDiscountAmount, couponDiscountAmount, membershipDiscountAmount, total, totalDiscount.
 function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent, appliedPromotion = null, customBundles = []) {
     const items = Array.isArray(cartItems) ? cartItems : [];
     const bundles = Array.isArray(customBundles) ? customBundles : [];
@@ -234,6 +249,8 @@ function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFi
     };
 }
 
+// createEmptySession: state mặc định của một tab giỏ hàng mới.
+// PT mặc định: CASH (quầy) hoặc COD (takeaway/giao hàng).
 function createEmptySession(mode = "counter") {
     return {
         searchValue: "",
@@ -255,6 +272,9 @@ function createEmptySession(mode = "counter") {
     };
 }
 
+// ─── Component chính ──────────────────────────────────────────────────────────
+// PosPage là màn hình bán hàng duy nhất. Không có router con — mọi modal/sidebar
+// đều render inline trong component này thông qua state (openModal, isPaymentSidebarOpen...).
 function PosPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -281,6 +301,8 @@ function PosPage() {
     if (canUsePosCodMode(session)) return 'takeaway'
     return 'counter'
   })
+  // workspaceByMode lưu toàn bộ state giỏ hàng, tổ chức theo salesMode → tabs → sessions.
+  // Được persist xuống IndexedDB (posWorkspaceStorage) sau mỗi thay đổi (debounce 300ms).
   const [workspaceByMode, setWorkspaceByMode] = useState({
     counter: createWorkspace('counter'),
     takeaway: createWorkspace('takeaway'),
@@ -305,6 +327,8 @@ function PosPage() {
   const [dayEndRequested, setDayEndRequested] = useState(false)
   const [shelfOnDuty, setShelfOnDuty] = useState(null)
 
+  // Đồng bộ trạng thái ca quỹ (cash session) khi mount và khi có thay đổi từ tab khác.
+  // cashSessionOpen = true chỉ khi đã mở ca quỹ (bắt buộc để bán TM/QR quầy).
   useEffect(() => {
     refreshCashSession().then(() => setCashSessionOpen(isOpenCashSessionReady()))
     return subscribeCashSession(() => setCashSessionOpen(isOpenCashSessionReady()))
@@ -355,6 +379,8 @@ function PosPage() {
   const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
   const validatedWorkspaceUserRef = useRef(null)
 
+  // Khi authUserId thay đổi (đăng nhập user khác): reset workspace rồi restore từ IndexedDB.
+  // isWorkspaceReady = false trong khi đang load → hiển thị loading spinner.
   useEffect(() => {
     let cancelled = false
     setIsWorkspaceReady(false)
@@ -392,6 +418,8 @@ function PosPage() {
     }
   }, [authUserId])
 
+  // Auto-persist workspace xuống IndexedDB sau mỗi thay đổi (debounce 300ms).
+  // Giúp khôi phục giỏ hàng nếu người dùng tải lại trang / đóng tab nhầm.
   useEffect(() => {
     if (!authUserId || !isWorkspaceReady) return undefined
     const timerId = setTimeout(() => {
@@ -404,6 +432,8 @@ function PosPage() {
     return () => clearTimeout(timerId)
   }, [authUserId, isWorkspaceReady, restoredOrderIds, salesMode, workspaceByMode])
 
+  // Sau khi restore workspace, xác thực lại giá/tồn từng sản phẩm trong giỏ với catalog hiện tại.
+  // Sản phẩm không còn active → đánh dấu isUnavailable=true, khóa nút thanh toán.
   useEffect(() => {
     if (!authUserId || !isWorkspaceReady || validatedWorkspaceUserRef.current === authUserId)
       return undefined
@@ -558,6 +588,9 @@ function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ khi đổi mode / PT không hợp lệ
   }, [isTakeaway, paymentMethod, isOnline])
 
+    // ─── State helpers ──────────────────────────────────────────────────────────
+    // patchWorkspace: cập nhật workspace của salesMode hiện tại (không ảnh hưởng mode kia).
+    // updateActiveSession: cập nhật session của tab đang active trong workspace hiện tại.
     const patchWorkspace = (patch) => {
         setWorkspaceByMode((all) => ({
             ...all,
@@ -670,6 +703,8 @@ function PosPage() {
         };
     }, []);
 
+    // Fetch danh mục sản phẩm để hiển thị bộ lọc category bên trái.
+    // catalogReloadKey tăng khi đồng bộ catalog mới → tự động reload danh mục.
     useEffect(() => {
         let mounted = true;
 
@@ -736,6 +771,8 @@ function PosPage() {
     return digits ? Number(digits) : 0
   }
 
+  // tierDiscountPercent: KH VIP không dùng tier (dùng CK thủ công); KH phổ thông dùng % hạng thành viên.
+  // canUseVipManualAdjustments: chỉ KH VIP mới được CK dòng/đơn và đánh dấu quà tặng.
   const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType)
     ? 0
     : Number(selectedCustomer?.tierDiscountPercent || 0)
@@ -850,6 +887,9 @@ function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-clamp debt plan when payment inputs change
   }, [selectedCustomer?.customerId, change, amountPaidInput, customerCurrentDebt, customerOpenDebts])
 
+    // Tìm kiếm sản phẩm: debounce 250ms khi có từ khóa; load ngay khi ô tìm kiếm rỗng.
+    // fetchPosProducts → GET /api/v1/store/skus (online) hoặc IndexedDB (offline).
+    // catalogReloadKey thay đổi → trigger lại fetch để cập nhật giá/tồn mới nhất.
     useEffect(() => {
         let cancelled = false;
 
@@ -885,6 +925,8 @@ function PosPage() {
         };
     }, [searchValue, activeTabId, catalogReloadKey]);
 
+    // handleRefreshCatalog: đồng bộ catalog từ ProductService về IndexedDB (offline cache).
+    // Sau khi sync: tăng catalogReloadKey → trigger reload sản phẩm và danh mục.
     async function handleRefreshCatalog() {
         if (!canSyncCatalog) return;
         setIsCatalogSyncing(true);
@@ -1160,6 +1202,9 @@ function PosPage() {
         setTabCloseConfirm(null);
     };
 
+    // ─── Quản lý giỏ hàng ───────────────────────────────────────────────────────
+    // addToCart: thêm SP vào giỏ. Nếu SKU đã có → tăng qty theo step. Nếu chưa → thêm dòng mới.
+    // step mặc định = 1 (Piece); sản phẩm Gram giữ step=1 (nhập tùy ý).
     const addToCart = (product) => {
         const stockOnHand = Math.max(0, Number(product.stockQuantity) || 0);
 
@@ -1216,6 +1261,7 @@ function PosPage() {
         });
     };
 
+    // updateQuantity: bấm nút +/- trên dòng giỏ. qty về 0 → tự xóa dòng.
     const updateQuantity = (sku, direction) => {
         const target = cartItems.find((item) => item.sku === sku);
         if (!target) {
@@ -1239,6 +1285,9 @@ function PosPage() {
         }));
     };
 
+    // setLineQuantity: nhập số lượng trực tiếp vào ô input trên dòng giỏ.
+    // normalizePosBaseQuantity làm tròn đúng đơn vị (Piece=int, Gram=float).
+    // qty <= 0 → xóa dòng.
     const setLineQuantity = (sku, rawValue) => {
         const item = cartItems.find((row) => row.sku === sku);
         if (!item) {
@@ -1271,6 +1320,7 @@ function PosPage() {
         }));
     };
 
+    // updateLineDiscountType: đổi loại CK dòng (% ↔ số tiền), chỉ KH VIP.
     const updateLineDiscountType = (sku, discountType) => {
         if (!canUseVipManualAdjustments) return;
         updateActiveSession((prev) => ({
@@ -1279,6 +1329,8 @@ function PosPage() {
         }));
     };
 
+    // toggleLineGift: đánh dấu SP là quà tặng (giá = 0 đ), chỉ KH VIP.
+    // Bật gift → xóa CK dòng hiện tại (tránh double discount).
     const toggleLineGift = (sku) => {
         if (!canUseVipManualAdjustments) {
             showError("Quà tặng chỉ áp dụng cho khách VIP / đối ngoại.");
@@ -1348,6 +1400,8 @@ function PosPage() {
         updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 });
     };
 
+    // buildPromotionCartSignature: tạo chuỗi hash giỏ hàng để phát hiện thay đổi sau khi áp coupon.
+    // Nếu giỏ thay đổi sau khi áp coupon → tự động xóa appliedPromotion, yêu cầu áp lại.
     const buildPromotionCartSignature = () =>
         JSON.stringify({
             items: cartItems.map((item) => ({
@@ -1485,6 +1539,9 @@ function PosPage() {
         updateActiveSession({ appliedPromotion: null, promoCodeInput: "" });
     };
 
+    // validateDiscountsBeforePayment: kiểm tra toàn bộ discount trước khi mở popup xác nhận.
+    // Tự động clamp CK dòng nếu vượt thành tiền (do giá sản phẩm vừa thay đổi).
+    // Dừng thanh toán và hiển thị lỗi nếu có vi phạm nghiệp vụ discount.
     const validateDiscountsBeforePayment = () => {
         const normalizedItems = clampCartLineDiscounts(cartItems);
         const cartBySku = Object.fromEntries(cartItems.map((row) => [row.sku, row]));
@@ -1666,6 +1723,9 @@ function PosPage() {
     const selectedPaymentMethodLabel =
         paymentMethods.find((method) => method.id === paymentMethod)?.label ?? paymentMethod;
 
+  // buildOrderPayload: tạo request body gửi lên POST /api/v1/orders (channel POS/QR quầy).
+  // Tab COD (takeaway) KHÔNG dùng hàm này — dùng buildTakeawayOrderPayload trong posApi.js.
+  // manualDiscount chỉ bao gồm CK thủ công VIP (dòng + đơn); CK hạng thành viên do BE tự tính.
   // JSON giỏ quầy (POS/QR). Tab COD không dùng hàm này — dùng buildTakeawayOrderPayload trong posApi.js.
   const buildOrderPayload = (method, amount, debtSettlementJson = null) => {
     const storeId = resolvePosStoreId()
@@ -1725,6 +1785,8 @@ function PosPage() {
     }
   }
 
+  // buildReceiptData: tạo object data cho việc in hóa đơn nhiệt (K80).
+  // Được gọi sau khi có kết quả thành công từ BE (orderCode, invoiceCode).
   const buildReceiptData = ({
     orderCode,
     method,
@@ -1988,8 +2050,9 @@ function PosPage() {
         return sessionSnapshot;
     };
 
-    // Nút Thanh toán trên sidebar — chỉ mở cột thu tiền, chưa gọi API.
-    const openPaymentSidebar = () => {
+  // openPaymentSidebar: bấm nút "Thanh toán" → mở sidebar nhập số tiền.
+  // Chỉ mở UI, CHƯA gọi API. API được gọi sau khi user bấm "Xác nhận" trong popup.
+  const openPaymentSidebar = () => {
         if (!hasCartItems) {
             showError("Giỏ hàng trống.");
             return;
@@ -1997,8 +2060,12 @@ function PosPage() {
         setIsPaymentSidebarOpen(true);
     };
 
-    // Tab COD/giao hàng → createTakeawayCodOrder (channel COD). Không dùng buildOrderPayload.
-    const handleTakeawayPayment = async (
+  // ─── Luồng thanh toán COD/giao hàng (tab takeaway) ─────────────────────────
+  // handleTakeawayPayment: xử lý thanh toán khi salesMode = 'takeaway'.
+  //   - isTransferPayment: tạo đơn QR mang đi → createTakeawayVietQrOrder → navigate sang QR page.
+  //   - paymentMethod = 'COD': tạo đơn COD → createTakeawayCodOrder → in hóa đơn + reset giỏ.
+  // Tab COD/giao hàng → createTakeawayCodOrder (channel COD). Không dùng buildOrderPayload.
+  const handleTakeawayPayment = async (
         debtSettlement = null,
         idempotencyKey,
         acceptBackorder = false,
@@ -2137,6 +2204,11 @@ function PosPage() {
         printReceiptFromData(receipt);
     };
 
+    // ─── executePayment: điểm phân nhánh chính gọi API tạo đơn ─────────────────
+    // Rẽ 3 nhánh sau khi đã xác nhận:
+    //   1. isTakeaway (COD mode) → handleTakeawayPayment
+    //   2. isTransferPayment (QR quầy) → createPosOrderOnline → navigate sang QR page
+    //   3. CASH (tiền mặt / ghi nợ) → finalizeRecordedPayment(createPosOrderOffline)
     // Rẽ 3 nhánh sau khi đã xác nhận: COD | QR quầy | tiền mặt. Đây mới là chỗ gọi API tạo đơn.
     const executePayment = async (
         debtSettlement = null,
@@ -2241,6 +2313,10 @@ function PosPage() {
         });
     };
 
+    // submitCheckoutAttempt: wrapper chống double-submit.
+    // checkoutAttemptRef so sánh payload lần này với lần trước;
+    // nếu trùng → tái sử dụng cùng idempotencyKey (BE sẽ trả về 200 thay vì tạo đơn mới).
+    // idempotencyKey được gán vào header X-Idempotency-Key trong apiClient.
     // Chống double-click: cùng payload thì tái sử dụng X-Idempotency-Key.
     const submitCheckoutAttempt = (
         activeDebtSettlement = null,
@@ -2289,6 +2365,10 @@ function PosPage() {
             ),
         );
 
+    // previewSellFirstBeforePayment: gọi HTTP preview tồn kho TRƯỚC khi mở popup xác nhận.
+    // Nếu BE trả về backorderRequired → mở BackorderConfirmModal (hỏi khách chờ không).
+    // Nếu cần chờ kho/điều chuyển → mở SellFirstConfirmModal (thông báo khách phải chờ).
+    // Đủ kệ → return false → mở popup xác nhận thanh toán bình thường.
     const previewSellFirstBeforePayment = async () => {
         if (cartItems.length === 0) return false;
         const preview = await previewPosStockHandling(cartItems.map((item) => ({
@@ -2319,6 +2399,18 @@ function PosPage() {
         return false;
     };
 
+    // ─── handlePayment: bấm "Xác nhận thanh toán" trên sidebar ─────────────────
+    // Kiểm tra điều kiện nghiệp vụ (theo thứ tự):
+    //   1. Catalog đang xác thực → chặn.
+    //   2. Có đơn QR đang chờ → chặn (phải hoàn tất QR trước).
+    //   3. Có sản phẩm không còn bán → chặn.
+    //   4. Khách DN → chặn (phải lập đơn hợp đồng).
+    //   5. COD nhưng chưa chọn khách → chặn.
+    //   6. Khách lẻ có CK/quà → chặn.
+    //   7. Khách lẻ trả không đủ → chặn.
+    //   8. Kiểm tra ca quầy + ca quỹ.
+    //   9. Preview tồn kho (HTTP) → backorder/sell-first modal hoặc mở popup xác nhận.
+    // CHƯA gọi API tạo đơn ở bước này.
     // Nút trên PosPaymentSidebar. Chỉ chặn nghiệp vụ rồi mở popup — chưa POST đơn.
     const handlePayment = async () => {
         setAcceptedBackorder(null);
@@ -2443,6 +2535,10 @@ function PosPage() {
         });
     };
 
+    // ─── handleConfirmPayment: bấm "Xác nhận" trên PosPaymentConfirmModal ──────
+    // Đây là điểm khởi động thực sự gọi API POST /api/v1/orders.
+    // Luồng: handleConfirmPayment → submitCheckoutAttempt → executePayment → createPosOrderOffline/QR/COD.
+    // 409 từ BE (requiresBackorderConfirmation) → đóng popup → mở BackorderConfirmModal.
     // Nút Xác nhận trên popup. Bắt online rồi mới submitCheckoutAttempt → executePayment.
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
@@ -2485,6 +2581,10 @@ function PosPage() {
         }
     };
 
+    // handleBackorderAccept: khách đồng ý chờ hàng trong BackorderConfirmModal.
+    //   - fromStockPreview=true: đến từ preview trước thanh toán → lưu acceptedBackorder, mở popup xác nhận.
+    //   - fromStockPreview=false: đến từ 409 BE → gọi luôn submitCheckoutAttempt với acceptBackorder=true.
+    // Tự động tạo hồ sơ khách vãng lai nếu có SĐT liên hệ (lưu best-effort, không ảnh hưởng đơn).
     const handleBackorderAccept = async ({
         fulfillmentPreference,
         pickupDate,
@@ -2591,6 +2691,9 @@ function PosPage() {
         }
     };
 
+    // ─── Lọc và phân trang sản phẩm hiển thị ────────────────────────────────────
+    // filteredSearchProducts: áp bộ lọc category + giá lên danh sách sản phẩm từ API.
+    // visibleProductPageItems: phân trang client-side (POS_PRODUCT_PAGE_SIZE = 18 SP/trang).
     const hasSearchQuery = searchValue.trim().length > 0;
 
     const filteredSearchProducts = useMemo(() => {
@@ -2648,6 +2751,9 @@ function PosPage() {
     const showCustomerDropdown = customerSearchDisplayState === "results";
     const showCustomerSearchEmpty = customerSearchDisplayState === "empty";
 
+    // selectCustomer: chọn khách từ kết quả tìm kiếm.
+    // KH DN → từ chối (phải dùng kênh hợp đồng).
+    // KH không phải VIP → xóa toàn bộ CK thủ công và quà tặng trong giỏ.
     const selectCustomer = (customer) => {
         if (isCorporateCustomerType(customer?.customerType)) {
             showError(CORPORATE_AT_POS_MESSAGE);
@@ -2740,10 +2846,14 @@ function PosPage() {
         updateActiveSession({ shippingAddress: value });
     };
 
+    // Chưa restore xong workspace → hiện spinner toàn trang, tránh render giỏ rỗng nhầm.
     if (authUserId && !isWorkspaceReady) {
         return <LoadingIndicator label="Đang khôi phục giỏ POS..." className="min-h-[60vh]" />;
     }
 
+    // ─── JSX render ──────────────────────────────────────────────────────────────
+    // Cấu trúc layout: PosShiftDutyGate (kiểm tra ca) → header (search + tabs) → body.
+    // Body chia đôi: trái = danh sách sản phẩm, phải = giỏ hàng + thanh toán.
     return (
         <PosShiftDutyGate
             onDutyChange={setShelfOnDuty}

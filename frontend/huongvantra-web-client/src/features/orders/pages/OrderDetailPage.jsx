@@ -419,12 +419,21 @@ function OrderDetailPage() {
 
   async function handleReviewBackorderCancellation(approved) {
     if (!canReviewRefund || !order) return
-    const note = window.prompt(
-      approved ? 'Ghi chú duyệt hoàn tiền (không bắt buộc):' : 'Lý do từ chối (không bắt buộc):',
-    )
+    const note = await promptDialog({
+      title: approved ? 'Duyệt hoàn tiền' : 'Từ chối yêu cầu hủy',
+      message: approved
+        ? 'Ghi chú duyệt hoàn tiền (không bắt buộc).'
+        : 'Lý do từ chối (không bắt buộc).',
+      placeholder: approved ? 'Nhập ghi chú duyệt...' : 'Nhập lý do từ chối...',
+      confirmLabel: approved ? 'Duyệt hoàn tiền' : 'Từ chối',
+      cancelLabel: 'Hủy bỏ',
+      tone: approved ? 'primary' : 'danger',
+      suggestions: getReasonSuggestions(approved ? 'backorderRefundApprove' : 'backorderRefundReject'),
+    })
+    if (note === null) return
     try {
       setIsSaving(true)
-      const updated = await reviewBackorderCancellation(order.id, approved, note || '')
+      const updated = await reviewBackorderCancellation(order.id, approved, note)
       setOrder(updated)
       setTimelineRefreshKey((key) => key + 1)
       showSuccess(approved ? 'Đã duyệt yêu cầu hoàn tiền.' : 'Đã từ chối yêu cầu hủy.')

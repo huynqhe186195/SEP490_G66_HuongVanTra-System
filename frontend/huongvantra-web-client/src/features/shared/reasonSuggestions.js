@@ -134,6 +134,18 @@ export const REASON_SUGGESTIONS = {
     'Khách từ chối nhận hàng',
     'Hàng đã quá hạn lưu giữ tại kệ',
   ],
+  backorderRefundApprove: [
+    'Đã xác minh lý do hủy hợp lệ',
+    'Khách đã trả lại hàng giao ngay',
+    'Đồng ý hoàn theo chính sách đặt cọc',
+    'Đã đối soát số tiền cần hoàn',
+  ],
+  backorderRefundReject: [
+    'Khách chưa trả lại hàng đã giao',
+    'Thiếu bằng chứng hủy đơn',
+    'Đơn đã xử lý sản xuất, chưa đủ điều kiện hủy',
+    'Cần liên hệ khách trước khi quyết định',
+  ],
   receiptReprint: [
     'Khách xin bản in thêm',
     'Máy in lỗi / giấy mờ',
