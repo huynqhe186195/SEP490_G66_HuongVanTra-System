@@ -967,7 +967,10 @@ public class StockTransferLogic(
             transfer.SourceRequest?.RequestCode,
             transfer.SourceRequest?.RequestedByName,
             transfer.SourceSuggestionId,
-            transfer.SourceSuggestion?.SuggestionCode);
+            transfer.SourceSuggestion?.SuggestionCode,
+            transfer.SourceOrderId,
+            transfer.SourceOrderCode,
+            transfer.SourceOrderChannel);
     }
 
     private static void EnsureActor(Guid actorId)

@@ -463,6 +463,7 @@ public class InventoryLogic(
                             : decisions.Any(d => d.WarehouseDeductedQuantity > 0)
                                 ? "pending_warehouse_transfer"
                                 : "pending_deduct",
+                    OrderChannelSnapshot = request.OrderChannel,
                     QueueStatus = shortages.Count > 0 ? QueueStatus.Insufficient : QueueStatus.Waiting,
                     TotalAmount = request.TotalAmount,
                     IsDeducted = false,
@@ -753,6 +754,9 @@ public class InventoryLogic(
         if (queue.IsDeducted)
             return;
 
+        // Đồng bộ snapshot trạng thái đơn cho màn Warehouse; nếu chỉ đổi
+        // OrderStockStatus thì cột "Trạng thái đơn" sẽ giữ WaitingTransfer cũ.
+        queue.OrderPaymentStatus = "cancellationrequested";
         queue.OrderStockStatus = OrderStockStatusCancellationRequested;
         queue.CancelReason = string.IsNullOrWhiteSpace(reason)
             ? "Đơn đang chờ duyệt hủy / hoàn tiền"
@@ -809,6 +813,14 @@ public class InventoryLogic(
 
         if (queue.QueueStatus == QueueStatus.Cancelled)
         {
+            // Queue hủy từ phiên bản trước có thể còn snapshot WaitingTransfer.
+            // Đồng bộ lại để Warehouse không hiển thị trạng thái đơn đã lỗi thời.
+            if (!string.Equals(queue.OrderPaymentStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                queue.OrderPaymentStatus = "cancelled";
+                await _queueRepo.SaveChangesAsync(innerCt);
+            }
+
             // Reconcile dữ liệu dở dang từ phiên bản cũ: queue đã bị đánh dấu Cancelled
             // nhưng release trước đó lỗi nên IsReserved/ReservedQuantity chưa được nhả.
             // Không trả về sớm trước khi xử lý hết stock effect.
@@ -891,6 +903,9 @@ public class InventoryLogic(
         await ReleaseOrRestoreQueueHoldAsync(queue, innerCt);
 
         queue.QueueStatus = QueueStatus.Cancelled;
+        // Queue là projection phía Kho, vì vậy cần phản ánh kết quả hủy cuối
+        // cùng của đơn thay vì để lại trạng thái chờ điều chuyển trước đó.
+        queue.OrderPaymentStatus = "cancelled";
         queue.OrderStockStatus = "cancelled";
         queue.ConfirmedAt ??= DateTime.UtcNow;
         queue.CancelledAt = DateTime.UtcNow;
@@ -2122,6 +2137,9 @@ public class InventoryLogic(
             Note = $"Tự động sinh khi Thủ kho xác nhận bán trước trừ sau cho đơn {queue.OrderCode}",
             ExportSlipId = exportSlipId,
             ImportSlipId = importSlipId,
+            SourceOrderId = queue.OrderId,
+            SourceOrderCode = queue.OrderCode,
+            SourceOrderChannel = queue.OrderChannelSnapshot,
             CreatedBy = effectiveConfirmedBy,
             CreatedByName = NormalizeSnapshotText(confirmer?.CreatedByName),
             CreatedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName),
@@ -3853,7 +3871,7 @@ public class InventoryLogic(
     private static StockDeductQueueResponse MapQueue(StockDeductQueue q) => new(
         q.Id, q.OrderId, q.OrderCode,
         q.QueueStatus.ToString().ToLowerInvariant(),
-        q.OrderPaymentStatus,
+        q.QueueStatus == QueueStatus.Cancelled ? "cancelled" : q.OrderPaymentStatus,
         q.OrderStockStatus,
         q.TotalAmount,
         q.CreatedAt,

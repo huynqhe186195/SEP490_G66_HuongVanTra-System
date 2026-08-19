@@ -3,6 +3,7 @@ using System;
 using InventoryService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace InventoryService.Infrastructure.Migrations
 {
     [DbContext(typeof(InventoryDbContext))]
-    partial class InventoryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260819180249_AddSourceOrderToStockTransfer")]
+    partial class AddSourceOrderToStockTransfer
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -884,9 +887,6 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
-                    b.Property<string>("OrderChannelSnapshot")
-                        .HasColumnType("longtext");
-
                     b.Property<string>("OrderCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1468,9 +1468,6 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<string>("SourceOrderChannel")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("SourceOrderCode")
                         .HasColumnType("longtext");
 
                     b.Property<Guid?>("SourceOrderId")

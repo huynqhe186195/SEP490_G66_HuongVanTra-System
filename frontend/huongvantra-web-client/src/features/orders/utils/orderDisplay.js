@@ -346,7 +346,7 @@ export function getInventorySyncLabel(status) {
   const map = {
     Synced: 'Đã đồng bộ kho',
     PendingDeduction: 'Chờ trừ tồn quầy',
-    Cancelled: 'Không trừ tồn quầy (đã hủy)',
+    Cancelled: 'Không trừ tồn kho (đã hủy)',
   }
   return map[key] || status || '—'
 }
@@ -368,7 +368,7 @@ export function resolveInventorySyncMeta(order) {
 
   if (orderStatus === 'Cancelled' || syncStatus === 'Cancelled') {
     return {
-      label: 'Không trừ tồn quầy (đã hủy)',
+      label: 'Không trừ tồn kho (đã hủy)',
       className: 'bg-slate-100 text-slate-500',
     }
   }
@@ -665,7 +665,7 @@ export function calcOrderFinalAmount(lines = [], discountAmount = 0) {
 // Legacy helpers still used by inventory stock-deduct pages
 export const STOCK_STATUS_OPTIONS = [
   { value: 'pending_deduct', label: 'Chờ trừ tồn quầy' },
-  { value: 'deducted', label: 'Đã trừ tồn quầy' },
+  { value: 'deducted', label: 'Đã xử lý' },
   { value: 'waiting_stock', label: 'Chờ hàng' },
   { value: 'cancelled', label: 'Đã hủy (kho)' },
 ]
@@ -680,11 +680,11 @@ export function getStockStatusLabel(status) {
     pendingdeduction: 'Chờ trừ tồn quầy',
     pending_warehouse_transfer: 'Chờ điều chuyển từ Kho',
     pending_custom_pack: 'Gói custom chờ đóng gói',
-    deducted: 'Đã trừ tồn quầy',
-    synced: 'Đã trừ tồn quầy',
+    deducted: 'Đã xử lý',
+    synced: 'Đã xử lý',
     restored: 'Đã hoàn tồn',
     waiting_stock: 'Chờ hàng',
-    cancelled: 'Đã hủy',
+    cancelled: 'Không trừ tồn kho (đã hủy)',
     cancelled_after_shipping: 'Đã hủy sau khi giao',
   }
   return map[key] || status || '—'

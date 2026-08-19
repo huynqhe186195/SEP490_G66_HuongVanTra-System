@@ -1922,6 +1922,9 @@ public class OrderLogic(
         order.DeliveredByName = actorName;
         order.UpdatedAt = deliveredAt;
 
+        // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+        await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, OrderStatus.Completed.ToString(), ct);
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Completed,
@@ -3280,7 +3283,8 @@ public class OrderLogic(
                     order.FulfillmentPreference?.ToString(),
                     order.PickupDate,
                     order.PickupNote,
-                    ReserveOnly: order.OrderChannel == OrderChannel.COD),
+                    ReserveOnly: order.OrderChannel == OrderChannel.COD,
+                    OrderChannel: order.OrderChannel.ToString()),
                 ct);
         }
         catch (InventoryStockHandlingException ex)

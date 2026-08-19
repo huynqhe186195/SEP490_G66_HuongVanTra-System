@@ -87,7 +87,9 @@ public record InventoryStockHandlingRequest(
     DateTime? PickupDate = null,
     string? PickupNote = null,
     /// <summary>COD: chuẩn bị tồn giống POS nhưng chỉ reserve, không trừ Kệ ngay.</summary>
-    bool ReserveOnly = false);
+    bool ReserveOnly = false,
+    /// <summary>Kênh đơn hàng (POS/COD/...) để gắn vào queue và phiếu điều chuyển.</summary>
+    string? OrderChannel = null);
 
 public record InventoryStockHandlingLineResponse(
     Guid SkuId,
