@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -71,7 +71,7 @@ function ReturnOrdersPage() {
   }, [queryParams])
 
   return (
-    <PageShell className="pb-8">
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Phiếu trả hàng"

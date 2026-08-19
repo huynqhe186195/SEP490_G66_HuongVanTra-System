@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OpsActionQueue from '../../../components/shared/OpsActionQueue.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
@@ -173,7 +173,7 @@ function CodOrdersPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Quản lý đơn COD"
@@ -188,38 +188,41 @@ function CodOrdersPage() {
           setSearchValue(value)
           setPage(1)
         }}
+        inlineContent={
+          <div className="flex items-center gap-1">
+            {VIEW_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveView(tab.key)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  activeView === tab.key
+                    ? 'bg-[#538463] text-white'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        }
+        rightContent={
+          canOpenGeneralOrders ? (
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/orders"
+            >
+              Đơn hàng khác
+            </Link>
+          ) : null
+        }
       />
-
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
-        {VIEW_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveView(tab.key)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              activeView === tab.key
-                ? 'bg-[#538463] text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-        {canOpenGeneralOrders ? (
-          <Link
-            className="ml-auto rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            to="/orders"
-          >
-            Đơn hàng khác
-          </Link>
-        ) : null}
-      </div>
 
       {activeView === 'report' ? (
         <CodShiftReportPanel searchValue={searchValue} />
       ) : (
         <div className="space-y-3">
-          <OpsActionQueue items={actionItems} />
+          <OpsActionQueue items={actionItems} layout="horizontal" />
 
           <StatusFilterChips
             options={listChips}

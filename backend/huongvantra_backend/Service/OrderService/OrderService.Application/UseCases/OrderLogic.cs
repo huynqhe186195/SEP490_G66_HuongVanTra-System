@@ -899,7 +899,7 @@ public class OrderLogic(
                 "Warehouse",
                 NotificationTypes.OrderWaitingTransfer,
                 $"Đơn hàng {order.OrderCode} cần điều chuyển hàng từ Kho sang Kệ",
-                $"/inventory/stock-requests");
+                $"/orders/stock-deduct");
         }
 
         if (order.OrderStatus == OrderStatus.WaitingProduction)
@@ -908,7 +908,7 @@ public class OrderLogic(
                 "Warehouse",
                 NotificationTypes.OrderWaitingProduction,
                 $"Đơn hàng {order.OrderCode} cần sản xuất và điều chuyển hàng",
-                $"/inventory/stock-requests");
+                $"/orders/stock-deduct");
         }
 
         if (order.OrderStatus == OrderStatus.WaitingMaterials)
@@ -917,7 +917,7 @@ public class OrderLogic(
                 "Warehouse",
                 NotificationTypes.OrderWaitingMaterials,
                 $"Đơn hàng {order.OrderCode} đang chờ nhập nguyên liệu (backorder)",
-                $"/inventory/stock-requests");
+                $"/orders/stock-deduct");
         }
 
         if (stockHandling != null)

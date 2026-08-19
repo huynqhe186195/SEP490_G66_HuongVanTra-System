@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import ListFilterToolbar, {
   listFilterControlClass,
 } from '../../../components/shared/ListFilterToolbar.jsx'
@@ -93,7 +93,7 @@ export default function PosCashSessionsPage() {
   }
 
   return (
-    <PageShell className="gap-3 sm:gap-3">
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Quỹ ca POS"
@@ -103,17 +103,6 @@ export default function PosCashSessionsPage() {
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
       />
 
-      <StatusFilterChips
-        ariaLabel="Lọc trạng thái ca quỹ"
-        value={status}
-        onChange={(value) => resetPageAndSet(setStatus, value)}
-        options={[
-          { value: '', label: 'Tất cả' },
-          { value: 'Open', label: 'Đang mở' },
-          { value: 'Closed', label: 'Đã đóng' },
-        ]}
-      />
-
       <ListFilterToolbar
         meta={
           <span className="tabular-nums">
@@ -121,6 +110,17 @@ export default function PosCashSessionsPage() {
           </span>
         }
       >
+        <StatusFilterChips
+          ariaLabel="Lọc trạng thái ca quỹ"
+          value={status}
+          onChange={(value) => resetPageAndSet(setStatus, value)}
+          options={[
+            { value: '', label: 'Tất cả' },
+            { value: 'Open', label: 'Đang mở' },
+            { value: 'Closed', label: 'Đã đóng' },
+          ]}
+        />
+        <div className="mx-1.5 h-5 w-px bg-slate-200" />
         <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
           Từ ngày
           <input

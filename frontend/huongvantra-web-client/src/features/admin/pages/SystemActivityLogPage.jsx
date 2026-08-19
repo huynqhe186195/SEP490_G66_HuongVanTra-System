@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -182,7 +182,7 @@ function SystemActivityLogPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Nhật ký hoạt động hệ thống"
@@ -199,7 +199,7 @@ function SystemActivityLogPage() {
         }
       />
 
-      <section className="mb-5 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Từ thời điểm

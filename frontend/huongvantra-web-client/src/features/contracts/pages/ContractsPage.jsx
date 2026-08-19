@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+﻿import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -123,7 +123,7 @@ function ContractsPage() {
   const totalPages = Math.ceil(totalCount / pageSize)
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Hợp đồng"
@@ -151,7 +151,7 @@ function ContractsPage() {
       />
 
       {/* Status tabs */}
-      <div className="mb-4 flex gap-1 border-b border-[#f0eee6]">
+      <div className="flex gap-1 border-b border-[#f0eee6]">
         {STATUS_TABS.map((tab) => (
           <button
             key={tab.key}

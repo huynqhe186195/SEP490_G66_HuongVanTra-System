@@ -107,10 +107,12 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
     }
   }
 
+  const isCancellationRequested = preview?.orderStockStatus?.toLowerCase() === 'cancellation_requested'
   const canConfirmQueue =
     canConfirm &&
     preview &&
-    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient')
+    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient') &&
+    !isCancellationRequested
   const canCancelQueue =
     canCancel &&
     preview &&
@@ -184,6 +186,20 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                   Trạng thái tồn: {getStockStatusLabel(preview.orderStockStatus)}
                 </span>
               </div>
+
+              {isCancellationRequested ? (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+                  <div className="flex items-start gap-2">
+                    <span className="material-symbols-outlined text-[20px] text-rose-600">block</span>
+                    <div>
+                      <p className="font-semibold">Đơn đang chờ duyệt hủy/hoàn tiền</p>
+                      <p className="mt-1">
+                        Không được xác nhận trừ kho trong lúc này. Vui lòng chờ Manager hoàn tất duyệt hủy đơn hoặc từ chối yêu cầu hủy.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {preview.lines?.length ? (
                 <div className="mb-4 overflow-hidden rounded-xl border border-slate-100">

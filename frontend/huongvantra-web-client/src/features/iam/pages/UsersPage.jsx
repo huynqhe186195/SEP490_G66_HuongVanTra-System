@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -352,7 +352,7 @@ function UsersPage() {
   }
 
   return (
-    <PageShell className="[font-family:'Manrope',sans-serif]">
+    <PageShell className="gap-1.5 sm:gap-1.5 [font-family:'Manrope',sans-serif]">
       <PageHeader
         compact
         title="Quản lý tài khoản đăng nhập"
@@ -378,7 +378,7 @@ function UsersPage() {
       ) : null}
 
 
-      <div className="mb-6">
+      <div>
         <ViewTabs view={view} onViewChange={setView} restoreCount={deletedUsers.length} />
       </div>
 

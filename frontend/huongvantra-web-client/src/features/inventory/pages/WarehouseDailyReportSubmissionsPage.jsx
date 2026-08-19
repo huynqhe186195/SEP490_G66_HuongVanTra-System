@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -110,7 +110,7 @@ export default function WarehouseDailyReportSubmissionsPage() {
   }, [load])
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Báo cáo đã gửi"
@@ -126,7 +126,7 @@ export default function WarehouseDailyReportSubmissionsPage() {
         ) : null}
       />
 
-      <div className="mb-4 space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
           {[
             { key: 'today', label: 'Hôm nay', from: today, to: today },

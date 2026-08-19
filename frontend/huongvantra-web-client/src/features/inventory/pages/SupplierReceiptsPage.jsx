@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -393,7 +393,7 @@ function SupplierReceiptsPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className="gap-1.5 sm:gap-1.5">
       <PageHeader
         compact
         title="Phiếu nhập nhà cung cấp"
@@ -412,7 +412,7 @@ function SupplierReceiptsPage() {
         ) : null}
       />
 
-      <div className="mb-3">
+      <div>
         <StatusFilterChips
           options={statusChipOptions}
           value={status}
