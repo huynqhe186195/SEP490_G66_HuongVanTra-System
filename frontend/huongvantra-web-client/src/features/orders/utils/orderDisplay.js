@@ -674,6 +674,7 @@ export function getStockStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'pendingreconciliation' || key === 'pending_bom_reconciliation') return 'Chờ đối soát nguyên liệu'
   if (key === 'waiting_materials') return 'Chờ nguyên liệu'
+  if (key === 'cancellation_requested') return 'Chờ duyệt hủy/hoàn tiền'
   const map = {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
@@ -706,6 +707,7 @@ export function getStockStatusClass(status) {
   if (key === 'pending_bom_reconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
   if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
   if (key === 'pending_warehouse_transfer') return 'bg-sky-50 text-sky-700'
+  if (key === 'cancellation_requested') return 'bg-rose-50 text-rose-700'
   if (key === 'restored') return 'bg-slate-100 text-slate-600'
   if (key === 'cancelled' || key === 'cancelled_after_shipping') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'

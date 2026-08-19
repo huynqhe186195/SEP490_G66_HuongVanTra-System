@@ -1459,7 +1459,7 @@ public class InventoryLogic(
                 "Warehouse",
                 NotificationTypes.StockQueuePendingConfirm,
                 $"Lệnh trừ kho {queue.OrderCode} đang chờ xác nhận",
-                $"/inventory/stock-requests");
+                $"/orders/stock-deduct");
         }
     }
 
@@ -2816,7 +2816,7 @@ public class InventoryLogic(
                 "Warehouse",
                 NotificationTypes.StockQueuePendingConfirm,
                 $"Lệnh giữ chỗ COD {queue.OrderCode} đã tạo, chờ xác nhận",
-                $"/inventory/stock-requests");
+                $"/orders/stock-deduct");
 
             // Lưu phần Kệ / chờ điều chuyển vào queue items để Thủ kho biết phải xử lý.
             foreach (var item in queue.Items)
@@ -3131,7 +3131,7 @@ public class InventoryLogic(
                 "Warehouse",
                 NotificationTypes.StockQueuePendingConfirm,
                 $"Lệnh giữ chỗ COD {queue.OrderCode} đã cập nhật, chờ xác nhận",
-                "/inventory/stock-requests");
+                "/orders/stock-deduct");
 
             return new ReplaceCodReservationResponse(
                 queue.Id, queue.OrderId, queue.OrderCode,
