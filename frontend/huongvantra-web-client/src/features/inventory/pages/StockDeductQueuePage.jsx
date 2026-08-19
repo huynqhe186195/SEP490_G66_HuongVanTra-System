@@ -426,12 +426,18 @@ function StockDeductQueuePage() {
                             else setPreviewQueue(row)
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
-                            canExecuteDeduct
+                            canExecuteDeduct && row.queueStatus !== 'cancelled'
                               ? 'bg-[#538463] hover:bg-[#457053]'
                               : 'bg-slate-500 hover:bg-slate-600'
                           }`}
                         >
-                          {canExecuteDeduct ? 'Xem & xác nhận' : canCancelQueue ? 'Xem & xử lý ngoại lệ' : 'Xem'}
+                          {row.queueStatus === 'cancelled'
+                            ? 'Xem'
+                            : canExecuteDeduct
+                              ? 'Xem & xác nhận'
+                              : canCancelQueue
+                                ? 'Xem & xử lý ngoại lệ'
+                                : 'Xem'}
                         </button>
                       </td>
                     </tr>
