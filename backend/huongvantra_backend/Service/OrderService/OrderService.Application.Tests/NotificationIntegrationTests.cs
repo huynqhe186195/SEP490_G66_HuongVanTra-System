@@ -79,16 +79,16 @@ public class NotificationIntegrationTests
         _ = _notificationClientMock.Object.SendBroadcastAsync(
             "Warehouse",
             NotificationTypes.OrderWaitingTransfer,
-            $"Đơn hàng {order.OrderCode} chờ điều chuyển hàng từ kho",
-            $"/orders/{order.Id}");
+            $"Đơn hàng {order.OrderCode} cần điều chuyển hàng từ Kho sang Kệ",
+            $"/orders/stock-deduct");
 
         // Assert
         _notificationClientMock.Verify(
             n => n.SendBroadcastAsync(
                 "Warehouse",
                 NotificationTypes.OrderWaitingTransfer,
-                It.Is<string>(msg => msg.Contains("POS-001") && msg.Contains("chờ điều chuyển")),
-                It.Is<string>(url => url.Contains($"/orders/{orderId}"))),
+                It.Is<string>(msg => msg.Contains("POS-001")),
+                "/orders/stock-deduct"),
             Times.Once);
     }
 
@@ -117,16 +117,16 @@ public class NotificationIntegrationTests
         _ = _notificationClientMock.Object.SendBroadcastAsync(
             "Warehouse",
             NotificationTypes.OrderWaitingProduction,
-            $"Đơn hàng {order.OrderCode} chờ sản xuất",
-            $"/orders/{order.Id}");
+            $"Đơn hàng {order.OrderCode} cần sản xuất và điều chuyển hàng",
+            $"/orders/stock-deduct");
 
         // Assert
         _notificationClientMock.Verify(
             n => n.SendBroadcastAsync(
                 "Warehouse",
                 NotificationTypes.OrderWaitingProduction,
-                It.Is<string>(msg => msg.Contains("POS-002") && msg.Contains("chờ sản xuất")),
-                It.Is<string>(url => url.Contains($"/orders/{orderId}"))),
+                It.Is<string>(msg => msg.Contains("POS-002")),
+                "/orders/stock-deduct"),
             Times.Once);
     }
 

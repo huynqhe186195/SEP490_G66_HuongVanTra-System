@@ -105,13 +105,13 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-80 rounded-xl border border-[#c1c9c0]/50 bg-white shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded-xl border border-[#c1c9c0]/50 bg-white shadow-lg">
           <div className="flex items-center justify-between border-b border-[#c1c9c0]/30 px-4 py-3">
             <p className="text-sm font-bold text-[#1b1c17]">Thông báo</p>
             {unreadCount > 0 && (
               <button
                 type="button"
-                className="text-xs font-medium text-[#356647] hover:underline"
+                className="shrink-0 text-xs font-medium text-[#356647] hover:underline"
                 onClick={handleMarkAllRead}
               >
                 Đánh dấu đã đọc hết
@@ -119,7 +119,7 @@ export default function NotificationBell() {
             )}
           </div>
 
-          <ul className="max-h-72 divide-y divide-[#c1c9c0]/20 overflow-y-auto">
+          <ul className="max-h-[32rem] divide-y divide-[#c1c9c0]/20 overflow-y-auto">
             {isLoading ? (
               <li className="px-4 py-6 text-center text-xs text-[#717971]">Đang tải...</li>
             ) : items.length === 0 ? (
@@ -134,9 +134,9 @@ export default function NotificationBell() {
                     }`}
                     onClick={() => handleItemClick(notification)}
                   >
-                    <p className="truncate text-sm font-semibold text-[#1b1c17]">{notification.title}</p>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-[#414942]">{notification.body}</p>
-                    <p className="mt-1 text-[11px] text-[#717971]">{formatDateTimeVN(notification.createdAt)}</p>
+                    <p className="text-sm font-semibold leading-snug text-[#1b1c17]">{notification.title}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#414942]">{notification.body}</p>
+                    <p className="mt-1.5 text-[11px] text-[#717971]">{formatDateTimeVN(notification.createdAt)}</p>
                   </button>
                 </li>
               ))
