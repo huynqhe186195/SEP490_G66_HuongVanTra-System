@@ -957,14 +957,18 @@ function StockTransfersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-4 text-slate-600">
-                    {transfer.sourceRequestId
-                      ? 'Từ yêu cầu'
-                      : transfer.sourceSuggestionId
-                        ? 'Từ gợi ý'
-                        : 'Không có nguồn (cũ)'}
+                    {transfer.sourceOrderId && transfer.sourceOrderChannel === 'POS'
+                      ? 'Đơn hàng POS'
+                      : transfer.sourceOrderId && transfer.sourceOrderChannel === 'COD'
+                        ? 'Đơn hàng COD'
+                        : transfer.sourceRequestId
+                          ? 'Yêu cầu bổ sung'
+                          : transfer.sourceSuggestionId
+                            ? 'Từ gợi ý'
+                            : 'Không có nguồn (cũ)'}
                   </td>
                   <td className="px-4 py-4 font-mono text-xs text-slate-600">
-                    {transfer.sourceRequestCode || transfer.sourceSuggestionCode || '—'}
+                    {transfer.sourceOrderCode || transfer.sourceRequestCode || transfer.sourceSuggestionCode || '—'}
                   </td>
                   <td className="px-4 py-4">{transfer.createdByName || '—'}</td>
                   <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(transfer.createdAt)}</td>

@@ -388,7 +388,10 @@ public record StockTransferResponse(
     string? SourceRequestCode = null,
     string? SourceRequestedByName = null,
     Guid? SourceSuggestionId = null,
-    string? SourceSuggestionCode = null);
+    string? SourceSuggestionCode = null,
+    Guid? SourceOrderId = null,
+    string? SourceOrderCode = null,
+    string? SourceOrderChannel = null);
 
 public record StockExportBatchAllocationResponse(
     Guid Id,

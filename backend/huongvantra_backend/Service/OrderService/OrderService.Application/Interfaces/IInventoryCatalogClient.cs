@@ -56,6 +56,15 @@ public interface IInventoryCatalogClient
     Task UnfreezeStockQueuesForOrderCancellationAsync(
         Guid orderId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Đồng bộ OrderStatus đã resolved vào queue để frontend hiển thị đúng trạng thái đơn.
+    /// Gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// </summary>
+    Task UpdateQueueOrderStatusAsync(
+        Guid orderId,
+        string orderStatus,
+        CancellationToken ct = default);
 }
 
 public record InventoryStockHandlingItemRequest(
@@ -78,7 +87,9 @@ public record InventoryStockHandlingRequest(
     DateTime? PickupDate = null,
     string? PickupNote = null,
     /// <summary>COD: chuẩn bị tồn giống POS nhưng chỉ reserve, không trừ Kệ ngay.</summary>
-    bool ReserveOnly = false);
+    bool ReserveOnly = false,
+    /// <summary>Kênh đơn hàng (POS/COD/...) để gắn vào queue và phiếu điều chuyển.</summary>
+    string? OrderChannel = null);
 
 public record InventoryStockHandlingLineResponse(
     Guid SkuId,

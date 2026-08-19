@@ -219,6 +219,34 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         }
     }
 
+    public async Task UpdateQueueOrderStatusAsync(
+        Guid orderId,
+        string orderStatus,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var body = new { OrderStatus = orderStatus };
+            var response = await httpClient.PatchAsJsonAsync(
+                $"api/stock-deduct-queue/update-order-status/{orderId}",
+                body,
+                ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning(
+                    "Inventory update-queue-order-status failed {Status}: {Error}",
+                    response.StatusCode,
+                    error);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Không cập nhật OrderStatus cho queue của đơn {OrderId}.", orderId);
+        }
+    }
+
     private static string? ExtractErrorMessage(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

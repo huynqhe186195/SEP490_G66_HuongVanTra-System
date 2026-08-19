@@ -783,6 +783,12 @@ public class OrderLogic(
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
+
+            // Đồng bộ OrderStatus resolved vào InventoryService queue để frontend hiển thị đúng.
+            if (stockHandling.HasPendingStockReconciliation)
+            {
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
+            }
         }
         // COD: cùng HTTP pos-stock-handling nhưng ReserveOnly=true (giữ chỗ, trừ lúc ship).
         else if (ShouldHandleCodStockSynchronously(order))
@@ -1916,6 +1922,9 @@ public class OrderLogic(
         order.DeliveredByName = actorName;
         order.UpdatedAt = deliveredAt;
 
+        // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+        await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, OrderStatus.Completed.ToString(), ct);
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Completed,
@@ -2927,8 +2936,8 @@ public class OrderLogic(
         order.UpdatedAt = DateTime.UtcNow;
 
         var completedForPickup = false;
-        // POS-06: KB2/KB3 khách đang chờ tại quầy nên hoàn thành luôn;
-        // KB4 khách đã về nên chỉ sẵn sàng giao, chờ Sale bấm "Đã giao hàng".
+        // POS-06: Tất cả các trường hợp bán trước trừ sau (KB2/KB3/KB4) đều chuyển sang
+        // ReadyToDeliver sau khi Thủ kho xác nhận, chờ Sale bấm "Đã giao hàng" để Completed.
         var readyToDeliver = false;
         if (order.OrderStatus is OrderStatus.WaitingMaterials
             or OrderStatus.WaitingTransfer
@@ -2939,16 +2948,14 @@ public class OrderLogic(
             {
                 order.OrderStatus = OrderStatus.Processing;
             }
-            else if (order.OrderStatus == OrderStatus.WaitingMaterials)
-            {
-                readyToDeliver = true;
-                order.OrderStatus = OrderStatus.ReadyToDeliver;
-            }
             else
             {
-                completedForPickup = true;
-                order.OrderStatus = OrderStatus.Completed;
-                order.CompletedAt ??= DateTime.UtcNow;
+                // Tất cả đơn pickup tại store chuyển sang ReadyToDeliver
+                readyToDeliver = true;
+                order.OrderStatus = OrderStatus.ReadyToDeliver;
+
+                // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
             }
 
             foreach (var detail in order.OrderDetails ?? [])
@@ -2976,7 +2983,9 @@ public class OrderLogic(
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.Updated,
-                "Đã đủ hàng; đơn sẵn sàng giao, chờ khách quay lại lấy.",
+                order.OrderStatus == OrderStatus.WaitingMaterials
+                    ? "Đã đủ hàng; đơn sẵn sàng giao, chờ khách quay lại lấy."
+                    : "Đã điều chuyển hàng từ Kho lên Kệ; đơn sẵn sàng giao cho khách.",
                 actorId: null,
                 actorName: "Hệ thống",
                 ct);
@@ -3274,7 +3283,8 @@ public class OrderLogic(
                     order.FulfillmentPreference?.ToString(),
                     order.PickupDate,
                     order.PickupNote,
-                    ReserveOnly: order.OrderChannel == OrderChannel.COD),
+                    ReserveOnly: order.OrderChannel == OrderChannel.COD,
+                    OrderChannel: order.OrderChannel.ToString()),
                 ct);
         }
         catch (InventoryStockHandlingException ex)

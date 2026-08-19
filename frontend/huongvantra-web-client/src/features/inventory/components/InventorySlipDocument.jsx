@@ -419,14 +419,29 @@ export function StockTransferDocument({ transfer, statusLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={transfer?.transferCode} />
         <HeaderField label="Trạng thái" value={statusLabel} />
-        <HeaderField label="Yêu cầu nguồn" value={transfer?.sourceRequestCode} />
+        <HeaderField
+          label="Loại phiếu"
+          value={
+            transfer?.sourceOrderId && transfer?.sourceOrderChannel === 'POS'
+              ? 'Đơn hàng POS'
+              : transfer?.sourceOrderId && transfer?.sourceOrderChannel === 'COD'
+                ? 'Đơn hàng COD'
+                : transfer?.sourceRequestCode
+                  ? 'Yêu cầu bổ sung'
+                  : '—'
+          }
+        />
+        <HeaderField
+          label="Yêu cầu nguồn"
+          value={transfer?.sourceOrderCode || transfer?.sourceRequestCode || '—'}
+        />
         <HeaderField label="Người yêu cầu" value={transfer?.sourceRequestedByName} />
         <HeaderField label="Thời gian tạo" value={transfer?.createdAt ? formatVietnamDateTime(transfer.createdAt) : '-'} />
         <HeaderField label="Phiếu xuất" value={transfer?.exportSlipCode} />
-        <HeaderField label="Phiếu nhập" value={transfer?.importSlipCode} />
         <HeaderField label="Hoàn tất lúc" value={transfer?.completedAt ? formatVietnamDateTime(transfer.completedAt) : '-'} />
         <HeaderField label="Người lập phiếu" value={creator.name} />
         <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
+        <HeaderField label="Phiếu nhập" value={transfer?.importSlipCode} />
         <HeaderField label="Tổng số lượng" value={formatStockQuantity(totalQuantity)} />
         <HeaderField label="Số dòng" value={`${lines.length} dòng`} />
       </div>
