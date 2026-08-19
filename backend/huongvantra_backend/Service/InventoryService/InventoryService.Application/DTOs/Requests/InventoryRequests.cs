@@ -316,3 +316,9 @@ public record ImportSupplierProductRow(
 public record ImportSupplierProductsRequest(
     List<ImportSupplierProductRow> Rows);
 
+/// <summary>
+/// OrderService gọi để đồng bộ OrderStatus resolved vào queue sau khi resolve
+/// WaitingTransfer/WaitingProduction/WaitingMaterials.
+/// </summary>
+public record UpdateQueueOrderStatusRequest(string OrderStatus);
+

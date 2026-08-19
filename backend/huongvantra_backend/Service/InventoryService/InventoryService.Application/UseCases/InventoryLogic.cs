@@ -9983,4 +9983,25 @@ public class InventoryLogic(
             p.IsActive,
             p.CreatedAt,
             p.UpdatedAt);
+
+    /// <summary>
+    /// Đồng bộ OrderStatus resolved từ OrderService vào queue để frontend hiển thị đúng.
+    /// OrderService gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// </summary>
+    public async Task UpdateQueueOrderStatusAsync(Guid orderId, string orderStatus, CancellationToken ct = default)
+    {
+        if (orderId == Guid.Empty || string.IsNullOrWhiteSpace(orderStatus))
+            return;
+
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue == null)
+            return;
+
+        var normalized = orderStatus.Trim().ToLowerInvariant();
+        if (queue.OrderPaymentStatus != normalized)
+        {
+            queue.OrderPaymentStatus = normalized;
+            await _queueRepo.SaveChangesAsync(ct);
+        }
+    }
 }

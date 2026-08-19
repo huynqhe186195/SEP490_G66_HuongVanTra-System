@@ -56,6 +56,15 @@ public interface IInventoryCatalogClient
     Task UnfreezeStockQueuesForOrderCancellationAsync(
         Guid orderId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Đồng bộ OrderStatus đã resolved vào queue để frontend hiển thị đúng trạng thái đơn.
+    /// Gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// </summary>
+    Task UpdateQueueOrderStatusAsync(
+        Guid orderId,
+        string orderStatus,
+        CancellationToken ct = default);
 }
 
 public record InventoryStockHandlingItemRequest(

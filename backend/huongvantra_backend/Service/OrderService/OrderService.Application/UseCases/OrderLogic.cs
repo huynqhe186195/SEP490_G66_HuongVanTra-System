@@ -783,6 +783,12 @@ public class OrderLogic(
             order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
+
+            // Đồng bộ OrderStatus resolved vào InventoryService queue để frontend hiển thị đúng.
+            if (stockHandling.HasPendingStockReconciliation)
+            {
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
+            }
         }
         // COD: cùng HTTP pos-stock-handling nhưng ReserveOnly=true (giữ chỗ, trừ lúc ship).
         else if (ShouldHandleCodStockSynchronously(order))
@@ -2944,6 +2950,9 @@ public class OrderLogic(
                 // Tất cả đơn pickup tại store chuyển sang ReadyToDeliver
                 readyToDeliver = true;
                 order.OrderStatus = OrderStatus.ReadyToDeliver;
+
+                // Đồng bộ OrderStatus vào queue để frontend hiển thị đúng
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
             }
 
             foreach (var detail in order.OrderDetails ?? [])
