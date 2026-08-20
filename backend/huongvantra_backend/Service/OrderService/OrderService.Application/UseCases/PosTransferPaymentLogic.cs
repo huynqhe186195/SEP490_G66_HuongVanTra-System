@@ -367,10 +367,14 @@ public class PosTransferPaymentLogic(
                         StringComparison.OrdinalIgnoreCase))
                 ? PaymentStatus.Success.ToString()
                 : PaymentStatus.Pending.ToString());
-        var isPaid = string.Equals(
-            order.OrderStatus,
-            OrderStatus.Completed.ToString(),
-            StringComparison.OrdinalIgnoreCase)
+        static bool IsPostPaymentStatus(string status) =>
+            string.Equals(status, OrderStatus.Completed.ToString(), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, OrderStatus.WaitingProduction.ToString(), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, OrderStatus.WaitingTransfer.ToString(), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, OrderStatus.WaitingMaterials.ToString(), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, OrderStatus.ReadyToDeliver.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        var isPaid = IsPostPaymentStatus(order.OrderStatus)
             || string.Equals(
                 paymentStatus,
                 PaymentStatus.Success.ToString(),
@@ -501,39 +505,47 @@ public class PosTransferPaymentLogic(
             return;
         }
 
+        // QR expiry chỉ kiểm soát việc hiển thị/làm mới QR trên UI; không dùng để từ chối thanh toán.
+        // Nếu ngân hàng đã gửi tiền kèm mã đơn hợp lệ thì phải ghi nhận dù QR đã hết hạn.
         if (payment.TransferQrExpiresAtUtc.HasValue
             && payment.TransferQrExpiresAtUtc.Value <= DateTime.UtcNow)
         {
-            logger.LogWarning(
-                "SePay webhook ignored: transfer QR for order {OrderCode} expired at {ExpiresAtUtc}.",
+            logger.LogInformation(
+                "SePay webhook: QR for order {OrderCode} was expired at {ExpiresAtUtc} but payment arrived — accepting.",
                 orderCode,
                 payment.TransferQrExpiresAtUtc.Value);
-            return;
         }
 
         var expectedAmount = (long)Math.Round(GetTransferQrAmount(order, payment), MidpointRounding.AwayFromZero);
         var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
 
-        // Từ chối nếu chuyển thừa quá tolerance (có thể nhầm đơn) hoặc chuyển 0/âm
-        if (receivedAmount <= 0 || receivedAmount > expectedAmount + tolerance)
-        {
-            logger.LogWarning(
-                "SePay webhook ignored: amount out of range for {OrderCode}. Expected {Expected}, got {Received}.",
-                orderCode,
-                expectedAmount,
-                receivedAmount);
-            return;
-        }
+        // Chế độ test QR: số tiền cố định TestQrFixedAmountVnd (thường rất nhỏ) không so sánh
+        // được với giá trị thật của đơn — bỏ qua hoàn toàn amount check.
+        var isTestQrMode = _pos.TestQrFixedAmountVnd > 0;
 
-        // Cho phép chuyển thiếu — phần còn lại sẽ tính vào công nợ khách hàng
-        if (receivedAmount < expectedAmount - tolerance)
+        if (!isTestQrMode)
         {
-            logger.LogWarning(
-                "SePay webhook ignored: transfer component is incomplete for {OrderCode}. Expected {Expected}, received {Received}.",
-                orderCode,
-                expectedAmount,
-                receivedAmount);
-            return;
+            // Từ chối nếu chuyển thừa quá tolerance (có thể nhầm đơn) hoặc chuyển 0/âm
+            if (receivedAmount <= 0 || receivedAmount > expectedAmount + tolerance)
+            {
+                logger.LogWarning(
+                    "SePay webhook ignored: amount out of range for {OrderCode}. Expected {Expected}, got {Received}.",
+                    orderCode,
+                    expectedAmount,
+                    receivedAmount);
+                return;
+            }
+
+            // Cho phép chuyển thiếu — phần còn lại sẽ tính vào công nợ khách hàng
+            if (receivedAmount < expectedAmount - tolerance)
+            {
+                logger.LogWarning(
+                    "SePay webhook ignored: transfer component is incomplete for {OrderCode}. Expected {Expected}, received {Received}.",
+                    orderCode,
+                    expectedAmount,
+                    receivedAmount);
+                return;
+            }
         }
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
@@ -667,9 +679,14 @@ public class PosTransferPaymentLogic(
         if (string.IsNullOrWhiteSpace(haystack))
             return "";
 
-        var hvtMatch = Regex.Match(haystack, @"HVT-\d{6}-\d{3}", RegexOptions.IgnoreCase);
+        // BIDV và một số ngân hàng strip dấu gạch ngang khi gửi nội dung chuyển khoản
+        // nên cần match cả "HVT-260819-010" lẫn "HVT260819010".
+        var hvtMatch = Regex.Match(haystack, @"HVT-?(\d{6})-?(\d{3})", RegexOptions.IgnoreCase);
         if (hvtMatch.Success)
-            return hvtMatch.Value.ToUpperInvariant();
+        {
+            // Chuẩn hóa về dạng có dấu gạch ngang để tra cứu DB khớp với OrderCode đã lưu.
+            return $"HVT-{hvtMatch.Groups[1].Value}-{hvtMatch.Groups[2].Value}".ToUpperInvariant();
+        }
 
         var ordMatch = Regex.Match(haystack, @"ORD[A-Z0-9-]*", RegexOptions.IgnoreCase);
         if (ordMatch.Success)

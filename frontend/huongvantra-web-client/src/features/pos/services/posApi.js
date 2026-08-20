@@ -631,12 +631,22 @@ export function mapPosPaymentStatus(item) {
 export async function fetchPosOrderPaymentStatus(orderId) {
   try {
     const data = await apiRequestAuth(`/api/pos/orders/${orderId}/payment-status`, { method: 'GET' })
-    return mapPosPaymentStatus(data)
-  } catch {
+    const mapped = mapPosPaymentStatus(data)
+    // Thêm displayAmount từ response backend (không có trong mapPosPaymentStatus cơ bản)
+    mapped.displayAmount = Number(data.displayAmount ?? data.DisplayAmount ?? 0)
+    return mapped
+  } catch (err) {
+    console.warn('[pollPaymentStatus] /payment-status failed, falling back to fetchOrder:', err?.message ?? err)
     const order = await fetchOrder(orderId)
     const transferPayment = findTransferPayment(order.payments)
     const paymentStatus = resolveOrderPaymentStatus(order.payments)
-    const isPaid = String(order.orderStatus || '').toLowerCase() === 'completed'
+    const isPaid =
+      String(order.orderStatus || '').toLowerCase() === 'completed' ||
+      String(order.orderStatus || '').toLowerCase() === 'waitingproduction' ||
+      String(order.orderStatus || '').toLowerCase() === 'waitingtransfer' ||
+      String(order.orderStatus || '').toLowerCase() === 'waitingmaterials' ||
+      String(order.orderStatus || '').toLowerCase() === 'readytodeliver' ||
+      String(paymentStatus || '').toLowerCase() === 'success'
 
     return mapPosPaymentStatus({
       orderId: order.id,

@@ -151,7 +151,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 
                 <div class='info-section' style='background-color: #f9fafb; padding: 15px; border-radius: 6px;'>
                     <p><strong>Mã đơn hàng:</strong> {order.OrderCode}</p>
-                    <p><strong>Ngày mua:</strong> {TimeZoneInfo.ConvertTimeFromUtc(order.CreatedAt, TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh")):dd/MM/yyyy HH:mm:ss}</p>
+                    <p><strong>Ngày mua:</strong> {order.CreatedAt.AddHours(7):dd/MM/yyyy HH:mm:ss}</p>
                     {(string.IsNullOrWhiteSpace(tierName) ? "" : $"<p><strong>Hạng thành viên:</strong> {tierName}</p>")}
                     {(string.IsNullOrWhiteSpace(order.ShippingAddress) ? "" : $"<p><strong>Địa chỉ nhận hàng:</strong> {order.ShippingAddress}</p>")}
                 </div>
