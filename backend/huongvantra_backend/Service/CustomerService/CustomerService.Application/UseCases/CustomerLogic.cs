@@ -2566,8 +2566,16 @@ public class CustomerLogic
 
     private static void EnsureCanManageCorporateCustomer(CustomerGroup customerGroup, CustomerAccessContext access)
     {
-        if (customerGroup == CustomerGroup.DoanhNghiep && !access.CanManageCorporateCustomers)
-            throw new CustomerForbiddenException("Chỉ Quản lý, Kế toán hoặc Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
+        // DocumentService + B2B contracts out of current release scope.
+        if (customerGroup == CustomerGroup.DoanhNghiep)
+        {
+            throw new CustomerValidationException(
+            [
+                "Khách doanh nghiệp / hợp đồng B2B đang tạm ngưng trong phạm vi hiện tại."
+            ]);
+        }
+
+        _ = access;
     }
 
     private static Guid? ResolveAssignedSaleId(Guid? requestedSaleId, CustomerAccessContext access)

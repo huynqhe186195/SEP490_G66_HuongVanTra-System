@@ -88,11 +88,8 @@ builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(cl
     var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
-builder.Services.AddHttpClient<IContractCatalogClient, ContractCatalogClient>(client =>
-{
-    var baseUrl = builder.Configuration["DocumentService:BaseUrl"] ?? "http://document-service:8080";
-    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+// B2B / DocumentService out of current release scope — no HTTP dependency on document-service.
+builder.Services.AddSingleton<IContractCatalogClient, DisabledContractCatalogClient>();
 builder.Services.AddHttpClient<IInventoryCatalogClient, InventoryCatalogClient>(client =>
 {
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";

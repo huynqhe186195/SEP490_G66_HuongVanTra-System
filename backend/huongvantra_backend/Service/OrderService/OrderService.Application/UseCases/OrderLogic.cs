@@ -434,20 +434,21 @@ public class OrderLogic(
             ? await _customerCatalogClient.GetCustomerAsync(req.CustomerId.Value, ct)
             : null;
 
+        // DI parameter retained for tests / future B2B restore; must not call DocumentService.
+        _ = _contractCatalogClient;
+
+        // DocumentService + khách doanh nghiệp / đơn hợp đồng B2B tạm cắt khỏi phạm vi hiện tại.
         ContractCatalogProfile? contract = null;
+        if (req.OrderChannel == OrderChannel.B2B || req.ContractId.HasValue)
+        {
+            throw new OrderValidationException(
+                "Đơn theo hợp đồng (B2B) đang tạm ngưng trong phạm vi hiện tại.");
+        }
+
         if (customer?.IsDoanhNghiep == true)
         {
-            // B2B chỉ bán qua kênh hợp đồng — POS/COD không phục vụ khách doanh nghiệp.
-            if (req.OrderChannel is OrderChannel.POS or OrderChannel.COD)
-                throw new OrderValidationException(
-                    "Khách doanh nghiệp phải lập đơn theo hợp đồng tại mục «Bán theo hợp đồng», không bán tại quầy POS.");
-
-            contract = await _contractCatalogClient.GetActiveContractAsync(customer.Id, ct);
-            OrderBusinessRules.EnsureContractRequiredForCorporate(customer.CustomerGroup, contract?.Id);
-
-            if (req.ContractId.HasValue && req.ContractId.Value != contract!.Id)
-                throw new OrderValidationException(
-                    "Hợp đồng gửi lên không khớp hợp đồng đang hiệu lực của khách hàng. Vui lòng tải lại trang.");
+            throw new OrderValidationException(
+                "Khách doanh nghiệp / hợp đồng B2B đang tạm ngưng trong phạm vi hiện tại.");
         }
 
         if (hasGiftItems)
@@ -1411,23 +1412,8 @@ public class OrderLogic(
             }
         }
 
-        // B5: tạo đơn nhỏ (qua hạn mức) rồi sửa lên số lớn phải bị chặn như lúc tạo.
-        // Dùng snapshot ContractId của đơn — không cho đổi hợp đồng khi sửa.
-        if (order.ContractId.HasValue && order.CustomerId.HasValue && remainingAmount > 0)
-        {
-            var contract = await _contractCatalogClient.GetActiveContractAsync(order.CustomerId.Value, ct);
-            if (contract is not null)
-            {
-                var customerProfile = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
-                var pendingContractDebt = await _orderRepo.GetPendingContractDebtAsync(
-                    order.CustomerId.Value, excludeOrderId: order.Id, ct);
-
-                OrderBusinessRules.EnsureCreditLimitNotExceeded(
-                    (customerProfile?.CurrentDebt ?? 0m) + pendingContractDebt,
-                    remainingAmount,
-                    contract.CreditLimit);
-            }
-        }
+        // B2B/DocumentService đã cắt khỏi runtime — không gọi lại hạn mức hợp đồng qua DocumentService.
+        // Đơn lịch sử còn ContractId: cho phép thao tác vận hành; không re-validate credit limit từ catalog.
 
         await RecordActivityAsync(
             order.Id,
