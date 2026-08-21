@@ -130,12 +130,16 @@ public class StockTransferLogic(
         transfer.SourceRequest = sourceRequest;
         transfer.SourceSuggestion = sourceSuggestion;
 
-        // Notify Warehouse: new transfer slip created (Draft)
-        _ = _notificationClient.SendBroadcastAsync(
-            "Warehouse",
-            NotificationTypes.TransferSlipPendingConfirm,
-            $"Phiếu điều chuyển {transfer.TransferCode} đã tạo, cần xác nhận",
-            $"/inventory/transfers/{transfer.Id}");
+        // Phiếu từ Yêu cầu bổ sung Kệ Hàng được tạo và hoàn tất ngay trong luồng tự động,
+        // không phát thông báo yêu cầu Warehouse xác nhận thêm lần nữa.
+        if (sourceRequest == null)
+        {
+            _ = _notificationClient.SendBroadcastAsync(
+                "Warehouse",
+                NotificationTypes.TransferSlipPendingConfirm,
+                $"Phiếu điều chuyển {transfer.TransferCode} đã tạo, cần xác nhận",
+                $"/inventory/transfers/{transfer.Id}");
+        }
 
         return Map(transfer);
     }

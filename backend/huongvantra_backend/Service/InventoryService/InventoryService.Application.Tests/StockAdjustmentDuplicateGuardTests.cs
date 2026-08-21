@@ -32,7 +32,7 @@ public sealed class StockAdjustmentDuplicateGuardTests
     }
 
     [Fact]
-    public async Task Create_SkuAlreadyPartiallyFulfilled_WarnsSoftly()
+    public async Task Create_SkuAlreadyPartiallyFulfilled_BlocksUntilLineIsClosed()
     {
         var repo = BuildRepo(OpenLine(StockAdjustmentRequestItemStatus.WaitingForStock, 5, 2));
         var logic = BuildLogic(repo.Object);
@@ -40,21 +40,23 @@ public sealed class StockAdjustmentDuplicateGuardTests
         var ex = await Assert.ThrowsAsync<DuplicateStockAdjustmentRequestException>(
             () => logic.CreateStockAdjustmentRequestAsync(NewRequest(), Guid.NewGuid()));
 
-        Assert.False(ex.Blocking);
+        Assert.True(ex.Blocking);
         Assert.Single(ex.Duplicates);
     }
 
     [Fact]
-    public async Task Create_SoftWarningAcknowledged_Proceeds()
+    public async Task Create_AcknowledgeDoesNotBypassPartiallyFulfilledLine()
     {
         var repo = BuildRepo(OpenLine(StockAdjustmentRequestItemStatus.WaitingForStock, 5, 2));
         var logic = BuildLogic(repo.Object);
 
-        await logic.CreateStockAdjustmentRequestAsync(
-            NewRequest(acknowledgeDuplicates: true), Guid.NewGuid());
+        var ex = await Assert.ThrowsAsync<DuplicateStockAdjustmentRequestException>(
+            () => logic.CreateStockAdjustmentRequestAsync(
+                NewRequest(acknowledgeDuplicates: true), Guid.NewGuid()));
 
+        Assert.True(ex.Blocking);
         repo.Verify(r => r.AddWithGeneratedCodeAsync(
-            It.IsAny<StockAdjustmentRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<StockAdjustmentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>Acknowledge không được phép bỏ qua cảnh báo cứng.</summary>

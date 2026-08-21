@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   listFilterControlClass,
@@ -16,8 +16,6 @@ import {
   canCreateStockReplenishmentRequest,
   canReviewStockReplenishmentRequest,
   isAuditOnlyAdmin,
-  isWarehouseRole,
-  canViewStockTransfer,
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -27,31 +25,20 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
 import StockAdjustmentRequestAuditView from '../components/StockAdjustmentRequestAuditView.jsx'
 import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
-import { SlipActionButtons, SlipPrintStyles, StockTransferDocument } from '../components/InventorySlipDocument.jsx'
-import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
-import { fetchInventorySettings, fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
+import { formatCreatorRole } from '../utils/inventoryCreatorDisplay.js'
+import { fetchInventorySettings, fetchSkuStocks } from '../services/inventoryStockApi.js'
 import {
   cancelStockAdjustmentRequest,
-  closeStockAdjustmentRemaining,
+  confirmStockAdjustmentRequestTransfer,
   fetchStockAdjustmentRequestById,
-  fetchStockAdjustmentRequestTransfers,
   fetchStockAdjustmentRequests,
   getAdjustmentRequestStatusPresentation,
-  getAdjustmentStatusClass,
-  getAdjustmentStatusLabel,
-  rejectStockAdjustmentRequest,
-  reviewStockAdjustmentRequest,
+  processStockAdjustmentRequestItem,
 } from '../services/stockAdjustmentRequestApi.js'
 import {
   getStockFlowErrorMessage,
-  getStockFlowStatusClass,
-  getStockTransferStatusLabel,
   STOCK_FLOW_TERMS,
 } from '../utils/stockFlowLabels.js'
-import { fetchStockTransferById } from '../services/stockTransferApi.js'
-
-/** Trạng thái yêu cầu còn cho phép Thủ kho tạo phiếu điều chuyển từ chi tiết. */
-const TRANSFERABLE_STATUSES = ['approved', 'processing', 'partiallyfulfilled']
 
 /**
  * Bộ lọc nhanh của Quản lý. Mỗi mục chỉ đặt tham số truy vấn phía máy chủ,
@@ -59,8 +46,7 @@ const TRANSFERABLE_STATUSES = ['approved', 'processing', 'partiallyfulfilled']
  */
 const QUICK_FILTERS = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'pending', label: 'Chờ tiếp nhận', status: 'Pending' },
-  { key: 'remaining', label: 'Còn thiếu', onlyRemaining: true },
+  { key: 'remaining', label: 'Cần xử lý', onlyRemaining: true },
   { key: 'processed', label: 'Đã xử lý', status: 'processed' },
 ]
 
@@ -72,280 +58,103 @@ const EMPTY_FILTERS = {
 const SORT_OPTIONS = [
   { value: '', label: 'Mới nhất trước' },
   { value: 'oldest', label: 'Cũ nhất trước' },
-  { value: 'warehouse_priority', label: 'Ưu tiên xử lý của Thủ kho' },
+  { value: 'warehouse_priority', label: 'Ưu tiên xử lý của Nhân viên kho' },
   { value: 'code_asc', label: 'Mã yêu cầu tăng dần' },
   { value: 'code_desc', label: 'Mã yêu cầu giảm dần' },
   { value: 'status', label: 'Theo trạng thái' },
 ]
 
-const FIELD_CLASS =
-  'min-h-[40px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-2.5 text-sm outline-none focus:border-[#538463]'
-
-/** Lý do từ chối gợi ý cho Thủ kho, bấm để điền nhanh vào ô lý do. */
-const REJECT_REASON_PRESETS = [
-  'Kho không đủ tồn để đáp ứng yêu cầu.',
-  'Sản phẩm yêu cầu đã hết hàng tại Kho.',
-  'Số lượng yêu cầu vượt quá nhu cầu thực tế của Kệ.',
-  'Sai sản phẩm hoặc sai đơn vị tính trong yêu cầu.',
-  'Trùng với yêu cầu bổ sung đã được duyệt trước đó.',
-  'Hàng đang chờ kiểm tra chất lượng, chưa thể xuất Kho.',
-]
+async function fetchRequestDetailWithWarehouseStock(id, isWarehouse) {
+  const [request, stocks] = await Promise.all([
+    fetchStockAdjustmentRequestById(id),
+    (isWarehouse ? fetchSkuStocks() : Promise.resolve([])).catch(() => []),
+  ])
+  const stockBySkuId = new Map(stocks.map((stock) => [stock.skuId, stock.warehouseQuantityOnHand]))
+  return {
+    ...request,
+    items: request.items.map((item) => ({
+      ...item,
+      warehouseQuantityOnHand: stockBySkuId.get(item.skuId) ?? null,
+    })),
+  }
+}
 
 function textOrDash(value) {
-  const trimmed = String(value ?? '').trim()
-  return trimmed || UNKNOWN_CREATOR_VALUE
+  const normalized = String(value ?? '').trim()
+  return normalized || '—'
 }
 
-function StockTransferPreviewModal({ transfer, isLoading, onClose }) {
-  const documentRef = useRef(null)
-  if (!transfer && !isLoading) return null
-
-  const statusLabel = transfer ? getStockTransferStatusLabel(transfer.status) : ''
-  return (
-    <div className="inventory-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4">
-      <SlipPrintStyles />
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-        {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">
-            <span className="inline-flex items-center gap-2 font-semibold">
-              <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
-              Đang tải Phiếu Điều Chuyển...
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="no-print flex items-start justify-between border-b border-slate-100 px-6 py-5">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="font-mono text-xl font-bold text-slate-900">{transfer.transferCode}</h2>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${getStockFlowStatusClass(transfer.status)}`}>
-                    {statusLabel}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  {STOCK_FLOW_TERMS.warehouse} → {STOCK_FLOW_TERMS.shelf}
-                  {transfer.sourceRequestCode ? ` · ${STOCK_FLOW_TERMS.request}: ${transfer.sourceRequestCode}` : ''}
-                </p>
-              </div>
-              <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Đóng Phiếu Điều Chuyển">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div className="px-6 py-5">
-              <SlipActionButtons documentRef={documentRef} filename={`${transfer.transferCode || 'phieu-dieu-chuyen'}.pdf`} />
-              <div ref={documentRef}>
-                <StockTransferDocument transfer={transfer} statusLabel={statusLabel} />
-              </div>
-            </div>
-          </>
-        )}
-
-        <div className="no-print flex justify-end border-t border-slate-100 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50">
-            Đóng
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Duyệt theo từng dòng. Duyệt KHÔNG làm thay đổi tồn kho — tồn chỉ đổi khi
- * Phiếu điều chuyển Kho → Kệ được hoàn tất.
- */
-function ReviewStockRequestModal({ request, onClose, onConfirm, isSaving }) {
-  const [stockBySkuId, setStockBySkuId] = useState(new Map())
-  const [isLoading, setIsLoading] = useState(true)
-  const [reviewNote, setReviewNote] = useState('')
-  const [lineState, setLineState] = useState(() => {
-    const initial = {}
-    for (const item of request?.items ?? []) {
-      initial[item.id] = {
-        approved: true,
-        approvedQuantity: String(item.remainingQuantity || item.requestedQuantity || 0),
-        note: '',
-      }
-    }
-    return initial
-  })
-
-  useEffect(() => {
-    let mounted = true
-    const fetchFn = isWarehouseRole(loadAuthSession()) ? fetchSkuStocks : fetchStoreSkuStocks
-    fetchFn()
-      .then((stocks) => {
-        if (!mounted) return
-        setStockBySkuId(new Map(stocks.map((stock) => [stock.skuId, stock])))
-      })
-      .catch((error) => showError(error.message))
-      .finally(() => {
-        if (mounted) setIsLoading(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  if (!request) return null
-
-  const items = Array.isArray(request.items) ? request.items : []
-  const requestCode = request.requestCode || '—'
-
-  function patchLine(itemId, patch) {
-    setLineState((current) => ({ ...current, [itemId]: { ...current[itemId], ...patch } }))
-  }
-
-  function handleConfirm() {
-    const lines = []
-    for (const item of items) {
-      const state = lineState[item.id] ?? {}
-      if (!state.approved) {
-        const rejectionReason = String(state.note ?? '').trim()
-        if (!rejectionReason) {
-          showError(`Vui lòng nhập lý do từ chối cho SKU ${item.skuCode}.`)
-          return
-        }
-        lines.push({ itemId: item.id, approved: false, approvedQuantity: null, note: rejectionReason })
-        continue
-      }
-      const parsed = Number(state.approvedQuantity)
-      if (!Number.isInteger(parsed) || parsed <= 0) {
-        showError(`${STOCK_FLOW_TERMS.approvedQuantity} của ${item.skuCode} phải là số nguyên lớn hơn 0.`)
-        return
-      }
-      if (parsed > Number(item.requestedQuantity ?? 0)) {
-        showError(`${STOCK_FLOW_TERMS.approvedQuantity} của ${item.skuCode} không được vượt ${STOCK_FLOW_TERMS.requestedQuantity}.`)
-        return
-      }
-      lines.push({ itemId: item.id, approved: true, approvedQuantity: parsed, note: state.note })
-    }
-    if (lines.length === 0) {
-      showError('Yêu cầu không có dòng SKU nào để duyệt.')
-      return
-    }
-    onConfirm?.(request.id, { reviewNote, lines })
-  }
+function ShelfReplenishmentProcessResultModal({ result, onClose }) {
+  if (!result) return null
+  const checks = Array.isArray(result.materialChecks) ? result.materialChecks : []
+  const isRejected = String(result.outcome).toLowerCase().includes('từ chối')
+  const hasCreatedProductionOrder = Boolean(result.productionOrderCode)
 
   return (
-    <div className="inventory-modal fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="flex max-h-[min(90dvh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
+    <div className="inventory-modal fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-800">Duyệt {STOCK_FLOW_TERMS.request}</h3>
-            <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{requestCode}</p>
-            <p className="mt-1 text-xs text-slate-600">
-              Duyệt không làm thay đổi tồn kho. Tồn chỉ thay đổi khi {STOCK_FLOW_TERMS.transfer} được hoàn tất.
-            </p>
+            <h3 className="text-lg font-bold text-slate-800">
+              {hasCreatedProductionOrder ? 'Lệnh sản xuất đã được tạo' : 'Kết quả xử lý yêu cầu bổ sung'}
+            </h3>
+            <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{result.requestCode}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <span className="material-symbols-outlined text-[22px]">close</span>
-          </button>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${isRejected ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+            {result.outcome || 'Đã xử lý'}
+          </span>
         </div>
 
-        <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <p className="mt-4 text-sm leading-6 text-slate-700">{result.message}</p>
+        {result.productionOrderCode ? (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Lệnh sản xuất đã được tạo và lưu: <strong>{result.productionOrderCode}</strong>.
+          </p>
+        ) : null}
+
+        {checks.length > 0 ? (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Sản phẩm</th>
-                  <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.requestedQuantity}</th>
-                  <th className="px-4 py-3 text-right">Tồn {STOCK_FLOW_TERMS.warehouse}</th>
-                  <th className="px-4 py-3">Xác nhận</th>
-                  <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.approvedQuantity}</th>
+                  <th className="px-4 py-3">Nguyên liệu/Bao bì</th>
+                  <th className="px-4 py-3 text-right">Cần</th>
+                  <th className="px-4 py-3 text-right">Có trong Kho</th>
+                  <th className="px-4 py-3 text-right">Thiếu</th>
+                  <th className="px-4 py-3">Kết quả</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.length > 0 ? (
-                  items.map((item) => {
-                    const stock = stockBySkuId.get(item.skuId)
-                    const warehouseOnHand = Number(stock?.warehouseQuantityOnHand ?? 0)
-                    const requested = Number(item.requestedQuantity ?? 0)
-                    const state = lineState[item.id] ?? {}
-                    const insufficient = warehouseOnHand < Number(state.approvedQuantity ?? 0)
-                    return (
-                      <tr key={item.id ?? item.skuId ?? item.skuCode}>
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-800">{item.skuSnapshotName || '—'}</p>
-                          <p className="mt-0.5 font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
-                          {!state.approved ? (
-                            <label className="mt-2 block">
-                              <span className="text-xs font-semibold text-rose-700">Lý do từ chối *</span>
-                              <input
-                                type="text"
-                                required
-                                value={state.note ?? ''}
-                                onChange={(event) => patchLine(item.id, { note: event.target.value })}
-                                placeholder="VD: Kho không còn hàng"
-                                className="mt-1 w-full rounded-lg border border-rose-200 bg-rose-50/40 px-2.5 py-2 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-                              />
-                            </label>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-slate-800">{formatStockQuantity(requested)}</td>
-                        <td className={`px-4 py-3 text-right ${insufficient ? 'font-semibold text-rose-700' : 'text-slate-600'}`}>
-                          {isLoading ? 'Đang tải...' : formatStockQuantity(warehouseOnHand)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            aria-label={`Xác nhận duyệt ${item.skuSnapshotName || item.skuCode || 'dòng này'}`}
-                            checked={Boolean(state.approved)}
-                            onChange={(event) => patchLine(item.id, { approved: event.target.checked })}
-                            className="h-4 w-4 rounded border-slate-300 text-[#538463] focus:ring-[#538463]"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            max={requested}
-                            step="1"
-                            disabled={!state.approved}
-                            value={state.approvedQuantity ?? ''}
-                            onChange={(event) => patchLine(item.id, { approvedQuantity: event.target.value })}
-                            className="w-24 rounded-lg border border-slate-200 px-3 py-2 text-right text-sm text-slate-900 outline-none focus:border-[#538463] disabled:bg-slate-50 disabled:text-slate-400"
-                          />
-                        </td>
-                      </tr>
-                    )
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
-                      Chưa có dòng SKU để duyệt.
+                {checks.map((check) => (
+                  <tr key={`${check.skuId}-${check.skuCode}`}>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800">{check.materialName || '—'}</p>
+                      <p className="font-mono text-xs text-[#356647]">{check.skuCode || '—'}</p>
+                    </td>
+                    <td className="px-4 py-3 text-right">{formatStockQuantity(check.requiredQuantity)}</td>
+                    <td className="px-4 py-3 text-right">{formatStockQuantity(check.availableQuantity)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-rose-700">
+                      {formatStockQuantity(check.shortageQuantity)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${Number(check.shortageQuantity) > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                        {check.status || (Number(check.shortageQuantity) > 0 ? 'Thiếu' : 'Đủ')}
+                      </span>
                     </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
+        ) : null}
 
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">Ghi chú duyệt</span>
-            <textarea
-              rows={2}
-              value={reviewNote}
-              onChange={(event) => setReviewNote(event.target.value)}
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
-              placeholder="VD: Duyệt một phần do Kho chưa đủ hàng."
-            />
-          </label>
-        </div>
-
-        <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-            Đóng
-          </button>
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            disabled={isSaving || items.length === 0 || !request.id}
-            onClick={handleConfirm}
-            className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
           >
-            {isSaving ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+            Đóng
           </button>
         </div>
       </div>
@@ -361,11 +170,10 @@ function StockAdjustmentRequestOperationsPage() {
   const canCreateRequest = canCreateStockReplenishmentRequest(session)
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
-  const canViewTransfer = canViewStockTransfer(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = QUICK_FILTERS
-  const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'all')
+  const [activeTab, setActiveTab] = useState(canReview ? 'remaining' : 'all')
   const [searchValue, setSearchValue] = useState(() => location.state?.search ?? '')
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [sort, setSort] = useState(canReview ? 'warehouse_priority' : '')
@@ -383,17 +191,11 @@ function StockAdjustmentRequestOperationsPage() {
   const [detailId, setDetailId] = useState(null)
   const [detail, setDetail] = useState(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
-  const [relatedTransfers, setRelatedTransfers] = useState([])
-  const [selectedTransfer, setSelectedTransfer] = useState(null)
-  const [isLoadingTransfer, setIsLoadingTransfer] = useState(false)
   const [actingId, setActingId] = useState(null)
-  const [rejectTarget, setRejectTarget] = useState(null)
-  const [rejectReason, setRejectReason] = useState('')
+  const [processingItemId, setProcessingItemId] = useState(null)
+  const [processResult, setProcessResult] = useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
-  const [reviewTarget, setReviewTarget] = useState(null)
-  const [closeTarget, setCloseTarget] = useState(null)
-  const [closeReason, setCloseReason] = useState('')
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
 
   const activeQuickFilter = quickFilters.find((tab) => tab.key === activeTab) ?? quickFilters[0]
@@ -468,32 +270,26 @@ function StockAdjustmentRequestOperationsPage() {
     const nextSearch = location.state?.search
     if (!nextSearch) return
     setSearchValue(nextSearch)
-    setActiveTab(canReview ? 'pending' : 'all')
+    setActiveTab(canReview ? 'remaining' : 'all')
     setPage(1)
   }, [canReview, location.key, location.state])
 
   useEffect(() => {
     if (!detailId) {
       setDetail(null)
-      setRelatedTransfers([])
       return undefined
     }
 
     let mounted = true
     setIsLoadingDetail(true)
-    Promise.all([
-      fetchStockAdjustmentRequestById(detailId),
-      fetchStockAdjustmentRequestTransfers(detailId).catch(() => []),
-    ])
-      .then(([request, transfers]) => {
+    fetchRequestDetailWithWarehouseStock(detailId, canReview)
+      .then((request) => {
         if (!mounted) return
         setDetail(request)
-        setRelatedTransfers(transfers)
       })
       .catch((error) => {
         if (!mounted) return
         setDetail(null)
-        setRelatedTransfers([])
         showError(getStockFlowErrorMessage(error, 'Không tải được chi tiết yêu cầu.'))
       })
       .finally(() => {
@@ -503,7 +299,7 @@ function StockAdjustmentRequestOperationsPage() {
     return () => {
       mounted = false
     }
-  }, [detailId])
+  }, [detailId, canReview])
 
   const hasActiveFilters = useMemo(
     () =>
@@ -523,88 +319,60 @@ function StockAdjustmentRequestOperationsPage() {
     setFilters(EMPTY_FILTERS)
     setSearchValue('')
     setSort(canReview ? 'warehouse_priority' : '')
-    setActiveTab(canReview ? 'pending' : 'all')
+    setActiveTab(canReview ? 'remaining' : 'all')
     setPage(1)
   }
 
   async function refreshDetail(id) {
     if (!id) return
     try {
-      const [request, transfers] = await Promise.all([
-        fetchStockAdjustmentRequestById(id),
-        fetchStockAdjustmentRequestTransfers(id).catch(() => []),
-      ])
+      const request = await fetchRequestDetailWithWarehouseStock(id, canReview)
       setDetail(request)
-      setRelatedTransfers(transfers)
     } catch {
       // Danh sách đã được tải lại; lỗi tải chi tiết không chặn luồng thao tác.
     }
   }
 
-  /** Duyệt theo dòng — không chạm tồn kho, nên không phát sự kiện đổi tồn. */
-  async function handleReview(id, payload) {
-    if (!id) {
-      showError('Không xác định được yêu cầu cần duyệt.')
+  /** Xử lý trọn một sản phẩm theo nhánh cấp đủ, tự sản xuất hoặc từ chối do thiếu vật tư. */
+  async function handleProcessItem(request, item) {
+    if (!request?.id || !item?.id) {
+      showError('Không xác định được sản phẩm cần xử lý.')
       return
     }
 
-    setActingId(id)
+    setProcessingItemId(item.id)
     try {
-      const updated = await reviewStockAdjustmentRequest(id, payload)
-      const statusPresentation = getAdjustmentRequestStatusPresentation(updated)
+      const result = await processStockAdjustmentRequestItem(request.id, item.id)
+      setProcessResult(result)
       showSuccess(
-        `Đã duyệt ${STOCK_FLOW_TERMS.request} ${updated.requestCode}. Trạng thái: ${statusPresentation.label}. `
-        + `Tồn kho chưa thay đổi — hãy tạo ${STOCK_FLOW_TERMS.transfer} để thực hiện.`,
+        result.message
+        || `Đã xử lý ${item.skuCode || 'sản phẩm'} trong yêu cầu ${request.requestCode}.`,
       )
-      setReviewTarget(null)
       await loadData()
-      await refreshDetail(id)
+      await refreshDetail(request.id)
     } catch (error) {
-      showError(getStockFlowErrorMessage(error))
+      showError(getStockFlowErrorMessage(error, 'Không xử lý được sản phẩm trong yêu cầu.'))
     } finally {
-      setActingId(null)
+      setProcessingItemId(null)
     }
   }
 
-  async function handleCloseRemaining(id) {
-    if (!closeReason.trim()) {
-      showError('Vui lòng nhập lý do đóng phần còn lại.')
+  async function handleConfirmTransfer(request, item) {
+    if (!request?.id || !item?.id) {
+      showError('Không xác định được sản phẩm cần xác nhận chuyển lên Kệ.')
       return
     }
-    setActingId(id)
-    try {
-      const updated = await closeStockAdjustmentRemaining(id, closeReason)
-      showSuccess(`Đã đóng phần còn lại. Trạng thái: ${getAdjustmentStatusLabel(updated.status)}.`)
-      setCloseTarget(null)
-      setCloseReason('')
-      await loadData()
-      await refreshDetail(id)
-    } catch (error) {
-      showError(getStockFlowErrorMessage(error))
-    } finally {
-      setActingId(null)
-    }
-  }
 
-  async function handleReject() {
-    if (!rejectTarget) return
-    if (!rejectReason.trim()) {
-      showError('Vui lòng nhập lý do từ chối.')
-      return
-    }
-    setActingId(rejectTarget.id)
+    setProcessingItemId(item.id)
     try {
-      await rejectStockAdjustmentRequest(rejectTarget.id, rejectReason)
-      showSuccess('Đã từ chối yêu cầu.')
-      const rejectedId = rejectTarget.id
-      setRejectTarget(null)
-      setRejectReason('')
+      const result = await confirmStockAdjustmentRequestTransfer(request.id, item.id)
+      showSuccess(result.message || 'Đã xác nhận chuyển đủ hàng lên Kệ.')
       await loadData()
-      await refreshDetail(rejectedId)
+      await refreshDetail(request.id)
     } catch (error) {
-      showError(getStockFlowErrorMessage(error))
+      showError(getStockFlowErrorMessage(error, 'Không thể xác nhận chuyển hàng lên Kệ.'))
     } finally {
-      setActingId(null)
+      setProcessingItemId(null)
     }
   }
 
@@ -628,27 +396,7 @@ function StockAdjustmentRequestOperationsPage() {
     }
   }
 
-  async function handleViewTransfer(transferId) {
-    if (!transferId) return
-    setIsLoadingTransfer(true)
-    try {
-      const transfer = await fetchStockTransferById(transferId)
-      setSelectedTransfer({
-        ...transfer,
-        sourceRequestedByName: transfer.sourceRequestedByName || detail?.requestedByName || '',
-      })
-    } catch (error) {
-      showError(getStockFlowErrorMessage(error, 'Không tải được Phiếu Điều Chuyển.'))
-    } finally {
-      setIsLoadingTransfer(false)
-    }
-  }
-
   const creatorColumnLabel = canReview ? 'Người yêu cầu' : 'Người tạo'
-  const canCreateTransferFromDetail =
-    canReview && detail && TRANSFERABLE_STATUSES.includes(String(detail.status ?? '').toLowerCase())
-  const latestRelatedTransfer = relatedTransfers[0] ?? null
-
   return (
     <PageShell className="-mt-2 !gap-1 sm:-mt-3 sm:!gap-1.5 lg:-mt-4 xl:-mt-5">
       <PageHeader
@@ -657,7 +405,7 @@ function StockAdjustmentRequestOperationsPage() {
         title={STOCK_FLOW_TERMS.request}
         titleInfo={
           canReview
-            ? `Thủ kho duyệt từng dòng SKU. Duyệt không đổi tồn — tồn chỉ đổi khi ${STOCK_FLOW_TERMS.transfer} hoàn tất.`
+            ? 'Nhân viên kho xử lý trọn từng sản phẩm. Đủ Thành phẩm thì hệ thống chuẩn bị chuyển lên Kệ; thiếu thì kiểm tra BOM và tự tạo Lệnh sản xuất nếu đủ Nguyên liệu/Bao bì.'
             : `Gửi yêu cầu bổ sung hàng thành phẩm từ ${STOCK_FLOW_TERMS.warehouse} sang ${STOCK_FLOW_TERMS.shelf}.`
         }
         searchPlaceholder="Tìm mã yêu cầu, mã SKU, tên sản phẩm..."
@@ -770,22 +518,22 @@ function StockAdjustmentRequestOperationsPage() {
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center">
                     <p className="font-semibold text-slate-800">
-                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all')
+                      {searchValue.trim() || activeTab !== (canReview ? 'remaining' : 'all')
                         ? 'Không có yêu cầu khớp bộ lọc'
                         : 'Chưa có yêu cầu bổ sung tồn'}
                     </p>
                     <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all')
+                      {searchValue.trim() || activeTab !== (canReview ? 'remaining' : 'all')
                         ? 'Thử đổi tab hoặc xóa từ khóa tìm kiếm.'
-                        : 'Tạo yêu cầu khi Kệ thiếu hàng. Thủ kho sẽ điều chuyển từ Kho sang Kệ.'}
+                        : 'Tạo yêu cầu khi Kệ Hàng thiếu hàng. Nhân viên kho sẽ xử lý đủ từng sản phẩm.'}
                     </p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                      {searchValue.trim() || activeTab !== (canReview ? 'pending' : 'all') ? (
+                      {searchValue.trim() || activeTab !== (canReview ? 'remaining' : 'all') ? (
                         <button
                           type="button"
                           onClick={() => {
                             setSearchValue('')
-                            setActiveTab(canReview ? 'pending' : 'all')
+                            setActiveTab(canReview ? 'remaining' : 'all')
                             setPage(1)
                           }}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
@@ -804,14 +552,6 @@ function StockAdjustmentRequestOperationsPage() {
                           Tạo yêu cầu
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => navigate('/inventory/stock-transfers')}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
-                        Xem điều chuyển
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -947,26 +687,6 @@ function StockAdjustmentRequestOperationsPage() {
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <h3 className="text-lg font-bold text-slate-800">Chi tiết {STOCK_FLOW_TERMS.request}</h3>
               <div className="flex flex-wrap gap-2">
-                {canViewTransfer && latestRelatedTransfer ? (
-                  <button
-                    type="button"
-                    onClick={() => handleViewTransfer(latestRelatedTransfer.transferId)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                    title={relatedTransfers.length > 1 ? 'Xem Phiếu Điều Chuyển mới nhất' : 'Xem Phiếu Điều Chuyển'}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                    {relatedTransfers.length > 1 ? 'Xem phiếu mới nhất' : 'Xem Phiếu'}
-                  </button>
-                ) : null}
-                {canCreateTransferFromDetail ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/inventory/stock-transfers/create?sourceRequestId=${detail.id}`)}
-                    className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
-                  >
-                    Tạo {STOCK_FLOW_TERMS.transfer}
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onClick={() => setDetailId(null)}
@@ -982,93 +702,21 @@ function StockAdjustmentRequestOperationsPage() {
             ) : detail ? (
               <StockAdjustmentRequestDetailPanel
                 request={detail}
-                relatedTransfers={relatedTransfers}
                 canReview={canReview}
                 canCancel={canCancelRequest}
                 canCancelAny={canCancelAnyRequest}
                 currentUserId={currentUserId}
                 activeTab={activeTab}
-                actingId={actingId}
-                onReview={setReviewTarget}
-                onReject={setRejectTarget}
+                processingItemId={processingItemId}
+                onProcessItem={handleProcessItem}
+                onConfirmTransfer={handleConfirmTransfer}
                 onCancel={setCancelTarget}
-                onCloseRemaining={setCloseTarget}
-                onViewTransfer={canViewTransfer ? handleViewTransfer : undefined}
               />
             ) : (
               <p className="text-sm text-slate-500">
                 Không tải được chi tiết yêu cầu. Vui lòng đóng và thử lại.
               </p>
             )}
-          </div>
-        </div>
-      ) : null}
-
-      {rejectTarget ? (
-        <div className="inventory-modal fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800">Từ chối yêu cầu {rejectTarget.requestCode}</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              {rejectTarget.itemCount} sản phẩm trong yêu cầu. Từ chối không làm thay đổi tồn kho.
-            </p>
-            <div className="mt-4 space-y-2">
-              <span className="text-xs font-semibold text-slate-500">Lý do thường gặp</span>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {REJECT_REASON_PRESETS.map((preset) => {
-                  const selected = rejectReason.trim() === preset
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setRejectReason(preset)}
-                      className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                        selected
-                          ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
-                          : 'border-slate-200 bg-[#fbf9f1] text-slate-600 hover:border-[#356647]/40'
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <label className="mt-4 block space-y-2">
-              <span className="text-xs font-semibold text-slate-500">Lý do từ chối *</span>
-              <ReasonSuggestionChips
-                suggestions={getReasonSuggestions('stockAdjustmentReject')}
-                value={rejectReason}
-                onSelect={setRejectReason}
-              />
-              <textarea
-                rows={5}
-                required
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                placeholder="Chọn lý do gợi ý phía trên hoặc nhập lý do khác..."
-                className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-              />
-            </label>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setRejectTarget(null)
-                  setRejectReason('')
-                }}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                disabled={actingId === rejectTarget.id}
-                onClick={handleReject}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                Xác nhận từ chối
-              </button>
-            </div>
           </div>
         </div>
       ) : null}
@@ -1117,69 +765,11 @@ function StockAdjustmentRequestOperationsPage() {
         </div>
       ) : null}
 
-      {closeTarget ? (
-        <div className="inventory-modal fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800">Đóng phần còn lại {closeTarget.requestCode}</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Đóng {STOCK_FLOW_TERMS.remainingQuantity} khi {STOCK_FLOW_TERMS.warehouse} không thể cấp thêm.
-              Thao tác này không thay đổi tồn kho và không hủy phần đã chuyển.
-            </p>
-            <label className="mt-4 block space-y-2">
-              <span className="text-xs font-semibold text-slate-500">Lý do đóng *</span>
-              <ReasonSuggestionChips
-                suggestions={getReasonSuggestions('stockAdjustmentCloseRemaining')}
-                value={closeReason}
-                onSelect={setCloseReason}
-              />
-              <textarea
-                rows={3}
-                required
-                value={closeReason}
-                onChange={(event) => setCloseReason(event.target.value)}
-                className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-              />
-            </label>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCloseTarget(null)
-                  setCloseReason('')
-                }}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                disabled={actingId === closeTarget.id}
-                onClick={() => handleCloseRemaining(closeTarget.id)}
-                className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-              >
-                Xác nhận đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {reviewTarget ? (
-        <ReviewStockRequestModal
-          request={reviewTarget}
-          isSaving={actingId === reviewTarget?.id}
-          onClose={() => setReviewTarget(null)}
-          onConfirm={handleReview}
-        />
-      ) : null}
-
-      <StockTransferPreviewModal
-        transfer={selectedTransfer}
-        isLoading={isLoadingTransfer}
-        onClose={() => {
-          if (!isLoadingTransfer) setSelectedTransfer(null)
-        }}
+      <ShelfReplenishmentProcessResultModal
+        result={processResult}
+        onClose={() => setProcessResult(null)}
       />
+
     </PageShell>
   )
 }

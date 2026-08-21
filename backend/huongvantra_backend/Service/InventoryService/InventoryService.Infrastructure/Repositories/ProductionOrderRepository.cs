@@ -14,6 +14,12 @@ public class ProductionOrderRepository(InventoryDbContext _db) : IProductionOrde
             .Include(o => o.OutputLines)
             .FirstOrDefaultAsync(o => o.Id == id, ct);
 
+    public Task<ProductionOrder?> GetBySourceRequestItemIdAsync(Guid requestItemId, CancellationToken ct = default) =>
+        _db.ProductionOrders
+            .Include(o => o.Lines)
+            .Include(o => o.OutputLines)
+            .FirstOrDefaultAsync(o => o.SourceStockAdjustmentRequestItemId == requestItemId, ct);
+
     public async Task<(List<ProductionOrder> Items, int Total)> GetPagedAsync(
         ProductionOrderStatus? status, int page, int pageSize, CancellationToken ct = default)
     {

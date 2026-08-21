@@ -9,13 +9,15 @@ namespace InventoryService.WebAPI.Controllers;
 
 /// <summary>
 /// Yêu cầu bổ sung Kệ Hàng. Ghi nhận nhu cầu bổ sung thành phẩm từ Kho lên Kệ.
-/// Không tự thay đổi tồn kho; tồn chỉ thay đổi khi Phiếu điều chuyển Kho → Kệ hoàn tất.
+/// Nhân viên kho xử lý trọn từng sản phẩm; tồn Kho → Kệ chỉ cập nhật khi Warehouse xác nhận đã chuyển thực tế.
 /// Admin chỉ được xem/audit, bị chặn mọi thao tác ghi kể cả khi kiêm vai trò khác.
 /// </summary>
 [ApiController]
 [Route("api/v1/inventory/stock-adjustment-requests")]
 [Authorize]
-public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
+public class StockAdjustmentRequestsController(
+    InventoryLogic _logic,
+    ShelfReplenishmentWorkflowLogic _workflow) : ControllerBase
 {
     private bool IsSaleRole() =>
         User.IsInRole("Sale") || User.IsInRole("SalePos");
@@ -115,17 +117,14 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         return Ok(item);
     }
 
-    /// <summary>Các Phiếu điều chuyển đã sinh ra từ yêu cầu này. Một yêu cầu có thể có nhiều phiếu.</summary>
-    [HttpGet("{id:guid}/transfers")]
-    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
-    public async Task<IActionResult> GetTransfers(Guid id, CancellationToken ct) =>
-        Ok(await _logic.GetStockAdjustmentRequestTransfersAsync(id, ct));
-
     [HttpPost]
     [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
-        if (User.IsInRole("Admin") || IsSaleCodOnly()) return Forbid();
+        if (User.IsInRole("Admin")
+            || User.IsInRole("Warehouse")
+            || !User.HasPermission(PermissionNames.ManageEmployee))
+            return Forbid();
         var requestedBy = User.GetUserId();
         if (requestedBy == Guid.Empty)
             return Unauthorized(new { message = "Không xác định được người dùng." });
@@ -142,54 +141,56 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> CheckDuplicates(
         [FromBody] CheckStockAdjustmentDuplicatesRequest request,
-        CancellationToken ct) =>
-        Ok(await _logic.CheckStockAdjustmentDuplicatesAsync(request.SkuIds ?? [], ct));
-
-    /// <summary>Warehouse duyệt/từ chối theo từng dòng. Không làm thay đổi tồn kho.</summary>
-    [HttpPost("{id:guid}/review")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
-    public async Task<IActionResult> Review(
-        Guid id,
-        [FromBody] ReviewStockAdjustmentRequestLines? request,
         CancellationToken ct)
     {
-        if (User.IsInRole("Admin")) return Forbid();
-        var reviewedBy = User.GetUserId();
-        if (reviewedBy == Guid.Empty)
-            return Unauthorized(new { message = "Không xác định được người dùng." });
+        if (User.IsInRole("Admin")
+            || User.IsInRole("Warehouse")
+            || !User.HasPermission(PermissionNames.ManageEmployee))
+            return Forbid();
 
-        return Ok(await _logic.ReviewStockAdjustmentRequestAsync(id, reviewedBy, request, ct, User.ToCreatorSnapshot()));
+        return Ok(await _logic.CheckStockAdjustmentDuplicatesAsync(request.SkuIds ?? [], ct));
     }
 
-    [HttpPost("{id:guid}/reject")]
+    /// <summary>
+    /// Nhân viên kho xử lý trọn một sản phẩm trong yêu cầu. Nếu đủ Thành phẩm, hệ thống
+    /// chuẩn bị Phiếu điều chuyển nội bộ nhưng chưa thay đổi tồn; nếu đủ Nguyên liệu/Bao bì, hệ thống chỉ trả kết quả kiểm tra để Warehouse xác nhận tạo Lệnh sản xuất;
+    /// nếu thiếu Nguyên liệu/Bao bì, dòng sản phẩm bị từ chối.
+    /// </summary>
+    [HttpPost("{id:guid}/items/{itemId:guid}/process")]
     [Authorize(Policy = PermissionNames.OperateWarehouse)]
-    public async Task<IActionResult> Reject(
-        Guid id,
-        [FromBody] RejectStockAdjustmentRequest request,
-        CancellationToken ct)
+    public async Task<IActionResult> ProcessItem(Guid id, Guid itemId, CancellationToken ct)
     {
-        if (User.IsInRole("Admin")) return Forbid();
-        var reviewedBy = User.GetUserId();
-        if (reviewedBy == Guid.Empty)
-            return Unauthorized(new { message = "Không xác định được người dùng." });
-
-        return Ok(await _logic.RejectStockAdjustmentRequestAsync(id, reviewedBy, request, ct, User.ToCreatorSnapshot()));
-    }
-
-    /// <summary>Warehouse đóng phần còn lại khi không thể cấp thêm; bắt buộc có lý do.</summary>
-    [HttpPost("{id:guid}/close-remaining")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
-    public async Task<IActionResult> CloseRemaining(
-        Guid id,
-        [FromBody] CloseStockAdjustmentRemainingRequest? request,
-        CancellationToken ct)
-    {
-        if (User.IsInRole("Admin")) return Forbid();
+        if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
         var actorId = User.GetUserId();
         if (actorId == Guid.Empty)
-            return Unauthorized(new { message = "Không xác định được người dùng." });
+            return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
 
-        return Ok(await _logic.CloseStockAdjustmentRemainingAsync(id, actorId, request, ct, User.ToCreatorSnapshot()));
+        return Ok(await _workflow.ProcessItemAsync(id, itemId, actorId, User.ToCreatorSnapshot(), ct));
+    }
+
+    [HttpPost("{id:guid}/items/{itemId:guid}/confirm-production")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    public async Task<IActionResult> ConfirmProduction(Guid id, Guid itemId, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
+        var actorId = User.GetUserId();
+        if (actorId == Guid.Empty)
+            return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
+
+        return Ok(await _workflow.ConfirmProductionAsync(id, itemId, actorId, User.ToCreatorSnapshot(), ct));
+    }
+
+    /// <summary>Nhân viên kho xác nhận đã chuyển đủ hàng thực tế lên Kệ Hàng.</summary>
+    [HttpPost("{id:guid}/items/{itemId:guid}/confirm-transfer")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    public async Task<IActionResult> ConfirmTransfer(Guid id, Guid itemId, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
+        var actorId = User.GetUserId();
+        if (actorId == Guid.Empty)
+            return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
+
+        return Ok(await _workflow.ConfirmTransferAsync(id, itemId, actorId, User.ToCreatorSnapshot(), ct));
     }
 
     [HttpPost("{id:guid}/cancel")]

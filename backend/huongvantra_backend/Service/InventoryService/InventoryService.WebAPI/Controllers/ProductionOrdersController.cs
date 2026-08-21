@@ -10,7 +10,9 @@ namespace InventoryService.WebAPI.Controllers;
 [ApiController]
 [Route("api/v1/inventory/production-orders")]
 [Authorize]
-public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
+public class ProductionOrdersController(
+    InventoryLogic _logic,
+    ShelfReplenishmentWorkflowLogic _shelfReplenishmentWorkflow) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewInventory)]
@@ -77,6 +79,8 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
         if (User.IsInRole("Admin")) return Forbid();
 
         var result = await _logic.CompleteProductionOrderAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
+        await _shelfReplenishmentWorkflow.TryFulfillCompletedProductionAsync(
+            id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 
