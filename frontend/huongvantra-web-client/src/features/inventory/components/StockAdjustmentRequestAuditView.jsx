@@ -17,7 +17,6 @@ import {
 import {
   fetchStockAdjustmentRequestById,
   fetchStockAdjustmentRequestFilterOptions,
-  fetchStockAdjustmentRequestTransfers,
   fetchStockAdjustmentRequests,
   getAdjustmentStatusClass,
   getAdjustmentStatusLabel,
@@ -83,7 +82,6 @@ export default function StockAdjustmentRequestAuditView() {
   const [creatorOptions, setCreatorOptions] = useState([])
   const [detailId, setDetailId] = useState(null)
   const [detail, setDetail] = useState(null)
-  const [detailTransfers, setDetailTransfers] = useState([])
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
   // Danh bạ phụ trợ lấy từ chính tùy chọn bộ lọc của Inventory; không gọi sang IAM.
@@ -149,25 +147,19 @@ export default function StockAdjustmentRequestAuditView() {
   useEffect(() => {
     if (!detailId) {
       setDetail(null)
-      setDetailTransfers([])
       return undefined
     }
 
     let mounted = true
     setIsLoadingDetail(true)
-    Promise.all([
-      fetchStockAdjustmentRequestById(detailId),
-      fetchStockAdjustmentRequestTransfers(detailId).catch(() => []),
-    ])
-      .then(([request, transfers]) => {
+    fetchStockAdjustmentRequestById(detailId)
+      .then((request) => {
         if (!mounted) return
         setDetail(request)
-        setDetailTransfers(transfers)
       })
       .catch((error) => {
         if (!mounted) return
         setDetail(null)
-        setDetailTransfers([])
         showError(getStockFlowErrorMessage(error, 'Không tải được chi tiết yêu cầu.'))
       })
       .finally(() => {
@@ -463,13 +455,11 @@ export default function StockAdjustmentRequestAuditView() {
 
                 <StockAdjustmentRequestDetailPanel
                   request={detail}
-                  relatedTransfers={detailTransfers}
                   canReview={false}
                   canCancel={false}
                   canCancelAny={false}
                   currentUserId=""
                   activeTab="audit"
-                  actingId={null}
                 />
               </>
             ) : (

@@ -701,6 +701,32 @@ export default function StockTransferCreatePage() {
     )
   }
 
+  if (!isSuggestionMode) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Không cần tạo Phiếu điều chuyển"
+          description="Yêu cầu bổ sung Kệ Hàng được Nhân viên kho xử lý trực tiếp theo từng sản phẩm."
+        />
+        <section className="rounded-2xl border border-[#cfe0d4] bg-[#f0f7f2] p-6 text-sm text-slate-700 shadow-sm">
+          <p className="font-semibold text-[#285239]">
+            Hệ thống chuẩn bị chuyển hàng lên Kệ hoặc tự tạo Lệnh sản xuất sau khi kiểm tra BOM Nguyên liệu/Bao bì.
+          </p>
+          <p className="mt-2">
+            Phiếu điều chuyển chỉ còn là chứng từ nội bộ do hệ thống tự sinh; Nhân viên kho không lập thêm phiếu từ yêu cầu.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/inventory/stock-requests')}
+            className="mt-4 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            Quay lại Yêu cầu bổ sung Kệ Hàng
+          </button>
+        </section>
+      </PageShell>
+    )
+  }
+
   return (
     <PageShell className="!gap-3 lg:h-full lg:min-h-0 lg:overflow-hidden">
       <PageHeader

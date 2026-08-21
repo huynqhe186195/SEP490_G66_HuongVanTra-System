@@ -20,7 +20,7 @@ public class StockAdjustmentRequest
     public DateTime RequestedAt { get; set; }
     public Guid? ReviewedBy { get; set; }
 
-    /// <summary>Ảnh chụp người xử lý gần nhất (duyệt, từ chối, đóng phần còn lại, hủy).</summary>
+    /// <summary>Ảnh chụp người xử lý gần nhất (xử lý sản phẩm, tự động từ chối hoặc hủy).</summary>
     public string? ReviewedByName { get; set; }
     public string? ReviewedByRoleName { get; set; }
     public DateTime? ReviewedAt { get; set; }

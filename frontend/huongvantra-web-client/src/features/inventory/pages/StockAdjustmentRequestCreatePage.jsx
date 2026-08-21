@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showInfo, showSuccess } from '../../../app/toast.js'
-import { alertDialog } from '../../../app/dialog.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   canCreateStockReplenishmentRequest,
@@ -43,41 +42,6 @@ function getDuplicateConflict(error) {
   const body = error?.body
   if (error?.statusCode !== 409 || body?.code !== 'DUPLICATE_STOCK_ADJUSTMENT_SKU') return null
   return { blocking: Boolean(body.blocking), duplicates: body.duplicates ?? [] }
-}
-
-/**
- * Message từ server nêu tên sản phẩm ở dạng thuần. Bọc **...** để popup in đậm.
- */
-function emphasizeSkuNames(message, duplicates) {
-  const names = [...new Set(duplicates.map((row) => row.skuSnapshotName))]
-    // Tên dài trước để tên ngắn không cắt mất phần đầu của tên dài hơn.
-    .sort((a, b) => b.length - a.length)
-
-  let result = String(message)
-  for (const name of names) {
-    if (!name) continue
-    result = result.split(name).join(`**${name}**`)
-  }
-  return result
-}
-
-/** Gom theo sản phẩm, mỗi sản phẩm một dòng liệt kê các phiếu đang treo. */
-function describeDuplicates(duplicates) {
-  const bySku = new Map()
-  for (const row of duplicates) {
-    const entry = bySku.get(row.skuId) ?? { name: row.skuSnapshotName, codes: [], remaining: 0 }
-    entry.codes.push(row.requestCode)
-    entry.remaining += row.remainingQuantity
-    bySku.set(row.skuId, entry)
-  }
-
-  return [...bySku.values()]
-    .map(({ name, codes, remaining }) => {
-      const shown = codes.slice(0, 3).join(', ')
-      const more = codes.length > 3 ? ` và ${codes.length - 3} phiếu khác` : ''
-      return `**${name}** — còn thiếu ${remaining}\n${codes.length} yêu cầu: ${shown}${more}`
-    })
-    .join('\n\n')
 }
 
 function normalizeSearchTerm(value) {
@@ -126,8 +90,9 @@ export default function StockAdjustmentRequestCreatePage() {
   const [lines, setLines] = useState([])
   const [reason, setReason] = useState('Bổ sung hàng thành phẩm từ Kho sang Kệ Hàng')
   const [isSaving, setIsSaving] = useState(false)
-  // Giữ kết quả kiểm tra trùng để popup xác nhận hiển thị đúng cảnh báo đã tính trước đó.
+  // Popup xác nhận chỉ được mở sau khi danh sách SKU đã qua kiểm tra trùng.
   const [confirmPrecheck, setConfirmPrecheck] = useState(null)
+  const [duplicatePrecheck, setDuplicatePrecheck] = useState({ skuIdsKey: '', blocking: false, duplicates: [] })
 
   const searchTerm = search.trim()
 
@@ -188,6 +153,47 @@ export default function StockAdjustmentRequestCreatePage() {
   }, [searchTerm, catalogPage])
 
   const selectedIds = useMemo(() => new Set(lines.map((line) => line.skuId)), [lines])
+  const selectedSkuIdsKey = useMemo(() => lines.map((line) => line.skuId).join('|'), [lines])
+
+  useEffect(() => {
+    let active = true
+    const skuIds = selectedSkuIdsKey ? selectedSkuIdsKey.split('|') : []
+
+    if (skuIds.length === 0) return undefined
+
+    checkStockAdjustmentDuplicates(skuIds)
+      .then((result) => {
+        if (!active) return
+        setDuplicatePrecheck({
+          skuIdsKey: selectedSkuIdsKey,
+          blocking: Boolean(result.blocking),
+          duplicates: result.duplicates ?? [],
+        })
+      })
+      .catch(() => {
+        if (!active) return
+        setDuplicatePrecheck({ skuIdsKey: selectedSkuIdsKey, blocking: false, duplicates: [] })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [selectedSkuIdsKey])
+
+  const duplicatesBySkuId = useMemo(() => {
+    const result = new Map()
+    for (const duplicate of duplicatePrecheck.duplicates) {
+      const entry = result.get(duplicate.skuId) ?? { codes: [], remaining: 0 }
+      entry.codes.push(duplicate.requestCode)
+      entry.remaining += Number(duplicate.remainingQuantity ?? 0)
+      result.set(duplicate.skuId, entry)
+    }
+    return result
+  }, [duplicatePrecheck.duplicates])
+
+  const isCheckingDuplicates = Boolean(selectedSkuIdsKey)
+    && duplicatePrecheck.skuIdsKey !== selectedSkuIdsKey
+  const hasOpenDuplicate = Boolean(selectedSkuIdsKey) && !isCheckingDuplicates && duplicatePrecheck.blocking
 
   const addLine = useCallback((option) => {
     setLines((current) => {
@@ -218,20 +224,15 @@ export default function StockAdjustmentRequestCreatePage() {
       const duplicate = getDuplicateConflict(error)
       if (!duplicate) throw error
 
-      await alertDialog({
-        title: 'Không thể gửi yêu cầu',
-        message:
-          `${emphasizeSkuNames(error.message, duplicate.duplicates)}\n\n`
-          + `${describeDuplicates(duplicate.duplicates)}\n\n`
-          + 'Vừa có yêu cầu khác được tạo cho sản phẩm này. Hãy kiểm tra lại phiếu rồi gửi lại.',
-      })
+      setDuplicatePrecheck({ skuIdsKey: selectedSkuIdsKey, blocking: true, duplicates: duplicate.duplicates })
+      showInfo('Danh sách sản phẩm đã có yêu cầu chưa xử lý. Hãy xóa các sản phẩm được cảnh báo trước khi gửi lại.')
       return null
     }
   }
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (isSaving || confirmPrecheck) return
+    if (isSaving || confirmPrecheck || isCheckingDuplicates || hasOpenDuplicate) return
 
     if (lines.length === 0) {
       showError('Vui lòng chọn ít nhất một sản phẩm cần bổ sung cho Kệ Hàng.')
@@ -252,20 +253,13 @@ export default function StockAdjustmentRequestCreatePage() {
 
     setIsSaving(true)
     try {
-      // Kiểm tra trùng trước để phiếu bị khóa dừng ngay, không bắt người dùng
-      // xác nhận xong mới nhận thông báo chặn.
+      // Kiểm tra lại trước khi mở popup để xử lý trường hợp có yêu cầu mới được tạo xen vào.
       const precheck = await checkStockAdjustmentDuplicates(lines.map((line) => line.skuId))
       if (precheck.blocking) {
-        await alertDialog({
-          title: 'Không thể gửi yêu cầu',
-          message:
-            `${emphasizeSkuNames(precheck.message, precheck.duplicates)}\n\n`
-            + `${describeDuplicates(precheck.duplicates)}\n\n`
-            + 'Hãy bỏ các sản phẩm này khỏi phiếu rồi gửi lại.',
-        })
+        setDuplicatePrecheck({ skuIdsKey: selectedSkuIdsKey, blocking: true, duplicates: precheck.duplicates ?? [] })
         return
       }
-      setConfirmPrecheck(precheck)
+      setConfirmPrecheck({})
     } catch (error) {
       showError(getStockFlowErrorMessage(error, 'Không kiểm tra được yêu cầu trước khi gửi.'))
     } finally {
@@ -280,8 +274,6 @@ export default function StockAdjustmentRequestCreatePage() {
     try {
       const created = await submitWithDuplicateHandling({
         reason: reason.trim() || null,
-        // Cảnh báo mềm đã nằm trong popup xác nhận nên không hỏi lại lần nữa.
-        acknowledgeDuplicates: confirmPrecheck.warning,
         items: lines.map((line) => ({
           skuId: line.skuId,
           skuCode: line.skuCode,
@@ -462,8 +454,10 @@ export default function StockAdjustmentRequestCreatePage() {
                       Number.isFinite(quantity)
                       && quantity > 0
                       && quantity > line.warehouseQuantityOnHand
+                    const duplicate = duplicatesBySkuId.get(line.skuId)
                     return (
-                      <tr key={line.skuId} className="align-top">
+                      <Fragment key={line.skuId}>
+                      <tr className="align-top">
                         <td className="px-4 py-3 text-slate-800">
                           <span className="block font-semibold">{line.skuSnapshotName}</span>
                           <span className="mt-0.5 block text-xs text-slate-500">{line.productName}</span>
@@ -511,6 +505,18 @@ export default function StockAdjustmentRequestCreatePage() {
                           </button>
                         </td>
                       </tr>
+                      {duplicate ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 pb-3 pt-0">
+                            <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                              Sản phẩm này đang có yêu cầu chưa xử lý: <strong>{duplicate.codes.join(', ')}</strong>
+                              {duplicate.remaining > 0 ? ` (còn thiếu ${formatStockQuantity(duplicate.remaining)}).` : '.'}
+                              {' '}Hãy xóa sản phẩm này khỏi danh sách để gửi các sản phẩm còn lại.
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     )
                   })
                 )}
@@ -541,10 +547,11 @@ export default function StockAdjustmentRequestCreatePage() {
             </button>
             <button
               type="submit"
-              disabled={isSaving || lines.length === 0}
+              disabled={isSaving || isCheckingDuplicates || lines.length === 0 || hasOpenDuplicate}
+              title={hasOpenDuplicate ? 'Hãy xóa các sản phẩm đang có yêu cầu chưa xử lý.' : undefined}
               className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang xử lý...' : 'Gửi yêu cầu'}
+              {isSaving ? 'Đang xử lý...' : isCheckingDuplicates ? 'Đang kiểm tra...' : 'Gửi yêu cầu'}
             </button>
           </div>
         </section>
@@ -557,7 +564,7 @@ export default function StockAdjustmentRequestCreatePage() {
         isSubmitting={isSaving}
         lines={lines}
         reason={reason}
-        duplicateWarning={confirmPrecheck?.warning ? confirmPrecheck : null}
+        duplicateWarning={null}
       />
     </PageShell>
   )

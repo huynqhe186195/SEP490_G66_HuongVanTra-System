@@ -77,6 +77,7 @@ builder.Services.AddHttpClient<INotificationClient, NotificationClient>(client =
 
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StockTransferLogic>();
+builder.Services.AddScoped<ShelfReplenishmentWorkflowLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddScoped<WarehouseDailyReportLogic>();
 builder.Services.AddScoped<WarehouseDailyReportSubmissionLogic>();

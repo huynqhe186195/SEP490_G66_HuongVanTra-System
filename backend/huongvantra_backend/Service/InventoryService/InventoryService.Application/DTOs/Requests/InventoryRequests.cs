@@ -72,8 +72,8 @@ public record CreateStockAdjustmentRequestItem(
     int QuantityDelta);
 
 /// <summary>
-/// AcknowledgeDuplicates: người tạo đã xem cảnh báo trùng SKU và vẫn muốn gửi.
-/// Chỉ bỏ qua được cảnh báo mềm; trùng với yêu cầu chưa ai tiếp nhận vẫn bị chặn.
+/// AcknowledgeDuplicates được giữ lại để tương thích payload cũ nhưng không còn được sử dụng.
+/// Mọi SKU còn dòng yêu cầu chưa kết thúc đều bị chặn tạo lại.
 /// </summary>
 public record CreateStockAdjustmentRequest(
     string? Reason,
@@ -83,23 +83,7 @@ public record CreateStockAdjustmentRequest(
 /// <summary>Kiểm tra trùng SKU trước khi gửi yêu cầu, không tạo dữ liệu.</summary>
 public record CheckStockAdjustmentDuplicatesRequest(List<Guid>? SkuIds);
 
-public record RejectStockAdjustmentRequest(string? Reason);
 public record CancelStockAdjustmentRequest(string? Reason);
-
-/// <summary>Duyệt một dòng yêu cầu bổ sung Kệ Hàng: Warehouse chọn số lượng duyệt cho từng dòng.</summary>
-public record ReviewStockAdjustmentLineRequest(
-    Guid ItemId,
-    bool Approved,
-    int? ApprovedQuantity,
-    string? Note);
-
-/// <summary>Duyệt/từ chối theo dòng. Dòng không liệt kê sẽ được duyệt nguyên số lượng yêu cầu.</summary>
-public record ReviewStockAdjustmentRequestLines(
-    string? ReviewNote,
-    List<ReviewStockAdjustmentLineRequest>? Lines);
-
-/// <summary>Đóng phần còn lại của yêu cầu (ClosedPartial) kèm lý do bắt buộc.</summary>
-public record CloseStockAdjustmentRemainingRequest(string? Reason);
 
 public record UpsertStockTransferLineRequest(
     Guid SkuId,

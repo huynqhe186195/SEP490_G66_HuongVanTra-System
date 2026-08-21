@@ -39,6 +39,9 @@ function mapRequestItem(row) {
       row.warehouseQuantityOnHandAfter ?? row.WarehouseQuantityOnHandAfter ?? null,
     exportSlipId: row.exportSlipId ?? row.ExportSlipId ?? null,
     exportSlipCode: row.exportSlipCode ?? row.ExportSlipCode ?? '',
+    autoProductionOrderId: row.autoProductionOrderId ?? row.AutoProductionOrderId ?? null,
+    autoProductionOrderCode: row.autoProductionOrderCode ?? row.AutoProductionOrderCode ?? '',
+    autoProductionOrderStatus: row.autoProductionOrderStatus ?? row.AutoProductionOrderStatus ?? '',
   }
 }
 
@@ -212,6 +215,90 @@ export async function createStockAdjustmentRequest(payload) {
   return mapRequest(data)
 }
 
+/**
+ * Warehouse xử lý trọn một sản phẩm: cấp đủ ngay, tự tạo Lệnh sản xuất,
+ * hoặc từ chối dòng khi không đủ Nguyên liệu/Bao bì.
+ */
+export async function processStockAdjustmentRequestItem(requestId, itemId) {
+  const data = await apiRequestAuth(
+    `/api/v1/inventory/stock-adjustment-requests/${requestId}/items/${itemId}/process`,
+    { method: 'POST' },
+  )
+  return {
+    requestId: data.requestId ?? data.RequestId,
+    itemId: data.itemId ?? data.ItemId,
+    requestCode: data.requestCode ?? data.RequestCode ?? '',
+    outcome: data.outcome ?? data.Outcome ?? '',
+    message: data.message ?? data.Message ?? '',
+    productionOrderId: data.productionOrderId ?? data.ProductionOrderId ?? null,
+    productionOrderCode: data.productionOrderCode ?? data.ProductionOrderCode ?? '',
+    productionOrderStatus: data.productionOrderStatus ?? data.ProductionOrderStatus ?? '',
+    materialChecks: (data.materialChecks ?? data.MaterialChecks ?? []).map((row) => ({
+      skuId: row.skuId ?? row.SkuId,
+      skuCode: row.skuCode ?? row.SkuCode ?? '',
+      materialName: row.materialName ?? row.MaterialName ?? '',
+      requiredQuantity: Number(row.requiredQuantity ?? row.RequiredQuantity ?? 0),
+      availableQuantity: Number(row.availableQuantity ?? row.AvailableQuantity ?? 0),
+      shortageQuantity: Number(row.shortageQuantity ?? row.ShortageQuantity ?? 0),
+      status: row.status ?? row.Status ?? '',
+    })),
+  }
+}
+
+/** Warehouse xác nhận tạo Lệnh sản xuất sau khi đã xem kết quả kiểm tra khả năng sản xuất. */
+export async function confirmStockAdjustmentRequestProduction(requestId, itemId) {
+  const data = await apiRequestAuth(
+    `/api/v1/inventory/stock-adjustment-requests/${requestId}/items/${itemId}/confirm-production`,
+    { method: 'POST' },
+  )
+  return {
+    requestId: data.requestId ?? data.RequestId,
+    itemId: data.itemId ?? data.ItemId,
+    requestCode: data.requestCode ?? data.RequestCode ?? '',
+    outcome: data.outcome ?? data.Outcome ?? '',
+    message: data.message ?? data.Message ?? '',
+    productionOrderId: data.productionOrderId ?? data.ProductionOrderId ?? null,
+    productionOrderCode: data.productionOrderCode ?? data.ProductionOrderCode ?? '',
+    productionOrderStatus: data.productionOrderStatus ?? data.ProductionOrderStatus ?? '',
+    materialChecks: (data.materialChecks ?? data.MaterialChecks ?? []).map((row) => ({
+      skuId: row.skuId ?? row.SkuId,
+      skuCode: row.skuCode ?? row.SkuCode ?? '',
+      materialName: row.materialName ?? row.MaterialName ?? '',
+      requiredQuantity: Number(row.requiredQuantity ?? row.RequiredQuantity ?? 0),
+      availableQuantity: Number(row.availableQuantity ?? row.AvailableQuantity ?? 0),
+      shortageQuantity: Number(row.shortageQuantity ?? row.ShortageQuantity ?? 0),
+      status: row.status ?? row.Status ?? '',
+    })),
+  }
+}
+
+/** Warehouse xác nhận đã chuyển đủ hàng thực tế lên Kệ; đây là thời điểm tồn Kho/Kệ thay đổi. */
+export async function confirmStockAdjustmentRequestTransfer(requestId, itemId) {
+  const data = await apiRequestAuth(
+    `/api/v1/inventory/stock-adjustment-requests/${requestId}/items/${itemId}/confirm-transfer`,
+    { method: 'POST' },
+  )
+  return {
+    requestId: data.requestId ?? data.RequestId,
+    itemId: data.itemId ?? data.ItemId,
+    requestCode: data.requestCode ?? data.RequestCode ?? '',
+    outcome: data.outcome ?? data.Outcome ?? '',
+    message: data.message ?? data.Message ?? '',
+    productionOrderId: data.productionOrderId ?? data.ProductionOrderId ?? null,
+    productionOrderCode: data.productionOrderCode ?? data.ProductionOrderCode ?? '',
+    productionOrderStatus: data.productionOrderStatus ?? data.ProductionOrderStatus ?? '',
+    materialChecks: (data.materialChecks ?? data.MaterialChecks ?? []).map((row) => ({
+      skuId: row.skuId ?? row.SkuId,
+      skuCode: row.skuCode ?? row.SkuCode ?? '',
+      materialName: row.materialName ?? row.MaterialName ?? '',
+      requiredQuantity: Number(row.requiredQuantity ?? row.RequiredQuantity ?? 0),
+      availableQuantity: Number(row.availableQuantity ?? row.AvailableQuantity ?? 0),
+      shortageQuantity: Number(row.shortageQuantity ?? row.ShortageQuantity ?? 0),
+      status: row.status ?? row.Status ?? '',
+    })),
+  }
+}
+
 /** Kiểm tra trùng SKU trước khi gửi, để chặn sớm thay vì báo lỗi sau bước xác nhận. */
 export async function checkStockAdjustmentDuplicates(skuIds) {
   const data = await apiRequestAuth('/api/v1/inventory/stock-adjustment-requests/check-duplicates', {
@@ -236,49 +323,6 @@ export async function checkStockAdjustmentDuplicates(skuIds) {
       isUntouched: Boolean(row.isUntouched),
     })),
   }
-}
-
-/** Warehouse duyệt/từ chối theo từng dòng. Không làm thay đổi tồn kho. */
-export async function reviewStockAdjustmentRequest(id, { reviewNote, lines } = {}) {
-  const body = {
-    reviewNote: reviewNote?.trim() || null,
-    lines: (lines ?? []).map((line) => ({
-      itemId: line.itemId,
-      approved: Boolean(line.approved),
-      approvedQuantity: line.approvedQuantity == null ? null : Number(line.approvedQuantity),
-      note: line.note?.trim() || null,
-    })),
-  }
-  const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/review`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-  return mapRequest(data)
-}
-
-/** Đóng phần còn lại khi Kho không thể cấp thêm; bắt buộc có lý do. */
-export async function closeStockAdjustmentRemaining(id, reason) {
-  const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/close-remaining`, {
-    method: 'POST',
-    body: JSON.stringify({ reason: reason?.trim() || null }),
-  })
-  return mapRequest(data)
-}
-
-/** Danh sách Phiếu điều chuyển đã sinh ra từ yêu cầu này (một yêu cầu có thể có nhiều phiếu). */
-export async function fetchStockAdjustmentRequestTransfers(id) {
-  const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/transfers`, {
-    method: 'GET',
-  })
-  return (Array.isArray(data) ? data : []).map(mapRelatedTransfer)
-}
-
-export async function rejectStockAdjustmentRequest(id, reason) {
-  const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/reject`, {
-    method: 'POST',
-    body: JSON.stringify({ reason: reason?.trim() || null }),
-  })
-  return data
 }
 
 export async function cancelStockAdjustmentRequest(id, reason) {

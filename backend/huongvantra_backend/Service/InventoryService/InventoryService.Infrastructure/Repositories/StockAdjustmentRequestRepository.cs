@@ -11,6 +11,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
     public Task<StockAdjustmentRequest?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         _db.StockAdjustmentRequests
             .Include(r => r.Items)
+            .ThenInclude(i => i.AutoProductionOrder)
+            .Include(r => r.Items)
             .ThenInclude(i => i.ExportSlip)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
@@ -23,6 +25,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         var query = BuildListQuery(status, false, requestedBy, search);
 
         return await query
+            .Include(r => r.Items)
+            .ThenInclude(i => i.AutoProductionOrder)
             .Include(r => r.Items)
             .ThenInclude(i => i.ExportSlip)
             .OrderByDescending(r => r.RequestedAt)
@@ -58,6 +62,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
 
         var totalCount = await query.CountAsync(ct);
         var items = await ApplySort(query, sort)
+            .Include(r => r.Items)
+            .ThenInclude(i => i.AutoProductionOrder)
             .Include(r => r.Items)
             .ThenInclude(i => i.ExportSlip)
             .Skip((page - 1) * pageSize)
@@ -98,13 +104,13 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
             ["pending"] = pending,
             ["processing"] = processing,
             ["remaining"] = remaining,
-            ["processed"] = total - pending,
+            ["processed"] = total - remaining,
         };
     }
 
     /// <summary>
-    /// Thứ tự ưu tiên xử lý của Thủ kho: Chờ tiếp nhận → Đang xử lý → Đã bổ sung một phần →
-    /// Chờ bổ sung tồn Kho → các trạng thái đã kết thúc; cùng nhóm thì cũ trước.
+    /// Thứ tự ưu tiên xử lý của Warehouse: yêu cầu còn dòng chờ xử lý hoặc đang sản xuất
+    /// được đưa lên trước; cùng nhóm thì yêu cầu cũ hơn được ưu tiên.
     /// </summary>
     private static IQueryable<StockAdjustmentRequest> ApplySort(
         IQueryable<StockAdjustmentRequest> query,
@@ -171,7 +177,12 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
             query = query.Where(r => r.Status == status.Value);
 
         if (excludePending)
-            query = query.Where(r => r.Status != StockAdjustmentRequestStatus.Pending);
+            query = query.Where(r => !r.Items.Any(i =>
+                i.Status != StockAdjustmentRequestItemStatus.Fulfilled &&
+                i.Status != StockAdjustmentRequestItemStatus.Rejected &&
+                i.Status != StockAdjustmentRequestItemStatus.ClosedPartial &&
+                i.Status != StockAdjustmentRequestItemStatus.Cancelled &&
+                i.QuantityDelta - i.FulfilledQuantity - i.RejectedQuantity > 0));
 
         if (requestedBy.HasValue)
             query = query.Where(r => r.RequestedBy == requestedBy.Value);
