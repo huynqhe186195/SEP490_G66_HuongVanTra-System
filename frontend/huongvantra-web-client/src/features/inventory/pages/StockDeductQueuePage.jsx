@@ -10,13 +10,11 @@ import { showError } from '../../../app/toast.js'
 import { canAccessPath, canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
-import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import StockDeductPreviewModal from '../components/StockDeductPreviewModal.jsx'
 import CustomBundlePreviewModal from '../components/CustomBundlePreviewModal.jsx'
 import { fetchPendingStockDeductQueues } from '../services/stockDeductQueueApi.js'
 import { fetchCustomBundles, fetchPendingCustomBundles } from '../../orders/services/customBundleApi.js'
 import {
-  formatVnd,
   getQueueStatusLabel,
   getStockStatusClass,
   getStockStatusLabel,
@@ -313,15 +311,13 @@ function StockDeductQueuePage() {
                 <th className="px-4 py-4">Trạng thái đóng gói</th>
                 <th className="px-4 py-4">Tình trạng xử lý tồn</th>
                 <th className="px-4 py-4">Trạng thái đơn</th>
-                <th className="px-4 py-4">Ngày tạo yêu cầu</th>
-                <th className="px-8 py-4 text-right">Tổng tiền</th>
                 <th className="px-4 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-center text-slate-500" colSpan={7}>
+                  <td className="px-8 py-10 text-center text-slate-500" colSpan={5}>
                     <span className="inline-flex items-center gap-2 text-sm font-semibold">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Đang tải yêu cầu đóng gói...
@@ -331,7 +327,7 @@ function StockDeductQueuePage() {
               ) : null}
               {!isLoading && queues.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-12 text-center" colSpan={7}>
+                  <td className="px-8 py-12 text-center" colSpan={5}>
                     <p className="font-semibold text-slate-800">
                       {searchValue.trim() || activeTab !== 'waiting'
                         ? 'Không có yêu cầu trong mục này'
@@ -453,12 +449,6 @@ function StockDeductQueuePage() {
                           {orderStatusMeta.label}
                         </span>
                       </td>
-                      <td className="px-4 py-5 text-sm text-slate-600">
-                        {formatVietnamDateTime(row.createdAt)}
-                      </td>
-                      <td className="px-8 py-5 text-right font-bold text-slate-800">
-                        {formatVnd(row.totalAmount)}
-                      </td>
                       <td className="px-4 py-5 text-right">
                         <button
                           type="button"
@@ -508,6 +498,8 @@ function StockDeductQueuePage() {
           queueId={previewQueue.queueId}
           orderCode={previewQueue.orderCode}
           orderPaymentStatus={previewQueue.orderPaymentStatus}
+          totalAmount={previewQueue.totalAmount}
+          createdAt={previewQueue.createdAt}
           canConfirm={canExecuteDeduct}
           canCancel={canCancelQueue}
           onClose={() => setPreviewQueue(null)}
@@ -522,6 +514,8 @@ function StockDeductQueuePage() {
           orderId={previewCustom.orderId}
           orderStatus={previewCustom.orderPaymentStatus}
           orderStockStatus={previewCustom.orderStockStatus}
+          totalAmount={previewCustom.totalAmount}
+          createdAt={previewCustom.createdAt}
           canConfirm={canExecuteDeduct && !previewCustom.readOnly}
           onClose={() => setPreviewCustom(null)}
           onConfirmed={loadData}

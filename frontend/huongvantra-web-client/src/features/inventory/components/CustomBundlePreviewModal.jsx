@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { getOrderStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { formatVnd, getOrderStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
 import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { confirmPacking, fetchCustomBundles } from '../../orders/services/customBundleApi.js'
 import {
   buildWarehouseStockBySkuIdMap,
@@ -19,6 +20,8 @@ function CustomBundlePreviewModal({
   orderId,
   orderStatus,
   orderStockStatus,
+  totalAmount,
+  createdAt,
   canConfirm = false,
   onClose,
   onConfirmed,
@@ -86,6 +89,8 @@ function CustomBundlePreviewModal({
   const canDeduct = items.length > 0 && items.every((row) => row.shortageQuantity <= 0)
   const displayOrderCode = orderCode || bundle?.orderCode || ''
   const displayOrderId = orderId || bundle?.orderId
+  const displayTotalAmount = totalAmount ?? bundle?.totalPrice ?? 0
+  const displayCreatedAt = createdAt ?? bundle?.createdAt
   const stockStatus = orderStockStatus || (String(orderStatus || bundle?.orderStatus || '').toLowerCase() === 'waitingmaterials'
     ? 'waiting_materials'
     : 'pending_custom_pack')
@@ -155,6 +160,17 @@ function CustomBundlePreviewModal({
 
           {!isLoading && bundle ? (
             <>
+              <dl className="mb-4 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-100 text-sm sm:grid-cols-2">
+                <div className="border-b border-slate-100 px-4 py-3 sm:border-b-0 sm:border-r">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ngày tạo yêu cầu</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{formatVietnamDateTime(displayCreatedAt)}</dd>
+                </div>
+                <div className="px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tổng tiền</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{formatVnd(displayTotalAmount)}</dd>
+                </div>
+              </dl>
+
               <div className="mb-4 flex flex-wrap gap-2">
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
