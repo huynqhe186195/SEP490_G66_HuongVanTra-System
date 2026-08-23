@@ -111,6 +111,7 @@ public class InventoryLogic(
         PropertyNameCaseInsensitive = true,
     };
     private static readonly Regex DocumentNumberRegex = new(@"^[A-Za-z0-9\-\/\.]{1,100}$", RegexOptions.Compiled);
+    private static readonly Regex SupplierLotCodeRegex = new(@"^[A-Za-z0-9\-_]{1,50}$", RegexOptions.Compiled);
     private static readonly Regex HtmlTagRegex = new(@"<[^>]*>|&[a-zA-Z0-9#]+;", RegexOptions.Compiled);
 
     public async Task HandleSkuCreatedAsync(SkuCreatedEvent message, CancellationToken ct = default)
@@ -4746,7 +4747,8 @@ public class InventoryLogic(
         await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(request), excludeReceiptId: null, ct);
 
         // ProductService HTTP hoàn tất trước khi mở transaction Inventory.
-        var (normalized, _) = await NormalizeSupplierReceiptItemsAsync(request, ct);
+        var (normalized, catalog) = await NormalizeSupplierReceiptItemsAsync(request, ct);
+        EnsureSupplierReceiptLotsReadyForCompletion(normalized);
         var now = DateTime.UtcNow;
         var countToday = await _supplierReceiptRepo.CountCreatedSinceAsync(now.Date, ct);
         var snapshot = await ResolveSupplierSnapshotAsync(request.SupplierId, request.SupplierName, ct);
@@ -4805,6 +4807,12 @@ public class InventoryLogic(
         return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
             await _supplierReceiptRepo.AddAsync(receipt, innerCt);
+            await _supplierReceiptRepo.SaveChangesAsync(innerCt);
+
+            // Thủ kho tạo phiếu là hoàn tất ngay — tồn Kho tăng, không chờ Manager duyệt.
+            receipt.SubmittedBy = createdBy;
+            receipt.SubmittedAt = now;
+            await ApplySupplierReceiptToWarehouseAsync(receipt, createdBy, creator, catalog, innerCt);
             await _supplierReceiptRepo.SaveChangesAsync(innerCt);
             return MapSupplierReceipt(receipt);
         }, ct);
@@ -4922,20 +4930,42 @@ public class InventoryLogic(
         if (receipt.CreatedBy != actorId)
             throw new InventoryValidationException("Chỉ người tạo mới được gửi phiếu nhập này.");
 
-        if (receipt.Status is not (SupplierReceiptStatus.Draft or SupplierReceiptStatus.Rejected))
-            throw new InventoryValidationException("Chỉ được gửi phiếu nhập ở trạng thái Draft hoặc Rejected.");
+        if (receipt.Status == SupplierReceiptStatus.Completed)
+            return MapSupplierReceipt(receipt);
+
+        if (receipt.Status is not (SupplierReceiptStatus.Draft or SupplierReceiptStatus.Rejected or SupplierReceiptStatus.PendingApproval))
+            throw new InventoryValidationException("Chỉ được hoàn tất phiếu nhập ở trạng thái Draft, Rejected hoặc PendingApproval.");
 
         if (receipt.Items.Count == 0)
             throw new InventoryValidationException("Phiếu nhập phải có ít nhất một dòng SKU.");
 
         await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(receipt), excludeReceiptId: receipt.Id, ct);
-        await ValidateSupplierReceiptItemsForApprovalAsync(receipt, ct);
-        receipt.Status = SupplierReceiptStatus.PendingApproval;
-        receipt.SubmittedBy = actorId;
-        receipt.SubmittedAt = DateTime.UtcNow;
-        receipt.UpdatedAt = DateTime.UtcNow;
-        await _supplierReceiptRepo.SaveChangesAsync(ct);
-        return MapSupplierReceipt(receipt);
+
+        var catalog = await _productCatalogClient.GetSupplierReceiptCatalogForVariantIdsAsync(
+            receipt.Items.Select(item => item.SkuId),
+            ct);
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var tracked = await _supplierReceiptRepo.GetByIdAsync(id, innerCt)
+                ?? throw new InventoryNotFoundException("Không tìm thấy phiếu nhập nhà cung cấp.");
+
+            if (tracked.Status == SupplierReceiptStatus.Completed)
+                return MapSupplierReceipt(tracked);
+
+            await ValidateSupplierReceiptItemsForApprovalAsync(tracked, innerCt, catalog);
+            tracked.SubmittedBy = actorId;
+            tracked.SubmittedAt = DateTime.UtcNow;
+            tracked.UpdatedAt = DateTime.UtcNow;
+            await ApplySupplierReceiptToWarehouseAsync(
+                tracked,
+                actorId,
+                new CreatorSnapshot(actorId, tracked.CreatedByName, tracked.CreatedByRoleName),
+                catalog,
+                innerCt);
+            await _supplierReceiptRepo.SaveChangesAsync(innerCt);
+            return MapSupplierReceipt(tracked);
+        }, ct);
     }
 
     public async Task<SupplierReceiptResponse> ApproveSupplierReceiptAsync(
@@ -7161,7 +7191,7 @@ public class InventoryLogic(
                     item.SkuCode,
                     item.SkuNameSnapshot,
                     item.Quantity,
-                    null)
+                    item.UnitCost)
             ],
             receipt.CreatedBy,
             ct,
@@ -7207,11 +7237,15 @@ public class InventoryLogic(
                 ProductSnapshotName = item.SkuNameSnapshot,
                 QuantityOnHand = 0,
                 InitialQuantity = 0,
-                UnitCost = null,
+                UnitCost = item.UnitCost,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
             existing.Items.Add(line);
+        }
+        else if (line.UnitCost is null && item.UnitCost is not null)
+        {
+            line.UnitCost = item.UnitCost;
         }
 
         line.QuantityOnHand += item.Quantity;
@@ -7441,6 +7475,11 @@ public class InventoryLogic(
                 throw new InventoryValidationException($"Đơn giá SKU {item.SkuCode} không được âm.");
             if (!string.IsNullOrWhiteSpace(item.LotCode) && item.LotCode.Trim().Length > 50)
                 throw new InventoryValidationException($"Mã lô SKU {item.SkuCode} không được vượt quá 50 ký tự.");
+            if (!string.IsNullOrWhiteSpace(item.LotCode) && !SupplierLotCodeRegex.IsMatch(item.LotCode.Trim()))
+                throw new InventoryValidationException(
+                    $"Mã lô NCC của SKU {item.SkuCode} chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).");
+            if (string.IsNullOrWhiteSpace(item.LotCode))
+                throw new InventoryValidationException($"Mã lô NCC của SKU {item.SkuCode} không được để trống.");
             var lineIdentity = BuildSupplierReceiptLineIdentity(item.SkuId, item.LotCode);
             if (lineIdentity is not null && !lineIdentities.Add(lineIdentity))
                 throw new InventoryValidationException(
@@ -7516,6 +7555,13 @@ public class InventoryLogic(
                 line.SubmittedUnit,
                 index + 1);
             var lotCode = NormalizeSnapshotText(line.LotCode) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(lotCode))
+                throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC không được để trống.");
+            if (lotCode.Length > 50)
+                throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC không được vượt quá 50 ký tự.");
+            if (!SupplierLotCodeRegex.IsMatch(lotCode))
+                throw new InventoryValidationException(
+                    $"Dòng {index + 1}: Mã lô NCC chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).");
             var lineIdentity = BuildSupplierReceiptLineIdentity(line.SkuId, lotCode);
             if (lineIdentity is not null && !lineIdentities.Add(lineIdentity))
                 throw new InventoryValidationException(
@@ -7550,6 +7596,23 @@ public class InventoryLogic(
         }
 
         return (normalized, catalog);
+    }
+
+    private static void EnsureSupplierReceiptLotsReadyForCompletion(
+        IReadOnlyList<NormalizedSupplierReceiptItem> items)
+    {
+        foreach (var (item, index) in items.Select((value, i) => (value, i)))
+        {
+            if (string.IsNullOrWhiteSpace(item.LotCode))
+                throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC không được để trống.");
+            if (!SupplierLotCodeRegex.IsMatch(item.LotCode))
+                throw new InventoryValidationException(
+                    $"Dòng {index + 1}: Mã lô NCC chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).");
+            if (!item.ManufacturedAt.HasValue)
+                throw new InventoryValidationException($"Dòng {index + 1}: Ngày sản xuất là bắt buộc.");
+            if (!item.UnitCost.HasValue || item.UnitCost.Value <= 0)
+                throw new InventoryValidationException($"Dòng {index + 1}: Đơn giá theo chứng từ phải lớn hơn 0.");
+        }
     }
 
     private async Task ValidateSupplierReceiptItemsForApprovalAsync(
@@ -7591,6 +7654,9 @@ public class InventoryLogic(
             var lotCode = NormalizeSnapshotText(item.LotCode);
             if (string.IsNullOrWhiteSpace(lotCode))
                 throw new InventoryValidationException($"Dòng {index + 1}: Mã lô NCC là bắt buộc.");
+            if (!SupplierLotCodeRegex.IsMatch(lotCode))
+                throw new InventoryValidationException(
+                    $"Dòng {index + 1}: Mã lô NCC chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).");
             if (!item.ManufacturedAt.HasValue)
                 throw new InventoryValidationException($"Dòng {index + 1}: Ngày sản xuất là bắt buộc.");
             var lineIdentity = BuildSupplierReceiptLineIdentity(item.SkuId, lotCode)!;
