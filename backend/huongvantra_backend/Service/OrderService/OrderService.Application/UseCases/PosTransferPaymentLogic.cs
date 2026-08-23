@@ -360,7 +360,7 @@ public class PosTransferPaymentLogic(
         var transferPayment = order.Payments?.FirstOrDefault(p =>
             IsTransferPaymentMethod(p.PaymentMethod));
         var paymentStatus = transferPayment?.PaymentStatus
-            ?? (order.Payments.All(payment =>
+            ?? ((order.Payments ?? []).All(payment =>
                     string.Equals(
                         payment.PaymentStatus,
                         PaymentStatus.Success.ToString(),

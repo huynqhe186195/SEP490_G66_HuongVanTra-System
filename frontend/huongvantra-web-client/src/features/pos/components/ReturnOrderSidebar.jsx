@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 
 function Icon({ children, className = '' }) {
@@ -67,15 +68,113 @@ export default function ReturnOrderSidebar({
   isSubmitting,
   canSubmit,
   onSubmit,
+  compactMobile = false,
 }) {
   const displayCustomerOwes = Math.max(0, customerOwes)
   const displayCustomerRefund = customerOwes < 0 ? Math.abs(customerOwes) : 0
   const isRefundFlow = displayCustomerRefund > 0
   const isPayFlow = displayCustomerOwes > 0
   const isSettled = !isRefundFlow && !isPayFlow
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  const paymentSection = isRefundFlow ? (
+    <section className="mb-4">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Hình thức hoàn tiền</p>
+      <PaymentMethodPicker paymentMethod={paymentMethod} onPaymentMethodChange={onPaymentMethodChange} />
+      {paymentMethod === 'CASH' ? (
+        <p className="mt-2 text-xs text-slate-500">Trả tiền mặt trực tiếp cho khách tại quầy.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-slate-500">
+            Chuyển khoản thủ công qua app ngân hàng — hệ thống chỉ ghi nhận, không tự chuyển tiền.
+          </p>
+          <label className="block">
+            <span className="mb-1 block text-xs text-slate-600">Mã giao dịch / ghi chú CK</span>
+            <input
+              type="text"
+              value={refundTransactionRef}
+              onChange={(e) => onRefundTransactionRefChange(e.target.value)}
+              placeholder="VD: FT25234... hoặc STK đã chuyển"
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#356647]"
+            />
+          </label>
+        </div>
+      )}
+    </section>
+  ) : null
+
+  const payExtraSection = isPayFlow ? (
+    <section className="mb-4">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Thanh toán thêm</p>
+      <PaymentMethodPicker paymentMethod={paymentMethod} onPaymentMethodChange={onPaymentMethodChange} />
+      {paymentMethod === 'TRANSFER' ? (
+        <p className="mt-2 text-xs text-slate-500">
+          Sau khi xác nhận trả hàng, hệ thống mở màn <strong>mã QR</strong> để khách quét chuyển khoản (giống bán hàng).
+        </p>
+      ) : (
+        <div className="mt-3">
+          <label className="mb-1 block text-xs text-slate-600">Khách thanh toán</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={amountPaid}
+            onChange={(e) => onAmountPaidChange(e.target.value)}
+            className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-[#356647]"
+          />
+        </div>
+      )}
+    </section>
+  ) : null
+
+  if (compactMobile) {
+    return (
+      <aside className="shrink-0 border-b border-[#c1c9c0] bg-white xl:hidden">
+        <div className="px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-base font-bold text-slate-800">{customerName || 'Khách lẻ'}</p>
+              <p className="text-sm font-semibold text-[#356647]">Trả hàng / {sourceOrderCode}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {isRefundFlow ? 'Hoàn khách' : isPayFlow ? 'Khách trả thêm' : 'Chênh lệch'}
+              </p>
+              <p className="text-xl font-bold text-[#356647]">
+                {isSettled ? '0' : formatMoney(isRefundFlow ? displayCustomerRefund : displayCustomerOwes)}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((value) => !value)}
+            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-[#356647]"
+          >
+            {detailsOpen ? 'Ẩn chi tiết tiền' : 'Xem chi tiết tiền & thanh toán'}
+            <span className="material-symbols-outlined text-[18px]">
+              {detailsOpen ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+
+          {detailsOpen ? (
+            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                <dt className="text-slate-500">Tiền trả</dt>
+                <dd className="text-right font-semibold text-slate-800">{formatMoney(returnNetTotal)}</dd>
+                <dt className="text-slate-500">Tiền mua</dt>
+                <dd className="text-right font-semibold text-slate-800">{formatMoney(purchaseNetTotal)}</dd>
+              </dl>
+              {paymentSection}
+              {payExtraSection}
+            </div>
+          ) : null}
+        </div>
+      </aside>
+    )
+  }
 
   return (
-    <aside className="flex w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-white xl:w-[min(100%,380px)] xl:border-l xl:border-t-0">
+    <aside className="hidden w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-white xl:flex xl:w-[min(100%,380px)] xl:border-l xl:border-t-0">
       <CustomScrollArea className="min-h-0 flex-1" contentClassName="p-4">
         <div className="mb-4 border-b border-slate-100 pb-3">
           <p className="text-sm font-bold text-slate-800">{customerName || 'Khách lẻ'}</p>
@@ -201,52 +300,11 @@ export default function ReturnOrderSidebar({
         </section>
 
         {isRefundFlow ? (
-          <section className="mb-4">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Hình thức hoàn tiền</p>
-            <PaymentMethodPicker paymentMethod={paymentMethod} onPaymentMethodChange={onPaymentMethodChange} />
-            {paymentMethod === 'CASH' ? (
-              <p className="mt-2 text-xs text-slate-500">Trả tiền mặt trực tiếp cho khách tại quầy.</p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs text-slate-500">
-                  Chuyển khoản thủ công qua app ngân hàng — hệ thống chỉ ghi nhận, không tự chuyển tiền.
-                </p>
-                <label className="block">
-                  <span className="mb-1 block text-xs text-slate-600">Mã giao dịch / ghi chú CK</span>
-                  <input
-                    type="text"
-                    value={refundTransactionRef}
-                    onChange={(e) => onRefundTransactionRefChange(e.target.value)}
-                    placeholder="VD: FT25234... hoặc STK đã chuyển"
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#356647]"
-                  />
-                </label>
-              </div>
-            )}
-          </section>
+          paymentSection
         ) : null}
 
         {isPayFlow ? (
-          <section className="mb-4">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Thanh toán thêm</p>
-            <PaymentMethodPicker paymentMethod={paymentMethod} onPaymentMethodChange={onPaymentMethodChange} />
-            {paymentMethod === 'TRANSFER' ? (
-              <p className="mt-2 text-xs text-slate-500">
-                Sau khi xác nhận trả hàng, hệ thống mở màn <strong>mã QR</strong> để khách quét chuyển khoản (giống bán hàng).
-              </p>
-            ) : (
-              <div className="mt-3">
-                <label className="mb-1 block text-xs text-slate-600">Khách thanh toán</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={amountPaid}
-                  onChange={(e) => onAmountPaidChange(e.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-[#356647]"
-                />
-              </div>
-            )}
-          </section>
+          payExtraSection
         ) : null}
       </CustomScrollArea>
 

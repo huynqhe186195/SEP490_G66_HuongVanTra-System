@@ -28,6 +28,8 @@ import {
 } from '../utils/supplierReceiptTt200Excel.js'
 import { toVietnamDateInputValue } from '../../../utils/vietnamDateTime.js'
 
+const LOT_CODE_REGEX = /^[A-Za-z0-9\-_]{1,50}$/
+
 const EMPTY_HEADER = {
   supplierId: '',
   supplierName: '',
@@ -496,20 +498,34 @@ function InventoryImportCreatePage() {
 
   const supplierCatalogBySkuId = useMemo(() => {
     if (!header.supplierId || supplierCatalog.supplierId !== header.supplierId) return new Map()
-    return new Map(supplierCatalog.items.map((item) => [item.skuId, item]))
+    return new Map(
+      supplierCatalog.items
+        .filter((item) => item?.skuId)
+        .map((item) => [String(item.skuId).toLowerCase(), item]),
+    )
   }, [header.supplierId, supplierCatalog])
 
   // BR-11/BR-12: NCC chưa khai danh mục thì vẫn cho chọn toàn bộ hàng đủ điều kiện nhập.
   const selectableSkus = useMemo(() => {
     if (supplierCatalogBySkuId.size === 0) return supplierReceiptSkus
-    return supplierReceiptSkus.filter((sku) => supplierCatalogBySkuId.has(sku.id))
+    return supplierReceiptSkus.filter((sku) => supplierCatalogBySkuId.has(String(sku.id).toLowerCase()))
   }, [supplierCatalogBySkuId, supplierReceiptSkus])
 
   // SP-12 / BR-15: lệch giá chào chỉ cảnh báo, không chặn nhập kho.
   const quotedPriceOf = useCallback((skuId) => {
-    const quoted = Number(supplierCatalogBySkuId.get(skuId)?.quotedPrice)
+    if (!skuId) return null
+    const quoted = Number(supplierCatalogBySkuId.get(String(skuId).toLowerCase())?.quotedPrice)
     return Number.isFinite(quoted) && quoted > 0 ? quoted : null
   }, [supplierCatalogBySkuId])
+
+  const suggestedUnitCostOf = useCallback((sku) => {
+    if (!sku) return null
+    const quoted = quotedPriceOf(sku.id)
+    if (quoted != null) return { value: Math.round(quoted), source: 'quoted' }
+    const cost = Number(sku.costPrice)
+    if (Number.isFinite(cost) && cost > 0) return { value: Math.round(cost), source: 'cost' }
+    return null
+  }, [quotedPriceOf])
 
   const quotedPriceWarning = useCallback((line) => {
     const quoted = quotedPriceOf(line.skuId)
@@ -998,8 +1014,6 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
     return Object.keys(errors).length === 0
   }
 
-  const LOT_CODE_REGEX = /^[A-Za-z0-9\-_]{1,50}$/
-
   function validateLines() {
     const errors = {}
     const warnings = {}
@@ -1012,7 +1026,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
       const documentQuantity = parseVndInput(line.documentQuantity)
       const actualQuantity = parseVndInput(line.actualQuantity)
       const unitCost = parseVndInput(line.unitCost)
-      const lotCode = line.lotCode.trim()
+      const lotCode = String(line.lotCode ?? '').trim()
 
       // SKU
       if (!line.skuId) lineErr.skuId = 'Vui lòng chọn SKU.'
@@ -1034,7 +1048,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
         lineErr.lotCode = 'Mã lô NCC không được để trống.'
       } else if (lotCode.length > 50) {
         lineErr.lotCode = 'Mã lô NCC không được vượt quá 50 ký tự.'
-      } else if (lotCode && !LOT_CODE_REGEX.test(lotCode)) {
+      } else if (!LOT_CODE_REGEX.test(lotCode)) {
         lineErr.lotCode = 'Mã lô NCC chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).'
       }
 
@@ -1134,7 +1148,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
       return
     }
     const headerOk = validateHeader()
-    const linesOk = validateLines(true)
+    const linesOk = validateLines()
     if (!headerOk || !linesOk) {
       setTimeout(() => {
         const firstError = document.querySelector('[data-error="true"]')
@@ -1160,7 +1174,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
         documentQuantity: parseVndInput(line.documentQuantity),
         actualQuantity: parseVndInput(line.actualQuantity),
         unitCost: line.unitCost === '' ? null : parseVndInput(line.unitCost),
-        lotCode: line.lotCode.trim(),
+        lotCode: String(line.lotCode ?? '').trim(),
         manufacturedAt: line.manufacturedAt ? new Date(`${line.manufacturedAt}T00:00:00`).toISOString() : null,
         expiresAt: line.expiresAt ? new Date(`${line.expiresAt}T00:00:00`).toISOString() : null,
         qualityNote: stripHtml(line.qualityNote),
@@ -1186,8 +1200,11 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
       const saved = editingReceiptId
         ? await updateSupplierReceipt(editingReceiptId, receiptPayload)
         : await createSupplierReceipt(receiptPayload)
-      const submitted = await submitSupplierReceipt(saved.id)
-      showSuccess(`Đã gửi phiếu ${submitted.receiptCode} chờ Quản lý duyệt. Tồn Kho cập nhật sau khi duyệt.`)
+      // Tạo mới đã Completed + áp tồn. Chỉ submit thêm khi sửa phiếu Draft/Rejected cũ.
+      const finalized = String(saved.status || '').toLowerCase() === 'completed'
+        ? saved
+        : await submitSupplierReceipt(saved.id)
+      showSuccess(`Đã hoàn tất phiếu ${finalized.receiptCode}. Tồn Kho đã được cập nhật.`)
       navigate('/inventory/supplier-receipts')
     } catch (error) {
       showError(error.message)
@@ -1205,12 +1222,12 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
     <PageShell>
       <PageHeader
         title={editingReceiptId ? 'CẬP NHẬT PHIẾU NHẬP KHO' : 'PHIẾU NHẬP KHO'}
-        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; sau khi gửi phiếu, Quản lý duyệt rồi tồn Kho và giá vốn mới cập nhật."
+        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; khi hoàn tất phiếu, tồn Kho và giá vốn cập nhật ngay."
       />
 
       {!canManage ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chỉ Thủ kho được tạo hoặc gửi phiếu nhập nhà cung cấp.
+          Chỉ Thủ kho được tạo phiếu nhập nhà cung cấp.
         </p>
       ) : null}
 
@@ -1647,10 +1664,13 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
                               duplicate={false}
                               isCatalogLoading={isSkuCatalogLoading}
                               onSelect={(sku) => {
-                                // SP-11 / BR-14: giá chào chỉ điền sẵn làm gợi ý, thủ kho sửa đè được.
-                                const quoted = Number(supplierCatalogBySkuId.get(sku?.id)?.quotedPrice)
-                                const patch = { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' }
-                                if (Number.isFinite(quoted) && quoted > 0) patch.unitCost = sanitizeVndInput(String(quoted))
+                                // SP-11 / BR-14: ưu tiên giá chào NCC; nếu chưa có thì gợi ý giá vốn SKU.
+                                const suggestion = suggestedUnitCostOf(sku)
+                                const patch = {
+                                  skuId: sku?.id ?? '',
+                                  submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '',
+                                }
+                                if (suggestion) patch.unitCost = sanitizeVndInput(String(suggestion.value))
                                 updateLine(line.key, patch)
                                 setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined, unitCost: undefined } }))
                               }}
@@ -1747,6 +1767,11 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
                               {!errs.unitCost && quotedPriceOf(line.skuId) ? (
                                 <p className="text-xs text-[#717971]">Giá chào của nhà cung cấp: {formatVnd(quotedPriceOf(line.skuId))}</p>
                               ) : null}
+                              {!errs.unitCost && !quotedPriceOf(line.skuId) && selectedSku?.costPrice ? (
+                                <p className="text-xs text-[#717971]">
+                                  Chưa có giá chào NCC — gợi ý giá vốn SKU: {formatVnd(Math.round(Number(selectedSku.costPrice)))}
+                                </p>
+                              ) : null}
                             </label>
                             <div className="space-y-1">
                               <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>
@@ -1755,14 +1780,34 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
                               </div>
                             </div>
                           </div>
-                          <label className="block space-y-1">
+                          <label className="block space-y-1" data-error={errs.lotCode ? 'true' : undefined}>
                             <span className="text-xs font-semibold text-[#717971]">Mã lô NCC <span className="text-red-500">*</span></span>
                             <input
                               className={`w-full rounded-xl border p-2.5 text-sm ${fi('lotCode')}`}
                               value={line.lotCode}
+                              maxLength={50}
+                              placeholder="VD: LOT-2026-01"
                               onChange={(event) => {
                                 updateLine(line.key, { lotCode: event.target.value })
                                 setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), lotCode: undefined } }))
+                              }}
+                              onBlur={(event) => {
+                                const lotCode = String(event.target.value ?? '').trim()
+                                let message
+                                if (!lotCode) message = 'Mã lô NCC không được để trống.'
+                                else if (lotCode.length > 50) message = 'Mã lô NCC không được vượt quá 50 ký tự.'
+                                else if (!LOT_CODE_REGEX.test(lotCode)) {
+                                  message = 'Mã lô NCC chỉ được chứa chữ cái, số, dấu gạch ngang (-) và gạch dưới (_).'
+                                }
+                                if (message) {
+                                  setLineErrors((prev) => ({
+                                    ...prev,
+                                    [line.key]: { ...(prev[line.key] ?? {}), lotCode: message },
+                                  }))
+                                }
+                                if (lotCode !== event.target.value) {
+                                  updateLine(line.key, { lotCode })
+                                }
                               }}
                             />
                             {errs.lotCode ? <p className="text-xs text-red-500">{errs.lotCode}</p> : null}
@@ -1865,7 +1910,7 @@ if (nextHeader.supplierName || nextHeader.supplierCode) {
               disabled={isSaving || isEditLoading || !canManage}
               className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang xử lý...' : 'Gửi duyệt'}
+              {isSaving ? 'Đang xử lý...' : (editingReceiptId ? 'Hoàn tất phiếu' : 'Tạo phiếu nhập')}
             </button>
             <Link
               to="/inventory/supplier-receipts"

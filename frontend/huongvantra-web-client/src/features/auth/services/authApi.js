@@ -40,7 +40,22 @@ const ROLE_MODULE_MAP = {
   salecod: ['pos', 'cod_ops', 'customers', 'dashboard'],
   // Legacy single Sale → quầy (không COD ops).
   sale: ['pos', 'orders', 'customers', 'dashboard'],
-  warehouse: ['products', 'product_creation_requests', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'inventory', 'inventory_statistics', 'warehouse_daily_report', 'inventory_returns'],
+  warehouse: [
+    'products',
+    'product_creation_requests',
+    'stock_deduct_ops',
+    'stock_adjustment_ops',
+    'stock_transfer_ops',
+    'inventory',
+    'inventory_statistics',
+    'warehouse_daily_report',
+    'inventory_returns',
+    'supplier_receipts',
+    'warehouse_batches',
+    'production_orders',
+    'inventory_ledger',
+    'inventory_stocktake',
+  ],
   accountant: [
     'orders',
     'customers',
@@ -221,18 +236,26 @@ function hasCatalogPermission(session) {
 
 export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
-  const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
-    if (module !== 'pos') return true
-    return (
-      permissions.includes('CREATE_POS_ORDER')
-      || permissions.includes('CREATE_COD_ORDER')
-      || permissions.includes('MANAGE_EMPLOYEE')
-    )
-  })
+  const modules = new Set(
+    deriveModulesFromRoles(session.roles ?? []).filter((module) => {
+      if (module !== 'pos') return true
+      return (
+        permissions.includes('CREATE_POS_ORDER')
+        || permissions.includes('CREATE_COD_ORDER')
+        || permissions.includes('MANAGE_EMPLOYEE')
+      )
+    }),
+  )
+
+  // Thủ kho có OPERATE_WAREHOUSE → luôn mở module kiểm tra hàng trả (kể cả role tùy chỉnh).
+  if (permissions.includes('OPERATE_WAREHOUSE')) {
+    modules.add('inventory_returns')
+  }
+
   return {
     ...session,
     permissions,
-    modules,
+    modules: [...modules],
   }
 }
 

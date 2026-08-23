@@ -275,7 +275,8 @@ public class ProductSkuLogic(
                 v.Product.ProductType.ToString(),
                 v.Product.InventoryUnit.ToString(),
                 v.Product.IsActive && v.IsActive,
-                v.IsPurchasable))
+                v.IsPurchasable,
+                v.CostPrice))
             .ToListAsync(ct);
     }
 
