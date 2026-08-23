@@ -1782,6 +1782,28 @@ public class InventoryLogic(
     }
 
     /// <summary>
+    /// Xác nhận từ màn hình Warehouse. Queue chỉ trừ tồn Kệ là nghiệp vụ POS/đơn hàng,
+    /// nên không được Thủ kho thao tác qua hàng đợi này.
+    /// </summary>
+    public async Task<StockDeductConfirmResponse> ConfirmWarehouseQueueAsync(
+        Guid queueId,
+        Guid confirmedBy,
+        CreatorSnapshot? confirmer,
+        CancellationToken ct = default)
+    {
+        var queue = await _queueRepo.GetByIdAsync(queueId, ct)
+            ?? throw new InventoryNotFoundException($"Queue '{queueId}' not found.");
+        var status = (queue.OrderStockStatus ?? string.Empty).Trim().ToLowerInvariant();
+        if (status is "pending_deduct" or "pendingdeduction")
+        {
+            throw new InventoryValidationException(
+                "Yêu cầu chỉ trừ tồn Kệ thuộc luồng POS/đơn hàng, không xử lý tại Kho.");
+        }
+
+        return await ConfirmQueueAsync(queueId, confirmedBy, confirmer, ct);
+    }
+
+    /// <summary>
     /// POS-06 (KB3/KB4): trừ nguyên liệu FEFO, nhập thành phẩm về Kho và sinh Lệnh sản xuất
     /// ở trạng thái đã hoàn thành. Không gọi <c>CompleteProductionOrderAsync</c> vì method đó
     /// tự trừ nguyên liệu thêm một lần nữa.

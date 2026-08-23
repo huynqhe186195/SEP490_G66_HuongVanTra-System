@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { formatVnd, getOrderStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { formatVnd, getOrderStatusLabel, getQueueStatusLabel, getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
 import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { confirmPacking, fetchCustomBundles } from '../../orders/services/customBundleApi.js'
@@ -20,6 +20,7 @@ function CustomBundlePreviewModal({
   orderId,
   orderStatus,
   orderStockStatus,
+  queueStatus,
   totalAmount,
   createdAt,
   canConfirm = false,
@@ -172,6 +173,9 @@ function CustomBundlePreviewModal({
               </dl>
 
               <div className="mb-4 flex flex-wrap gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Trạng thái yêu cầu: {getQueueStatusLabel(queueStatus)}
+                </span>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     canDeduct ? 'bg-[#b9d4b0]/30 text-[#538463]' : 'bg-amber-50 text-amber-700'
@@ -190,35 +194,11 @@ function CustomBundlePreviewModal({
                 </span>
               </div>
 
-              <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+              <div className="overflow-hidden rounded-xl border border-slate-100">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-4 py-3">Nguyên liệu / bao bì</th>
-                      <th className="px-4 py-3 text-right">Số lượng gói</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {(bundle.ingredients || []).map((ing) => (
-                      <tr key={ing.materialSkuId || ing.id}>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-800">{ing.materialSnapshotName || '—'}</p>
-                          <p className="font-mono text-xs text-slate-500">{ing.materialSkuCode}</p>
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                          ×{ing.quantity}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                    <tr>
-                      <th className="px-4 py-3">Sản Phẩm</th>
+                      <th className="px-4 py-3">Mặt hàng cần trừ từ Kho</th>
                       <th className="px-4 py-3 text-right">Cần trừ</th>
                       <th className="px-4 py-3 text-right">Tồn Kho hiện có</th>
                       <th className="px-4 py-3 text-right">Thiếu</th>

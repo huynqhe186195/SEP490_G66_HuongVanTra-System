@@ -10,12 +10,12 @@ import { showError } from '../../../app/toast.js'
 import { canAccessPath, canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
+import { parseApiDateTime } from '../../../utils/vietnamDateTime.js'
 import StockDeductPreviewModal from '../components/StockDeductPreviewModal.jsx'
 import CustomBundlePreviewModal from '../components/CustomBundlePreviewModal.jsx'
 import { fetchPendingStockDeductQueues } from '../services/stockDeductQueueApi.js'
 import { fetchCustomBundles, fetchPendingCustomBundles } from '../../orders/services/customBundleApi.js'
 import {
-  getQueueStatusLabel,
   getStockStatusClass,
   getStockStatusLabel,
   resolveStockDeductOrderStatusMeta,
@@ -34,6 +34,10 @@ function getStockDeductTabLabel(tab) {
   if (tab?.value === 'waiting') return 'Chờ đóng gói'
   if (tab?.value === 'insufficient') return 'Chờ hàng'
   return tab?.label ?? ''
+}
+
+function getCreatedAtSortValue(row) {
+  return parseApiDateTime(row?.createdAt)?.getTime() || 0
 }
 
 function getStockDeductLineSummary(line) {
@@ -165,7 +169,8 @@ function StockDeductQueuePage() {
         : activeTab === 'all'
           ? [...customRows, ...packedCustomRows]
           : customRows
-      const merged = page === 1 ? [...customForTab, ...(queuePage.items || [])] : (queuePage.items || [])
+      const merged = (page === 1 ? [...customForTab, ...(queuePage.items || [])] : (queuePage.items || []))
+        .sort((left, right) => getCreatedAtSortValue(right) - getCreatedAtSortValue(left))
       setQueues(merged)
       setTotalCount((queuePage.totalCount || 0) + customForTab.length)
 
@@ -308,8 +313,7 @@ function StockDeductQueuePage() {
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
-                <th className="px-4 py-4">Trạng thái đóng gói</th>
-                <th className="px-4 py-4">Tình trạng xử lý tồn</th>
+                <th className="px-4 py-4">Trạng thái xử lý Kho</th>
                 <th className="px-4 py-4">Trạng thái đơn</th>
                 <th className="px-4 py-4 text-right">Thao tác</th>
               </tr>
@@ -317,7 +321,7 @@ function StockDeductQueuePage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-center text-slate-500" colSpan={5}>
+                  <td className="px-8 py-10 text-center text-slate-500" colSpan={4}>
                     <span className="inline-flex items-center gap-2 text-sm font-semibold">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Đang tải yêu cầu đóng gói...
@@ -327,7 +331,7 @@ function StockDeductQueuePage() {
               ) : null}
               {!isLoading && queues.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-12 text-center" colSpan={5}>
+                  <td className="px-8 py-12 text-center" colSpan={4}>
                     <p className="font-semibold text-slate-800">
                       {searchValue.trim() || activeTab !== 'waiting'
                         ? 'Không có yêu cầu trong mục này'
@@ -399,13 +403,11 @@ function StockDeductQueuePage() {
                             {PERSONAL_PRODUCT_LABEL}{row.label ? ` · ${row.label}` : ''}
                           </span>
                         ) : null}
-                        {row.lines?.length ? (
+                        {row.rowKind !== 'custom' && row.lines?.length ? (
                           <div className="mt-2 space-y-1 text-xs font-medium text-slate-500">
                             {row.lines.slice(0, 2).map((line) => (
                               <p key={line.skuId}>
-                                {row.rowKind === 'custom'
-                                  ? `${line.skuCode || line.skuName}: ×${line.orderedQuantity}`
-                                  : `${line.skuCode || line.skuName}: ${getStockDeductLineSummary(line)}`}
+                                {`${line.skuCode || line.skuName}: ${getStockDeductLineSummary(line)}`}
                               </p>
                             ))}
                             {row.lines.length > 2 ? <p>+{row.lines.length - 2} dòng khác</p> : null}
@@ -413,32 +415,15 @@ function StockDeductQueuePage() {
                         ) : null}
                       </td>
                       <td className="px-4 py-5">
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                          {row.rowKind === 'custom'
-                            ? (isCompletedQueue
-                              ? `Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
-                              : normalizedQueueStatus === 'insufficient'
-                                ? `Chờ hàng (${PERSONAL_PRODUCT_LABEL.toLowerCase()})`
-                                : `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`)
-                            : getQueueStatusLabel(row.queueStatus)}
-                        </span>
-                        {row.isReserved ? (
-                          <span
-                            className="mt-1 block w-fit rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700"
-                            title="Đơn COD đang giữ chỗ tồn Kệ Hàng — tồn khả bán đã trừ phần giữ chỗ này"
-                          >
-                            Đang giữ chỗ tồn
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-5">
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(row.orderStockStatus)}`}
                         >
                           {row.rowKind === 'custom' && row.orderStockStatus === 'pending_custom_pack'
-                            ? PERSONAL_PRODUCT_LABEL
+                            ? `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
                             : row.rowKind === 'custom' && row.orderStockStatus === 'custom_packed'
                               ? `Đã trừ nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                              : row.orderStockStatus === 'pending_warehouse_transfer'
+                                ? 'Chờ xuất Kho điều chuyển Kệ'
                               : getStockStatusLabel(row.orderStockStatus)}
                         </span>
                       </td>
@@ -498,6 +483,7 @@ function StockDeductQueuePage() {
           queueId={previewQueue.queueId}
           orderCode={previewQueue.orderCode}
           orderPaymentStatus={previewQueue.orderPaymentStatus}
+          queueStatus={previewQueue.queueStatus}
           totalAmount={previewQueue.totalAmount}
           createdAt={previewQueue.createdAt}
           canConfirm={canExecuteDeduct}
@@ -514,6 +500,7 @@ function StockDeductQueuePage() {
           orderId={previewCustom.orderId}
           orderStatus={previewCustom.orderPaymentStatus}
           orderStockStatus={previewCustom.orderStockStatus}
+          queueStatus={previewCustom.queueStatus}
           totalAmount={previewCustom.totalAmount}
           createdAt={previewCustom.createdAt}
           canConfirm={canExecuteDeduct && !previewCustom.readOnly}
