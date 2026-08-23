@@ -427,7 +427,7 @@ function StockDeductQueuePage() {
                           {row.rowKind === 'custom' && row.orderStockStatus === 'pending_custom_pack'
                             ? PERSONAL_PRODUCT_LABEL
                             : row.rowKind === 'custom' && row.orderStockStatus === 'custom_packed'
-                              ? `Đã trừ NL ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                              ? `Đã trừ nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
                               : getStockStatusLabel(row.orderStockStatus)}
                         </span>
                       </td>

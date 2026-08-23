@@ -1,4 +1,9 @@
-import { isSystemAdmin, isWarehouseRole, isAccountantRole } from '../../auth/utils/permissions.js'
+import {
+  canInspectReturn,
+  isSystemAdmin,
+  isWarehouseRole,
+  isAccountantRole,
+} from '../../auth/utils/permissions.js'
 
 export const warehouseNavTabs = [
   { label: 'Kho', to: '/inventory' },
@@ -91,6 +96,9 @@ export function getInventoryNavTabs(session) {
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
     tabs.push(inventoryReturnNavTab)
+  }
+  // Chỉ Thủ kho kiểm tra hàng trả khách.
+  if (canInspectReturn(session)) {
     tabs.push(returnInspectionNavTab)
   }
   if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {

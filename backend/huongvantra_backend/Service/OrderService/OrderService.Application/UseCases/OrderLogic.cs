@@ -3992,7 +3992,10 @@ public class OrderLogic(
         // Còn dòng thành phẩm chờ nguyên liệu / chờ Thủ kho → chưa advance.
         if ((order.OrderDetails ?? []).Any(d => d.BackorderQuantity > 0))
             return false;
-        if (order.OrderStatus == OrderStatus.WaitingMaterials
+        // PendingReconciliation trên đơn chỉ có SP cá nhân = chờ đóng gói; sau pack vẫn advance.
+        // Chỉ chặn khi đơn có thành phẩm catalog chờ queue Thủ kho.
+        if ((order.OrderDetails?.Count ?? 0) > 0
+            && order.OrderStatus == OrderStatus.WaitingMaterials
             && order.InventorySyncStatus is InventorySyncStatus.PendingDeduction
                 or InventorySyncStatus.PendingReconciliation)
             return false;

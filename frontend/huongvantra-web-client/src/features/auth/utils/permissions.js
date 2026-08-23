@@ -280,10 +280,19 @@ export function canReviewStockReplenishmentRequest(session) {
   return isWarehouseRole(session) && !hasAdminRole(session)
 }
 
-/** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý. */
+/**
+ * Kiểm tra & quyết định xử lý hàng trả (Bán lại / Tiêu hủy) — chỉ Thủ kho.
+ * Quản lý / Admin không thao tác nghiệp vụ này.
+ */
 export function canInspectReturn(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
+  if (hasPermission(session, 'OPERATE_WAREHOUSE')) return true
+  return isWarehouseRole(session)
+}
+
+/** Xem danh sách kiểm tra hàng trả — cùng phạm vi Thủ kho. */
+export function canViewReturnInspections(session) {
+  return canInspectReturn(session)
 }
 
 /** Huỷ yêu cầu đang chờ xử lý: chỉ Manager tạo yêu cầu; Warehouse và Admin không được huỷ. */

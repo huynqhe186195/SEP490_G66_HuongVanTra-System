@@ -364,7 +364,89 @@ function ExchangeOrdersPage() {
 
       {viewTab === 'returns' ? (
         <section className="overflow-hidden rounded-[1rem] bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="divide-y divide-slate-100 lg:hidden">
+            {isLoading ? (
+              <p className="px-4 py-10 text-center text-sm text-slate-500">Đang tải...</p>
+            ) : null}
+            {!isLoading && returns.length === 0 ? (
+              <p className="px-4 py-10 text-center text-sm text-slate-500">
+                {hasActiveFilters ? 'Không có phiếu trả phù hợp bộ lọc.' : 'Chưa có phiếu trả hàng.'}
+              </p>
+            ) : null}
+            {!isLoading
+              ? returns.map((item) => (
+                  <article key={item.id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link
+                          className="text-base font-bold text-slate-800 hover:text-[#538463] hover:underline"
+                          to={`/orders/returns/${item.id}`}
+                        >
+                          {item.returnCode}
+                        </Link>
+                        <p className="mt-1 text-xs text-slate-500">{formatVietnamDateTime(item.createdAt)}</p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${getExchangeChannelBadgeClass(item.sourceOrderChannel)}`}
+                      >
+                        {getExchangeChannelShortLabel(item.sourceOrderChannel)}
+                      </span>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                      <div>
+                        <dt className="text-xs text-slate-500">Hóa đơn gốc</dt>
+                        <dd>
+                          <Link
+                            className="font-mono text-sm text-slate-700 hover:underline"
+                            to={`/orders/${item.sourceOrderId}${item.sourceOrderChannel === 'COD' ? '?from=cod' : ''}`}
+                          >
+                            {item.sourceOrderCode}
+                          </Link>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Khách hàng</dt>
+                        <dd className="text-slate-700">
+                          <OrderCustomerCell
+                            snapshot={item.customerSnapshotName}
+                            customerId={item.customerId}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Tiền trả</dt>
+                        <dd className="font-semibold text-[#356647]">{formatVnd(item.returnAmount)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Hoàn khách</dt>
+                        <dd className="font-semibold text-slate-700">
+                          {item.refundAmount > 0 ? formatVnd(item.refundAmount) : '—'}
+                        </dd>
+                      </div>
+                    </dl>
+                    {item.exchangeOrderCode ? (
+                      <p className="text-xs text-slate-500">
+                        Đơn đổi:{' '}
+                        <Link
+                          className="font-mono font-semibold text-slate-700 hover:underline"
+                          to={`/orders/${item.exchangeOrderId}?from=exchange`}
+                        >
+                          {item.exchangeOrderCode}
+                        </Link>
+                      </p>
+                    ) : null}
+                    <Link
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/5"
+                      to={`/orders/returns/${item.id}`}
+                    >
+                      Xem chi tiết
+                    </Link>
+                  </article>
+                ))
+              : null}
+          </div>
+
+          <div className="hidden overflow-x-auto lg:block">
             <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -474,7 +556,80 @@ function ExchangeOrdersPage() {
 
       {viewTab === 'exchange' ? (
       <section className="overflow-hidden rounded-[1rem] bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-slate-100 lg:hidden">
+          {isLoading ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">Đang tải...</p>
+          ) : null}
+          {!isLoading && orders.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">
+              {hasActiveFilters ? 'Không có đơn đổi phù hợp bộ lọc.' : 'Chưa có đơn đổi hàng.'}
+            </p>
+          ) : null}
+          {!isLoading
+            ? orders.map((order) => {
+                const inventorySyncMeta = resolveInventorySyncMeta(order)
+                return (
+                  <article key={order.id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link
+                          className="text-base font-bold text-slate-800 hover:text-[#538463] hover:underline"
+                          to={`/orders/${order.id}?from=exchange`}
+                        >
+                          {order.orderCode}
+                        </Link>
+                        <p className="mt-1 text-xs text-slate-500">{formatVietnamDateTime(order.createdAt)}</p>
+                      </div>
+                      <span className="rounded-full bg-[#538463]/10 px-2 py-0.5 text-[10px] font-bold uppercase text-[#356647]">
+                        Đổi
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
+                        {getOrderStatusLabel(order.orderStatus)}
+                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${inventorySyncMeta.className}`}>
+                        {inventorySyncMeta.label}
+                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getExchangeChannelBadgeClass(order.orderChannel)}`}>
+                        {getExchangeChannelShortLabel(order.orderChannel)}
+                      </span>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                      <div className="col-span-2">
+                        <dt className="text-xs text-slate-500">Khách hàng</dt>
+                        <dd className="text-slate-700">
+                          <OrderCustomerCell
+                            snapshot={order.customerSnapshotName}
+                            customerId={order.customerId}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Người bán</dt>
+                        <dd className="text-slate-700">{order.sellerName?.trim() || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Thành tiền</dt>
+                        <dd className="font-bold text-[#356647]">{formatVnd(order.finalAmount)}</dd>
+                      </div>
+                    </dl>
+                    {order.note?.trim() ? (
+                      <p className="line-clamp-2 text-xs text-slate-600">{order.note}</p>
+                    ) : null}
+                    <Link
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/5"
+                      to={`/orders/${order.id}?from=exchange`}
+                    >
+                      Xem chi tiết
+                    </Link>
+                  </article>
+                )
+              })
+            : null}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
             <thead className="bg-slate-50">
               <tr>

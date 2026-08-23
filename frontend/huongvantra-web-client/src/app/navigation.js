@@ -74,7 +74,7 @@ export const navigationItems = [
     path: '/inventory/return-inspections',
     module: 'inventory_returns',
     icon: 'rule',
-    roles: ['admin', 'agencyManager', 'inventoryManager'],
+    roles: ['inventoryManager'],
   },
   {
     label: 'Chờ đóng gói / trừ Kho',
@@ -288,17 +288,10 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory', label: 'Kho' },
       { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
+      { path: '/inventory/return-inspections', label: 'Kiểm tra hàng trả' },
       { path: '/inventory/stocktake', label: 'Kiểm kê tồn kho' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-transfers', label: 'Điều chuyển Kho → Kệ' },
-    ],
-  },
-  {
-    key: '__grp_customer_orders',
-    label: 'Đơn hàng',
-    icon: 'receipt_long',
-    entries: [
-      { path: '/inventory/return-inspections', label: 'Kiểm tra hàng trả' },
     ],
   },
   {
@@ -338,9 +331,14 @@ function isInventoryOnlySession(roles = []) {
   )
 }
 
-/** Fold các mục kho phẳng thành 3 nhóm cha; giữ nguyên các mục còn lại theo thứ tự gốc. */
+/** Fold các mục kho phẳng thành nhóm cha; giữ nguyên các mục còn lại theo thứ tự gốc. */
 function groupInventorySidebar(items) {
   const byPath = new Map(items.map((item) => [item.path, item]))
+  // Inject «Kiểm tra hàng trả» nếu filter module cũ làm mất mục (mọi Thủ kho đều cần).
+  if (!byPath.has('/inventory/return-inspections')) {
+    const fallback = navigationItems.find((item) => item.path === '/inventory/return-inspections')
+    if (fallback) byPath.set(fallback.path, fallback)
+  }
   const consumed = new Set()
 
   const groups = INVENTORY_SIDEBAR_GROUPS.map((spec) => {
@@ -479,8 +477,10 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const exchange = takeNavLeaf(byPath, consumed, '/orders/exchange', 'Trả / đổi hàng')
   if (exchange) orderChildren.push(exchange)
 
-  const returnInspect = takeNavLeaf(byPath, consumed, '/inventory/return-inspections', 'Kiểm tra hàng trả')
-  if (returnInspect) orderChildren.push(returnInspect)
+  // Kiểm tra hàng trả chỉ dành cho Thủ kho (nhóm Kho tổng) — không gắn vào sidebar Manager/Admin.
+  if (byPath.has('/inventory/return-inspections')) {
+    consumed.add('/inventory/return-inspections')
+  }
 
   if (!isAdmin) {
     const waiting = takeNavLeaf(byPath, consumed, '/orders/stock-deduct', 'Chờ đóng gói / trừ Kho')
@@ -1117,6 +1117,17 @@ export function canAccessModule(session, module) {
     return hasAnyRoleGroup(session.roles, ['inventoryManager', 'accountant'])
   }
 
+  if (String(module).toLowerCase() === 'inventory_returns') {
+    const permissions = session?.permissions ?? []
+    if (
+      permissions.includes('OPERATE_WAREHOUSE')
+      || permissions.includes('APPROVE_INVENTORY')
+      || permissions.includes('VIEW_INVENTORY')
+    ) {
+      return true
+    }
+  }
+
   // Sale (quầy/COD) không dùng kiểm kê kệ / YC bổ sung kệ — chỉ Manager / Thủ kho / Admin.
   if (
     (String(module).toLowerCase() === 'inventory_stocktake'
@@ -1173,6 +1184,14 @@ export function canAccessPath(session, pathname, search = '') {
     ) {
       return true
     }
+  }
+
+  // Kiểm tra hàng trả: chỉ Thủ kho (OPERATE_WAREHOUSE). Quản lý không thao tác.
+  if (path === '/inventory/return-inspections' || path.startsWith('/inventory/return-inspections/')) {
+    const permissions = session?.permissions ?? []
+    if (permissions.includes('OPERATE_WAREHOUSE')) return true
+    return hasAnyRoleGroup(session?.roles ?? [], ['inventoryManager'])
+      && !hasAnyRoleGroup(session?.roles ?? [], ['admin', 'agencyManager'])
   }
 
   // Live báo cáo cuối ngày: chỉ Thủ kho. Admin/Manager chỉ xem /submissions.
@@ -1294,6 +1313,9 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
+  }
+  if (module === 'inventory_returns') {
+    return 'Chỉ Thủ kho được kiểm tra hàng trả.'
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'

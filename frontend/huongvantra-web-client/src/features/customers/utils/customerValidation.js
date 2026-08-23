@@ -139,7 +139,7 @@ export function mapCustomerApiError(message) {
   return { field: null, message: text }
 }
 
-export function validatePosCustomerForm({ fullName, phone, address }) {
+export function validatePosCustomerForm({ fullName, phone, address, email }) {
   const errors = {}
   const nameValue = normalizeText(fullName)
   if (!nameValue) errors.fullName = 'Họ tên là bắt buộc.'
@@ -149,6 +149,12 @@ export function validatePosCustomerForm({ fullName, phone, address }) {
 
   const phoneError = validatePhoneNumber(phone)
   if (phoneError) errors.phone = phoneError
+
+  const emailValue = normalizeText(email)
+  if (emailValue) {
+    if (emailValue.length > 100) errors.email = 'Email tối đa 100 ký tự.'
+    else if (!EMAIL_REGEX.test(emailValue)) errors.email = 'Email không đúng định dạng.'
+  }
 
   const addressValue = normalizeText(address)
   if (addressValue) {
