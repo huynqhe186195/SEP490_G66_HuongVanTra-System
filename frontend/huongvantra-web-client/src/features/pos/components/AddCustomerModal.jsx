@@ -22,6 +22,7 @@ function inputClass(hasError) {
 function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
@@ -30,6 +31,7 @@ function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
     if (!isOpen) return
     setFullName('')
     setPhone(normalizePhoneInput(initialPhone) || '')
+    setEmail('')
     setAddress('')
     setFieldErrors({})
     setIsSaving(false)
@@ -44,7 +46,7 @@ function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
   const handleSave = async () => {
     if (isSaving) return
 
-    const validation = validatePosCustomerForm({ fullName, phone, address })
+    const validation = validatePosCustomerForm({ fullName, phone, address, email })
     if (!validation.valid) {
       setFieldErrors(validation.errors)
       showError(validation.message)
@@ -53,6 +55,7 @@ function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
 
     const name = fullName.trim()
     const phoneValue = phone.trim()
+    const emailValue = email.trim()
     const addressValue = address.trim()
 
     setIsSaving(true)
@@ -60,6 +63,7 @@ function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
       const result = await createPosCustomer({
         fullName: name,
         phone: phoneValue,
+        email: emailValue || null,
         address: addressValue || null,
       })
       const customer = result?.customer ?? result
@@ -123,6 +127,22 @@ function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
               inputMode="tel"
             />
             <FieldError message={fieldErrors.phone} />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-[#717971]">Email (tuỳ chọn)</span>
+            <input
+              className={inputClass(Boolean(fieldErrors.email))}
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                setFieldErrors((prev) => ({ ...prev, email: undefined }))
+              }}
+              placeholder="email@example.com"
+              autoComplete="email"
+            />
+            <FieldError message={fieldErrors.email} />
           </label>
 
           <label className="block space-y-1">

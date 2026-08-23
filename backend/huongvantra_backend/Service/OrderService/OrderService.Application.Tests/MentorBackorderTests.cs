@@ -407,6 +407,123 @@ public sealed class MentorBackorderTests
     }
 
     [Fact]
+    public async Task PackCustomBundle_AllPacked_AdvancesWaitingMaterialsWithPendingReconciliation_CustomOnly()
+    {
+        var materialSkuId = Guid.Parse("dddddddd-4444-4444-8444-dddddddddddd");
+        var orderId = Guid.NewGuid();
+        var bundleId = Guid.NewGuid();
+        var order = new Order
+        {
+            Id = orderId,
+            OrderCode = "HVT-PACK-002",
+            OrderChannel = OrderChannel.POS,
+            OrderKind = OrderKind.Sale,
+            OrderStatus = OrderStatus.WaitingMaterials,
+            InventorySyncStatus = InventorySyncStatus.PendingReconciliation,
+            FinalAmount = 72_600,
+            ShippingAddress = null,
+            OrderDetails = [],
+            CustomBundles =
+            [
+                new CustomBundle
+                {
+                    Id = bundleId,
+                    OrderId = orderId,
+                    Label = "Gói sen",
+                    PackingStatus = PackingStatus.Pending,
+                    TotalPrice = 72_600,
+                    Ingredients =
+                    [
+                        new CustomBundleIngredient
+                        {
+                            Id = Guid.NewGuid(),
+                            MaterialSkuId = materialSkuId,
+                            MaterialSkuCode = "NL-HOA-SEN-C",
+                            MaterialSnapshotName = "Hoa sen",
+                            Quantity = 30,
+                            UnitPrice = 80,
+                            SubTotal = 2_400
+                        }
+                    ]
+                }
+            ]
+        };
+        order.CustomBundles.First().Order = order;
+
+        var orderRepo = new Mock<IOrderRepository>();
+        orderRepo.Setup(r => r.GetByIdAsync(orderId, It.IsAny<CancellationToken>())).ReturnsAsync(order);
+        orderRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var bundleRepo = new Mock<ICustomBundleRepository>();
+        bundleRepo
+            .Setup(r => r.GetByIdAsync(bundleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order.CustomBundles.First());
+        bundleRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var inventory = new Mock<IInventoryCatalogClient>();
+        inventory
+            .Setup(c => c.DeductMaterialsAsync(
+                It.IsAny<IEnumerable<(Guid, string?, string?, int)>>(),
+                It.IsAny<string?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var productCatalog = new Mock<IProductCatalogClient>();
+        productCatalog
+            .Setup(client => client.GetSkuProfilesAsync(
+                It.IsAny<IEnumerable<Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new ProductSkuCatalogProfile(
+                    materialSkuId, null, "Piece", "NGUYEN_LIEU",
+                    true, true, true, false, 0m)
+            ]);
+
+        var activityRepo = new Mock<IOrderActivityRepository>();
+        activityRepo
+            .Setup(r => r.AddAsync(It.IsAny<OrderActivity>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+        var logic = new OrderLogic(
+            orderRepo.Object,
+            new Mock<IReturnOrderRepository>().Object,
+            new Mock<IPaymentRepository>().Object,
+            new Mock<IOrderCodeGenerator>().Object,
+            new Mock<IOrderEventPublisher>().Object,
+            activityRepo.Object,
+            new PromotionLogic(
+                new Mock<IPromotionRepository>().Object,
+                new Mock<ICustomerCatalogClient>().Object),
+            productCatalog.Object,
+            new Mock<ICustomerCatalogClient>().Object,
+            new Mock<IContractCatalogClient>().Object,
+            inventory.Object,
+            bundleRepo.Object,
+            new Mock<IEmailService>().Object,
+            PosShiftTestDoubles.CashSessionLogic(shiftGuard),
+            shiftGuard,
+            new PaymentIdempotencyService(
+                Mock.Of<IPaymentIdempotencyRepository>(),
+                Mock.Of<Microsoft.Extensions.Logging.ILogger<PaymentIdempotencyService>>()),
+            new Mock<HuongVanTra.Shared.Notifications.INotificationClient>().Object,
+            Microsoft.Extensions.Options.Options.Create(new SepayOptions()),
+            Microsoft.Extensions.Options.Options.Create(new BackorderOptions()));
+
+        await logic.PackCustomBundleAsync(bundleId);
+
+        Assert.Equal(OrderStatus.ReadyToDeliver, order.OrderStatus);
+        Assert.Equal(InventorySyncStatus.Synced, order.InventorySyncStatus);
+        orderRepo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task AcceptBackorder_SavesOrderWithWaitingMaterialsStatus()
     {
         Order? persisted = null;

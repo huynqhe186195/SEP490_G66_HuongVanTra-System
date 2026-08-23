@@ -177,11 +177,15 @@ export function mapSupplierReceiptSku(item) {
   const variantName = item.variantName ?? item.VariantName ?? ''
   const productName = item.productName ?? item.ProductName ?? item.displayName ?? item.DisplayName ?? item.skuName ?? item.SkuName ?? variantName ?? skuCode
   const productType = normalizeSupplierReceiptProductType(item.productType ?? item.ProductType)
+  const rawInventoryUnit = item.inventoryUnit ?? item.InventoryUnit ?? ''
+  const inventoryUnit = normalizeSupplierReceiptInventoryUnit(rawInventoryUnit)
+  const costPriceRaw = item.costPrice ?? item.CostPrice
+  const costPrice = costPriceRaw == null || costPriceRaw === '' ? null : Number(costPriceRaw)
 
   return {
-    id,
-    skuId: id,
-    variantId: id,
+    id: String(id),
+    skuId: String(id),
+    variantId: String(id),
     productId: item.productId ?? item.ProductId ?? null,
     productName,
     displayName: productName,
@@ -189,11 +193,25 @@ export function mapSupplierReceiptSku(item) {
     packagingType: variantName,
     variantName,
     unitName: item.unitName ?? item.UnitName ?? '',
-    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    inventoryUnit,
+    costPrice: Number.isFinite(costPrice) && costPrice > 0 ? costPrice : null,
     productType: productType ?? '',
     isActive: normalizeCatalogBoolean(item.isActive ?? item.IsActive),
     isPurchasable: normalizeCatalogBoolean(item.isPurchasable ?? item.IsPurchasable),
   }
+}
+
+/** Chuẩn hóa đơn vị tồn: API có thể trả "Gram"/"Piece" hoặc số enum 0/1. */
+export function normalizeSupplierReceiptInventoryUnit(value) {
+  if (value === 0 || value === '0') return 'Gram'
+  if (value === 1 || value === '1') return 'Piece'
+  const text = String(value ?? '').trim().toLowerCase()
+  if (!text) return ''
+  if (text === 'gram' || text === 'g' || text === 'gr') return 'Gram'
+  if (text === 'piece' || text === 'pcs' || text === 'cái' || text === 'cai') return 'Piece'
+  // Giữ nguyên casing chuẩn nếu đã đúng
+  if (String(value).trim() === 'Gram' || String(value).trim() === 'Piece') return String(value).trim()
+  return String(value).trim()
 }
 
 export function mapProduct(item) {

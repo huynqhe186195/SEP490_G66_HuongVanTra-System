@@ -938,6 +938,7 @@ export async function createPosCustomer(payload) {
   const body = buildCreateCustomerBody({
     fullName: payload.fullName,
     phone: payload.phone,
+    email: payload.email,
     address: payload.address,
     customerType: payload.customerType,
   })

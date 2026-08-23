@@ -14,4 +14,5 @@ public record ProductSkuSupplierReceiptCatalogResponse(
     string ProductType,
     string InventoryUnit,
     bool IsActive,
-    bool IsPurchasable);
+    bool IsPurchasable,
+    decimal? CostPrice = null);

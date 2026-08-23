@@ -66,7 +66,64 @@ function mapOrderLineToReturnLine(line, paidRatio = 1) {
   }
 }
 
-function ReturnLineTable({ rows, onQtyChange, onRemove, emptyLabel }) {
+function ReturnLineCards({ rows, onQtyChange, onRemove, emptyLabel, formatMoney }) {
+  if (rows.length === 0) {
+    return (
+      <div className="flex min-h-[120px] items-center justify-center px-4 py-6 text-sm text-slate-500">
+        {emptyLabel}
+      </div>
+    )
+  }
+
+  return (
+    <ul className="divide-y divide-slate-100">
+      {rows.map((row) => {
+        const lineTotal = row.unitPrice * row.returnQty
+        return (
+          <li key={row.key} className="px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-semibold leading-snug text-slate-800">{row.name}</p>
+                {row.code ? <p className="mt-0.5 text-sm text-slate-500">{row.code}</p> : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(row.key)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                aria-label="Xóa dòng"
+              >
+                <Icon className="text-[20px]">delete</Icon>
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">SL</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={row.maxQty ?? row.returnQty}
+                  value={row.returnQty}
+                  onChange={(e) => onQtyChange(row.key, clampQty(e.target.value, row.maxQty ?? 999))}
+                  className="h-11 w-full rounded-xl border border-slate-300 text-center text-base outline-none focus:border-[#356647]"
+                />
+              </label>
+              <div>
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">Giá trả</span>
+                <p className="pt-2.5 text-sm font-medium text-slate-700">{formatMoney(row.unitPrice)}</p>
+              </div>
+              <div className="text-right">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">T.Tiền</span>
+                <p className="pt-2.5 text-base font-bold text-slate-800">{formatMoney(lineTotal)}</p>
+              </div>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function ReturnLineTable({ rows, onQtyChange, onRemove, emptyLabel, formatMoney }) {
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[120px] items-center justify-center px-4 text-sm text-slate-500">
@@ -157,6 +214,7 @@ function ReturnOrderPage() {
   const [evidenceImageUrls, setEvidenceImageUrls] = useState([])
   const [uploadingCount, setUploadingCount] = useState(0)
   const [managerOverride, setManagerOverride] = useState(false)
+  const [mobileLinesTab, setMobileLinesTab] = useState('return')
   const authSession = useAuthSession()
   const canManagerOverride = canViewAllOrders(authSession)
 
@@ -683,9 +741,21 @@ function ReturnOrderPage() {
     }
   }
 
+  const mobileActionSummary = useMemo(() => {
+    const owed = Math.max(0, totals.customerOwes)
+    const refund = totals.customerOwes < 0 ? Math.abs(totals.customerOwes) : 0
+    if (refund > 0) {
+      return { label: 'Hoàn khách', amount: refund, settled: false }
+    }
+    if (owed > 0) {
+      return { label: 'Khách trả thêm', amount: owed, settled: false }
+    }
+    return { label: 'Chênh lệch', amount: 0, settled: true }
+  }, [totals.customerOwes])
+
   if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#f6f4ec] text-slate-600">
+      <div className="flex h-full min-h-0 flex-1 items-center justify-center bg-[#f6f4ec] text-base text-slate-600">
         Đang tải hóa đơn...
       </div>
     )
@@ -693,7 +763,7 @@ function ReturnOrderPage() {
 
   if (!order) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-3 bg-[#f6f4ec]">
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-[#f6f4ec]">
         <p className="text-slate-600">Không tìm thấy hóa đơn.</p>
         <Link to="/pos" className="text-[#356647] hover:underline">
           Về POS
@@ -703,163 +773,266 @@ function ReturnOrderPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#f6f4ec]">
-      <header className="shrink-0 border-b border-[#c1c9c0]/60 bg-white px-3 py-2 sm:px-4">
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#f6f4ec]">
+      <header className="shrink-0 border-b border-[#c1c9c0]/60 bg-white px-3 py-2.5 sm:px-4">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate('/pos')}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-[#356647] hover:bg-[#356647]/10"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/10"
           >
-            <Icon className="text-[18px]">arrow_back</Icon>
-            POS
+            <Icon className="text-[20px]">arrow_back</Icon>
+            <span className="hidden sm:inline">POS</span>
           </button>
 
-          <div className="relative min-w-[200px] flex-1">
+          <div className="relative min-w-0 flex-1">
             <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</Icon>
             <input
               type="text"
-              placeholder="Tìm hàng trả (F3)"
+              placeholder="Tìm hàng trả"
               value={returnSearch}
               onChange={(e) => setReturnSearch(e.target.value)}
-              className="w-full rounded-full border border-slate-300 bg-[#f8f9fa] py-2 pl-9 pr-3 text-sm outline-none focus:border-[#356647]"
+              className="w-full rounded-full border border-slate-300 bg-[#f8f9fa] py-2.5 pl-9 pr-3 text-base outline-none focus:border-[#356647]"
             />
           </div>
 
-          <div className="flex items-center gap-1 rounded-lg border border-[#356647] bg-[#356647]/5 px-3 py-1.5 text-sm font-semibold text-[#356647]">
+          <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#356647] bg-[#356647]/5 px-2.5 py-2 text-sm font-semibold text-[#356647] sm:px-3">
             <Icon className="text-[18px]">assignment_return</Icon>
-            Trả hàng
+            <span className="hidden sm:inline">Trả hàng</span>
           </div>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <section className="flex min-h-0 flex-[1_1_45%] flex-col border-b border-[#c1c9c0] bg-white">
-            <div className="shrink-0 border-b border-slate-100 bg-[#f8f9fa] px-3 py-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Hàng trả</p>
-            </div>
-            <CustomScrollArea className="min-h-0 flex-1">
-              <ReturnLineTable
-                rows={filteredReturnLines}
-                onQtyChange={updateReturnQty}
-                onRemove={removeReturnLine}
-                emptyLabel="Không có hàng trả. Thêm từ hóa đơn gốc hoặc đổi bộ lọc tìm kiếm."
-              />
-            </CustomScrollArea>
-          </section>
+      <div className="flex min-h-0 flex-1 flex-col xl:flex-row xl:overflow-hidden">
+        <ReturnOrderSidebar
+          compactMobile
+          customerName={order.customerSnapshotName}
+          customerPhone=""
+          createdAtLabel={vietnamNowLabel()}
+          sourceOrderCode={order.orderCode}
+          returnOriginalTotal={totals.returnOriginalTotal}
+          returnItemsTotal={totals.returnItemsTotal}
+          returnDiscount={totals.returnDiscount}
+          returnFee={totals.returnFee}
+          returnNetTotal={totals.returnNetTotal}
+          purchaseItemsTotal={totals.purchaseItemsTotal}
+          purchaseDiscount={totals.purchaseDiscount}
+          membershipDiscountAmount={totals.membershipDiscountAmount}
+          manualExchangeDiscountAmount={totals.manualExchangeDiscountAmount}
+          tierDiscountPercent={totals.tierDiscountPercent}
+          tierCode={totals.tierCode}
+          purchaseNetTotal={totals.purchaseNetTotal}
+          customerOwes={totals.customerOwes}
+          amountPaid={amountPaidInput}
+          paymentMethod={paymentMethod}
+          onPaymentMethodChange={setPaymentMethod}
+          onAmountPaidChange={setAmountPaidInput}
+          refundTransactionRef={refundTransactionRef}
+          onRefundTransactionRefChange={setRefundTransactionRef}
+          canUseVipManualAdjustments={canUseVipManualAdjustments}
+          exchangeOrderDiscountPercent={exchangeOrderDiscountPercent}
+          usesFixedExchangeOrderDiscount={usesFixedExchangeOrderDiscount}
+          onExchangeOrderDiscountPercentChange={(value) => {
+            const pct = Math.min(100, Math.max(0, Number(value) || 0))
+            setExchangeOrderDiscountPercent(pct)
+            if (pct > 0) setExchangeOrderDiscountAmountFixed(0)
+          }}
+          onOpenExchangeOfferModal={() => setOfferModalOpen(true)}
+          formatMoney={formatMoney}
+          isSubmitting={isSubmitting}
+          canSubmit={canSubmit}
+          onSubmit={handleSubmit}
+        />
 
-          <section className="flex min-h-0 flex-[1_1_55%] flex-col bg-white">
-            <div className="shrink-0 bg-[#538463] px-3 py-2">
-              <div className="relative">
-                <input
-                  ref={exchangeSearchRef}
-                  type="text"
-                  placeholder="Tìm hàng đổi / mua thêm..."
-                  value={exchangeSearch}
-                  onChange={(e) => setExchangeSearch(e.target.value)}
-                  className="w-full rounded border-0 bg-white py-2 pl-3 pr-10 text-sm outline-none ring-2 ring-transparent focus:ring-white/40"
-                />
-                <Icon className="absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-500">
-                  barcode_scanner
-                </Icon>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-28 xl:pb-0">
+          <div className="grid shrink-0 grid-cols-2 gap-2 border-b border-slate-200 bg-white p-3 xl:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileLinesTab('return')}
+              className={`rounded-xl px-3 py-3 text-sm font-bold transition ${
+                mobileLinesTab === 'return'
+                  ? 'bg-[#356647] text-white shadow-sm'
+                  : 'border border-slate-200 bg-[#fbf9f1] text-slate-700'
+              }`}
+            >
+              Hàng trả ({filteredReturnLines.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileLinesTab('exchange')}
+              className={`rounded-xl px-3 py-3 text-sm font-bold transition ${
+                mobileLinesTab === 'exchange'
+                  ? 'bg-[#538463] text-white shadow-sm'
+                  : 'border border-slate-200 bg-[#fbf9f1] text-slate-700'
+              }`}
+            >
+              Hàng đổi ({exchangeRows.length})
+            </button>
+          </div>
+
+          {/* Vùng danh sách hàng — luôn chiếm phần trên, không bị chính sách đè mất */}
+          <div className="flex min-h-0 flex-[1.2] flex-col overflow-hidden xl:min-h-[280px]">
+            <section
+              className={`min-h-0 flex-col border-b border-[#c1c9c0] bg-white xl:flex xl:flex-[1_1_45%] ${
+                mobileLinesTab === 'return' ? 'flex flex-1' : 'hidden'
+              }`}
+            >
+              <div className="hidden shrink-0 border-b border-slate-100 bg-[#f8f9fa] px-4 py-2.5 xl:block">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Hàng trả</p>
               </div>
-              {exchangeSearch.trim() ? (
-                <CustomScrollArea className="mt-2 rounded bg-white shadow-lg" contentClassName="max-h-40">
-                  {isSearchingExchange ? (
-                    <p className="px-3 py-2 text-sm text-slate-500">Đang tìm...</p>
-                  ) : exchangeResults.length === 0 ? (
-                    <p className="px-3 py-2 text-sm text-slate-500">Không tìm thấy sản phẩm.</p>
-                  ) : (
-                    exchangeResults.map((product) => (
-                      <button
-                        key={product.sku ?? product.id}
-                        type="button"
-                        onClick={() => addExchangeProduct(product)}
-                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 last:border-0"
-                      >
-                        <span className="min-w-0 truncate font-medium text-slate-800">{product.name}</span>
-                        <span className="shrink-0 font-semibold text-[#356647]">{formatMoney(product.price)}</span>
-                      </button>
-                    ))
-                  )}
-                </CustomScrollArea>
+              <CustomScrollArea className="min-h-0 flex-1">
+                <div className="xl:hidden">
+                  <ReturnLineCards
+                    rows={filteredReturnLines}
+                    onQtyChange={updateReturnQty}
+                    onRemove={removeReturnLine}
+                    emptyLabel="Không có hàng trả. Thêm từ hóa đơn gốc hoặc đổi bộ lọc tìm kiếm."
+                    formatMoney={formatMoney}
+                  />
+                </div>
+                <div className="hidden xl:block">
+                  <ReturnLineTable
+                    rows={filteredReturnLines}
+                    onQtyChange={updateReturnQty}
+                    onRemove={removeReturnLine}
+                    emptyLabel="Không có hàng trả. Thêm từ hóa đơn gốc hoặc đổi bộ lọc tìm kiếm."
+                    formatMoney={formatMoney}
+                  />
+                </div>
+              </CustomScrollArea>
+            </section>
+
+            <section
+              className={`min-h-0 flex-col bg-white xl:flex xl:flex-[1_1_55%] ${
+                mobileLinesTab === 'exchange' ? 'flex flex-1' : 'hidden'
+              }`}
+            >
+              <div className="shrink-0 bg-[#538463] px-3 py-3 sm:px-4">
+                <div className="relative">
+                  <input
+                    ref={exchangeSearchRef}
+                    type="text"
+                    placeholder="Tìm hàng đổi / mua thêm..."
+                    value={exchangeSearch}
+                    onChange={(e) => setExchangeSearch(e.target.value)}
+                    className="w-full rounded-xl border-0 bg-white py-3 pl-4 pr-11 text-base outline-none ring-2 ring-transparent focus:ring-white/40"
+                  />
+                  <Icon className="absolute right-3 top-1/2 -translate-y-1/2 text-[22px] text-slate-500">
+                    barcode_scanner
+                  </Icon>
+                </div>
+                {exchangeSearch.trim() ? (
+                  <CustomScrollArea className="mt-2 rounded-xl bg-white shadow-lg" contentClassName="max-h-48">
+                    {isSearchingExchange ? (
+                      <p className="px-4 py-3 text-sm text-slate-500">Đang tìm...</p>
+                    ) : exchangeResults.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-slate-500">Không tìm thấy sản phẩm.</p>
+                    ) : (
+                      exchangeResults.map((product) => (
+                        <button
+                          key={product.sku ?? product.id}
+                          type="button"
+                          onClick={() => addExchangeProduct(product)}
+                          className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-base hover:bg-slate-50 last:border-0"
+                        >
+                          <span className="min-w-0 font-medium text-slate-800">{product.name}</span>
+                          <span className="shrink-0 font-semibold text-[#356647]">{formatMoney(product.price)}</span>
+                        </button>
+                      ))
+                    )}
+                  </CustomScrollArea>
+                ) : null}
+              </div>
+              <CustomScrollArea className="min-h-0 flex-1">
+                <div className="xl:hidden">
+                  <ReturnLineCards
+                    rows={exchangeRows}
+                    onQtyChange={updateExchangeQty}
+                    onRemove={removeExchangeLine}
+                    emptyLabel="Tìm và thêm hàng đổi / mua thêm ở thanh tìm kiếm phía trên."
+                    formatMoney={formatMoney}
+                  />
+                </div>
+                <div className="hidden xl:block">
+                  <ReturnLineTable
+                    rows={exchangeRows}
+                    onQtyChange={updateExchangeQty}
+                    onRemove={removeExchangeLine}
+                    emptyLabel="Tìm và thêm hàng đổi / mua thêm ở thanh tìm kiếm phía trên."
+                    formatMoney={formatMoney}
+                  />
+                </div>
+              </CustomScrollArea>
+            </section>
+          </div>
+
+          {/* Chính sách / lý do / ghi chú — cuộn riêng phía dưới */}
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto border-t border-slate-200 bg-white xl:max-h-[42%]">
+            <section className="border-b border-slate-100 px-4 py-4">
+              <ReturnPolicyPanel
+                context={policyContext}
+                loading={isPolicyLoading}
+                checklistAnswers={checklistAnswers}
+                onToggleChecklist={toggleChecklistItem}
+                evidenceImageUrls={evidenceImageUrls}
+                onEvidenceChange={handleEvidenceChange}
+                onRemoveEvidence={removeEvidenceImage}
+                uploadingCount={uploadingCount}
+                maxEvidenceImages={MAX_EVIDENCE_IMAGES}
+                canManagerOverride={canManagerOverride}
+                managerOverride={managerOverride}
+                onManagerOverrideChange={setManagerOverride}
+              />
+            </section>
+
+            <section className="border-b border-slate-100 px-4 py-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-600">Lý do trả/đổi hàng</p>
+                <span className="text-xs text-slate-500">Bắt buộc</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {visibleReturnReasons.map((reason) => {
+                  const selected = selectedReasons.includes(reason.id)
+                  return (
+                    <button
+                      key={reason.id}
+                      type="button"
+                      onClick={() => toggleReturnReason(reason.id)}
+                      className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold leading-snug transition ${
+                        selected
+                          ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                          : 'border-slate-200 bg-[#fbf9f1] text-slate-600 hover:border-[#356647]/40'
+                      }`}
+                    >
+                      {reason.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {hasOtherReason ? (
+                <input
+                  type="text"
+                  value={otherReason}
+                  onChange={(e) => setOtherReason(e.target.value)}
+                  maxLength={300}
+                  placeholder="Nhập lý do khác, ít nhất 10 ký tự..."
+                  className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-[#356647]"
+                />
               ) : null}
-            </div>
-            <CustomScrollArea className="min-h-0 flex-1">
-              <ReturnLineTable
-                rows={exchangeRows}
-                onQtyChange={updateExchangeQty}
-                onRemove={removeExchangeLine}
-                emptyLabel="Tìm và thêm hàng đổi / mua thêm ở thanh tìm kiếm phía trên."
-              />
-            </CustomScrollArea>
-          </section>
+            </section>
 
-          <section className="shrink-0 border-b border-slate-200 bg-white px-3 py-3">
-            <ReturnPolicyPanel
-              context={policyContext}
-              loading={isPolicyLoading}
-              checklistAnswers={checklistAnswers}
-              onToggleChecklist={toggleChecklistItem}
-              evidenceImageUrls={evidenceImageUrls}
-              onEvidenceChange={handleEvidenceChange}
-              onRemoveEvidence={removeEvidenceImage}
-              uploadingCount={uploadingCount}
-              maxEvidenceImages={MAX_EVIDENCE_IMAGES}
-              canManagerOverride={canManagerOverride}
-              managerOverride={managerOverride}
-              onManagerOverrideChange={setManagerOverride}
-            />
-          </section>
-
-          <section className="shrink-0 border-t border-slate-200 bg-white px-3 py-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Lý do trả/đổi hàng</p>
-              <span className="text-[11px] text-slate-500">Bắt buộc</span>
+            <div className="px-4 py-3">
+              <label className="flex items-center gap-3 text-base text-slate-600">
+                <Icon className="text-[20px] text-slate-400">edit_note</Icon>
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Ghi chú (VD: thu hồi/giao qua ship, bưu điện, địa chỉ...)"
+                  className="min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-slate-400"
+                />
+              </label>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {visibleReturnReasons.map((reason) => {
-                const selected = selectedReasons.includes(reason.id)
-                return (
-                  <button
-                    key={reason.id}
-                    type="button"
-                    onClick={() => toggleReturnReason(reason.id)}
-                    className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                      selected
-                        ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
-                        : 'border-slate-200 bg-[#fbf9f1] text-slate-600 hover:border-[#356647]/40'
-                    }`}
-                  >
-                    {reason.label}
-                  </button>
-                )
-              })}
-            </div>
-            {hasOtherReason ? (
-              <input
-                type="text"
-                value={otherReason}
-                onChange={(e) => setOtherReason(e.target.value)}
-                maxLength={300}
-                placeholder="Nhập lý do khác, ít nhất 10 ký tự..."
-                className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#356647]"
-              />
-            ) : null}
-          </section>
-
-          <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2">
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <Icon className="text-[18px] text-slate-400">edit_note</Icon>
-              <input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Ghi chú (VD: thu hồi/giao qua ship, bưu điện, địa chỉ...)"
-                className="min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-slate-400"
-              />
-            </label>
           </div>
         </div>
 
@@ -914,6 +1087,27 @@ function ReturnOrderPage() {
             if (warning) showError(warning)
           }}
         />
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur xl:hidden">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {mobileActionSummary.label}
+            </p>
+            <p className="text-xl font-bold text-[#356647]">
+              {mobileActionSummary.settled ? '0' : formatMoney(mobileActionSummary.amount)}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canSubmit || isSubmitting}
+            onClick={handleSubmit}
+            className="shrink-0 rounded-xl bg-[#356647] px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#2d553c] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? 'Đang xử lý...' : 'Trả hàng'}
+          </button>
+        </div>
       </div>
     </div>
   )

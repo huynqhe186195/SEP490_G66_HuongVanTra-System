@@ -214,7 +214,7 @@ function ReturnInspectionsPage() {
         hint: 'Danh sách yêu cầu trả / đổi hàng của khách',
         icon: 'undo',
         alwaysShow: true,
-        to: '/inventory/returns',
+        to: '/orders/exchange?tab=returns',
       },
     ].filter(Boolean),
     [canInspect, snapshotCounts.pending],
@@ -240,13 +240,13 @@ function ReturnInspectionsPage() {
 
       <OpsActionQueue items={actionItems} />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => selectTab(tab.key)}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors sm:px-5 sm:py-2.5 ${
               activeTab === tab.key
                 ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
                 : 'bg-white text-slate-600 hover:bg-slate-100'
@@ -263,7 +263,84 @@ function ReturnInspectionsPage() {
       </div>
 
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
-        <div className="custom-scrollbar overflow-x-auto">
+        <div className="divide-y divide-slate-100 lg:hidden">
+          {isLoading ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">Đang tải mục kiểm tra...</p>
+          ) : null}
+          {!isLoading && rows.length === 0 ? (
+            <div className="px-4 py-12 text-center">
+              <p className="font-semibold text-slate-800">
+                {searchValue.trim() || activeTab !== 'pending'
+                  ? 'Không có mục kiểm tra trong bộ lọc này'
+                  : 'Chưa có hàng trả chờ kiểm tra'}
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                {searchValue.trim() || activeTab !== 'pending'
+                  ? 'Thử đổi tab hoặc xóa từ khóa.'
+                  : 'Khi có hàng trả từ khách, chọn Bán lại hoặc Tiêu hủy sau khi kiểm tra.'}
+              </p>
+            </div>
+          ) : null}
+          {!isLoading
+            ? rows.map((row) => {
+                const isPending = String(row.disposition).toLowerCase() === 'pending'
+                return (
+                  <article key={row.id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-800">{row.returnCode || '—'}</p>
+                        {row.orderId && canOpenOrders ? (
+                          <Link
+                            className="text-xs text-slate-500 hover:text-[#538463] hover:underline"
+                            to={`/orders/${row.orderId}`}
+                          >
+                            {row.orderCode || row.orderId}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-400">{row.orderCode || '—'}</span>
+                        )}
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getDispositionClass(row.disposition)}`}
+                      >
+                        {getDispositionLabel(row.disposition)}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900">{row.skuSnapshotName || '—'}</p>
+                      <p className="font-mono text-xs text-slate-400">{row.skuCode}</p>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                      <div>
+                        <dt className="text-xs text-slate-500">Số lượng</dt>
+                        <dd className="font-semibold text-slate-700">{row.quantity}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Thời điểm</dt>
+                        <dd className="text-xs text-slate-600">
+                          {formatVietnamDateTime(row.inspectedAt ?? row.createdAt)}
+                        </dd>
+                      </div>
+                    </dl>
+                    {row.inspectionNote ? (
+                      <p className="text-xs text-slate-500">{row.inspectionNote}</p>
+                    ) : null}
+                    {isPending && canInspect ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelected(row)}
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+                      >
+                        Kiểm tra
+                      </button>
+                    ) : null}
+                  </article>
+                )
+              })
+            : null}
+        </div>
+
+        <div className="custom-scrollbar hidden overflow-x-auto lg:block">
           <table className="w-full text-left">
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
@@ -315,7 +392,7 @@ function ReturnInspectionsPage() {
                         </button>
                       ) : null}
                       <Link
-                        to="/inventory/returns"
+                        to="/orders/exchange?tab=returns"
                         className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
                       >
                         <span className="material-symbols-outlined text-[18px]">undo</span>

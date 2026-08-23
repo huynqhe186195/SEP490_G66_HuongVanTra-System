@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
 using OrderService.Domain.Entities;
+using OrderService.Domain.Enums;
 
 namespace OrderService.Infrastructure.Services;
 
@@ -239,6 +240,17 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
                     <div class='summary-row total'>
                         <span>Tổng thanh toán:</span>
                         <span>{order.FinalAmount:N0}đ</span>
+                    </div>");
+
+        var (amountPaid, debtAmount, paidLabel, debtLabel) = ResolveInvoicePaymentSummary(order);
+        sb.Append($@"
+                    <div class='summary-row'>
+                        <span>{paidLabel}:</span>
+                        <span>{amountPaid:N0}đ</span>
+                    </div>
+                    <div class='summary-row{(debtAmount > 0 ? " total" : "")}' style='{(debtAmount > 0 ? "color:#b45309;font-weight:600;" : "")}'>
+                        <span>{debtLabel}:</span>
+                        <span>{debtAmount:N0}đ</span>
                     </div>
                 </div>
 
@@ -251,5 +263,17 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
         </html>");
 
         return sb.ToString();
+    }
+
+    private static (decimal AmountPaid, decimal DebtAmount, string PaidLabel, string DebtLabel) ResolveInvoicePaymentSummary(Order order)
+    {
+        var amountPaid = (order.Payments ?? [])
+            .Where(p => p.PaymentStatus == PaymentStatus.Success)
+            .Sum(p => p.Amount);
+        var debtAmount = Math.Max(0, order.FinalAmount - amountPaid);
+        var isDeposit = order.DepositAmount.HasValue && order.DepositAmount.Value > 0;
+        var paidLabel = isDeposit ? "Đã nhận cọc" : "Khách trả";
+        var debtLabel = isDeposit ? "Còn lại thu khi nhận hàng" : "Công nợ";
+        return (amountPaid, debtAmount, paidLabel, debtLabel);
     }
 }

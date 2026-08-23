@@ -58,6 +58,10 @@ function AdminLayout() {
   const location = useLocation()
   const [lastNavPath, setLastNavPath] = useState(location.pathname)
   const isOnline = useNetworkStatus()
+  const isPosFlowPage =
+    location.pathname === '/pos'
+    || location.pathname.startsWith('/pos/returns/')
+    || location.pathname.startsWith('/pos/payment/')
   const isPosPage = location.pathname === '/pos'
 
   // Background sync mỗi 30 phút khi online, và khi tab được focus lại
@@ -201,7 +205,7 @@ function AdminLayout() {
   const isInventoryCreatePage =
     location.pathname === '/inventory/stock-requests/create'
     || location.pathname === '/inventory/stock-transfers/create'
-  const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
+  const isViewportLocked = isPosFlowPage || isStoreProductsPage
 
   const visibleSidebarItems =
     shiftLockMode === 'hard_block' || shiftLockMode === 'checking' || shiftLockMode === 'day_end'
@@ -236,6 +240,7 @@ function AdminLayout() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {!isPosFlowPage ? (
           <header className="flex shrink-0 items-center gap-3 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-3 py-3 lg:hidden">
             <button
               type="button"
@@ -252,8 +257,9 @@ function AdminLayout() {
             {isPosPage && <SyncStatusBadge />}
             <NotificationBell />
           </header>
+          ) : null}
 
-          <div className="hidden lg:flex shrink-0 items-center justify-end gap-2 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
+          <div className="hidden shrink-0 items-center justify-end gap-2 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2 lg:flex">
             {isPosPage && <SyncStatusBadge />}
             <NotificationBell />
           </div>
