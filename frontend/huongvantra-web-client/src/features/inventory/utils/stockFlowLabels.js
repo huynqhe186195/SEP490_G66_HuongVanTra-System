@@ -13,9 +13,9 @@ function normalize(value) {
 const REQUEST_STATUS_LABELS = {
   draft: 'Nháp',
   pending: 'Chờ tiếp nhận',
-  approved: 'Đã duyệt',
+  approved: 'Chờ xác nhận chuyển lên Kệ',
   processing: 'Đang xử lý',
-  partiallyfulfilled: 'Đã bổ sung một phần',
+  partiallyfulfilled: 'Đang xử lý',
   fulfilled: 'Đã bổ sung đủ',
   completed: 'Đã bổ sung đủ',
   rejected: 'Đã từ chối',
@@ -25,8 +25,8 @@ const REQUEST_STATUS_LABELS = {
 
 const REQUEST_LINE_STATUS_LABELS = {
   pending: 'Chờ xử lý',
-  approved: 'Đã duyệt',
-  waitingforstock: 'Chờ bổ sung tồn Kho',
+  approved: 'Chờ xác nhận chuyển lên Kệ',
+  waitingforstock: 'Đang chờ hoàn tất Lệnh sản xuất',
   partiallyfulfilled: 'Đã bổ sung một phần',
   fulfilled: 'Đã bổ sung đủ',
   rejected: 'Đã từ chối',
@@ -92,8 +92,8 @@ export const STOCK_FLOW_TERMS = {
   request: 'Yêu cầu bổ sung Kệ Hàng',
   transfer: 'Phiếu điều chuyển Kho → Kệ',
   requestedQuantity: 'Số lượng yêu cầu',
-  approvedQuantity: 'Số lượng duyệt',
-  fulfilledQuantity: 'Số lượng đã chuyển',
+  approvedQuantity: 'Số lượng được xử lý',
+  fulfilledQuantity: 'Số lượng đã bổ sung',
   rejectedQuantity: 'Số lượng từ chối',
   remainingQuantity: 'Số lượng còn lại',
   transferQuantity: 'Số lượng điều chuyển',

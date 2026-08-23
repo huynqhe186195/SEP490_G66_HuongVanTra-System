@@ -96,7 +96,7 @@ public static class StockAdjustmentFulfillment
             : StockAdjustmentRequestStatus.Pending;
     }
 
-    /// <summary>Yêu cầu đã chốt hoàn toàn, không thể tạo thêm phiếu điều chuyển.</summary>
+    /// <summary>Yêu cầu đã chốt hoàn toàn, không thể xử lý bổ sung thêm.</summary>
     public static bool IsClosed(StockAdjustmentRequestStatus status) =>
         status is StockAdjustmentRequestStatus.Cancelled
             or StockAdjustmentRequestStatus.Rejected

@@ -275,7 +275,7 @@ export function canFilterStockReplenishmentByCreator(session) {
   )
 }
 
-/** Duyệt / Từ chối / Đóng phần còn lại: chỉ Thủ kho không có role Admin. */
+/** Xử lý trọn từng sản phẩm trong yêu cầu: chỉ Warehouse không có role Admin. */
 export function canReviewStockReplenishmentRequest(session) {
   return isWarehouseRole(session) && !hasAdminRole(session)
 }
@@ -286,14 +286,12 @@ export function canInspectReturn(session) {
   return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
-/** Huỷ yêu cầu: người tạo (Sale/Manager); Thủ kho và Admin không được huỷ yêu cầu của người khác. */
+/** Huỷ yêu cầu đang chờ xử lý: chỉ Manager tạo yêu cầu; Warehouse và Admin không được huỷ. */
 export function canCancelStockReplenishmentRequest(session) {
   if (hasAdminRole(session)) return false
   if (isWarehouseRole(session)) return false
   return (
-    isSalePosRole(session)
-    || isSaleCodRole(session)
-    || isBranchManager(session)
+    isBranchManager(session)
     || isManagerRole(session)
     || isSystemAdmin(session)
   )

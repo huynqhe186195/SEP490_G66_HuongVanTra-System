@@ -465,7 +465,6 @@ function StockTransfersPage() {
   const [formSourceRequest, setFormSourceRequest] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [pendingRequestCount, setPendingRequestCount] = useState(0)
-  const [openRequestCount, setOpenRequestCount] = useState(0)
   const [openSuggestionCount, setOpenSuggestionCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -475,7 +474,6 @@ function StockTransfersPage() {
   useEffect(() => {
     if (!canOperate) {
       setPendingRequestCount(0)
-      setOpenRequestCount(0)
       setOpenSuggestionCount(0)
       return undefined
     }
@@ -513,13 +511,11 @@ function StockTransfersPage() {
       .then(([requestCounts, suggestionCount]) => {
         if (!mounted) return
         setPendingRequestCount(Math.max(0, Number(requestCounts?.pendingCount ?? 0)))
-        setOpenRequestCount(Math.max(0, Number(requestCounts?.transferableCount ?? 0)))
         setOpenSuggestionCount(Math.max(0, Number(suggestionCount ?? 0)))
       })
       .catch(() => {
         if (!mounted) return
         setPendingRequestCount(0)
-        setOpenRequestCount(0)
         setOpenSuggestionCount(0)
       })
 
@@ -738,7 +734,7 @@ function StockTransfersPage() {
       <PageHeader
         compact
         title={STOCK_FLOW_TERMS.transfer}
-        titleInfo={`Chỉ tạo từ Yêu cầu bổ sung hoặc Gợi ý bổ sung. Hoàn tất trừ ${STOCK_FLOW_TERMS.warehouse} (FEFO), cộng ${STOCK_FLOW_TERMS.shelf}.`}
+        titleInfo={`Yêu cầu bổ sung Kệ Hàng được hệ thống tự động cấp hàng. Màn hình này chỉ dùng để tra soát chứng từ nội bộ hoặc xử lý Gợi ý bổ sung.`}
         searchPlaceholder="Tìm mã phiếu, mã yêu cầu nguồn, sản phẩm hoặc người tạo..."
         searchValue={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
@@ -757,20 +753,6 @@ function StockTransfersPage() {
                 </span>
               ) : null}
             </Link>
-            <button
-              type="button"
-              onClick={() => navigate('/inventory/stock-transfers/create')}
-              title="Lập phiếu điều chuyển từ yêu cầu đã duyệt còn số lượng cần chuyển"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-3.5 py-2 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
-            >
-              <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-              Lập phiếu từ yêu cầu
-              {openRequestCount > 0 ? (
-                <span className="rounded-full bg-[#356647]/10 px-1.5 py-0.5 text-xs font-bold text-[#356647]">
-                  Cần chuyển: {openRequestCount}
-                </span>
-              ) : null}
-            </button>
             <Link
               to="/inventory/shelf-replenishment-suggestions"
               title="Xử lý các gợi ý bổ sung Kệ Hàng tự động"
@@ -911,22 +893,12 @@ function StockTransfersPage() {
                     </p>
                     <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
                       {sourceRequestId
-                        ? 'Tạo phiếu từ yêu cầu để chuyển hàng Kho → Kệ.'
-                        : 'Tạo phiếu từ yêu cầu bổ sung hoặc mở Gợi ý bổ sung Kệ Hàng để tạo phiếu từ gợi ý.'}
+                        ? 'Yêu cầu này chưa phát sinh chứng từ cấp hàng nội bộ.'
+                        : 'Yêu cầu bổ sung Kệ Hàng được xử lý tự động; mở Gợi ý bổ sung để tạo phiếu khi cần.'}
                     </p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                       {canOperate ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => navigate(sourceRequestId
-                              ? `/inventory/stock-transfers/create?sourceRequestId=${sourceRequestId}`
-                              : '/inventory/stock-transfers/create')}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#356647]/5"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-                            Từ yêu cầu
-                          </button>
                           <Link
                             to="/inventory/shelf-replenishment-suggestions"
                             className="inline-flex items-center gap-1.5 rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#2a5238]"

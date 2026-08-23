@@ -60,6 +60,11 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
     public async Task<IActionResult> Create([FromBody] UpsertStockTransferRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
+        if (request.SourceRequestId.HasValue)
+            return Conflict(new
+            {
+                message = "Yêu cầu bổ sung Kệ Hàng được hệ thống tự động cấp hàng; không tạo Phiếu điều chuyển thủ công."
+            });
         var actorId = User.GetUserId();
         if (actorId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
         var created = await _logic.CreateAsync(request, actorId, User.ToCreatorSnapshot(), ct);

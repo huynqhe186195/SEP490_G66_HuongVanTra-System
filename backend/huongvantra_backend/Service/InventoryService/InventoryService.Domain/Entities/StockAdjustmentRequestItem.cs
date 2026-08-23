@@ -24,7 +24,9 @@ public class StockAdjustmentRequestItem
     public string? ReviewNote { get; set; }
     public string? RejectionReason { get; set; }
     public string? ClosedReason { get; set; }
+    public Guid? AutoProductionOrderId { get; set; }
+    public ProductionOrder? AutoProductionOrder { get; set; }
 
-    /// <summary>Số lượng còn phải điều chuyển; luôn dẫn xuất, không lưu database.</summary>
+    /// <summary>Số lượng còn phải bổ sung lên Kệ Hàng; luôn dẫn xuất, không lưu database.</summary>
     public int RemainingQuantity => Math.Max(0, QuantityDelta - FulfilledQuantity - RejectedQuantity);
 }
