@@ -84,6 +84,7 @@ function mapQueueLine(item) {
     orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
     finishedDeductedQuantity: Number(item.finishedDeductedQuantity ?? item.FinishedDeductedQuantity ?? 0),
     pendingBomQuantity: Number(item.pendingBomQuantity ?? item.PendingBomQuantity ?? 0),
+    warehouseTransferQuantity: Number(item.warehouseTransferQuantity ?? item.WarehouseTransferQuantity ?? 0),
     stockHandlingMode: String(item.stockHandlingMode ?? item.StockHandlingMode ?? '').toLowerCase(),
   }
 }

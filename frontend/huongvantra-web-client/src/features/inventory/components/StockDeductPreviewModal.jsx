@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { getStockStatusLabel, resolveStockDeductOrderStatusMeta, STOCK_DEDUCT_REMAINING_QTY_LABEL } from '../../orders/utils/orderDisplay.js'
+import { getStockStatusLabel, resolveStockDeductOrderStatusMeta } from '../../orders/utils/orderDisplay.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   cancelStockDeductQueue,
@@ -108,11 +107,6 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
   }
 
   const isCancellationRequested = preview?.orderStockStatus?.toLowerCase() === 'cancellation_requested'
-  const canConfirmQueue =
-    canConfirm &&
-    preview &&
-    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient') &&
-    !isCancellationRequested
   const canCancelQueue =
     canCancel &&
     preview &&
@@ -120,12 +114,37 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
   const isBomReconciliation = Boolean(preview?.isBomReconciliation)
   const willCreateProductionOrder = Boolean(preview?.willCreateProductionOrder)
   const willCreateStockTransfer = Boolean(preview?.willCreateStockTransfer)
+  const isBackorder = preview?.lines?.some((line) => line.stockHandlingMode.includes('backorder'))
+  const hasWarehouseTransfer = preview?.lines?.some((line) => line.warehouseTransferQuantity > 0)
   const generatedDocuments = [
     willCreateProductionOrder ? 'Lệnh sản xuất (SX-…)' : null,
     willCreateStockTransfer ? 'Phiếu điều chuyển Kho → Kệ Hàng (DC-…)' : null,
   ].filter(Boolean)
-  const operationLabel = isBomReconciliation ? 'đóng gói và trừ Kho' : 'trừ tồn Kệ Hàng'
-  const stockLocationLabel = isBomReconciliation ? 'Kho' : 'Kệ Hàng'
+  const operationLabel = isBackorder
+    ? 'tình trạng Hẹn Giao Sau'
+    : willCreateProductionOrder
+      ? 'sản xuất, điều chuyển và trừ đơn'
+      : hasWarehouseTransfer
+        ? 'điều chuyển và trừ đơn'
+        : 'trừ tồn Kệ Hàng'
+  const stockAvailabilityLabel = isBackorder
+    ? 'Có phần Hẹn Giao Sau'
+    : isBomReconciliation
+      ? (preview?.canDeduct ? 'Đủ Nguyên liệu/Bao bì tại Kho — có thể xử lý' : 'Thiếu Nguyên liệu/Bao bì tại Kho')
+      : hasWarehouseTransfer
+        ? (preview?.canDeduct ? 'Đủ Thành phẩm tại Kho — có thể điều chuyển' : 'Thiếu Thành phẩm tại Kho')
+        : (preview?.canDeduct ? 'Đủ tồn Kệ Hàng — có thể xử lý' : 'Thiếu tồn Kệ Hàng')
+  const detailSectionTitle = isBomReconciliation
+    ? 'Nguyên liệu/Bao bì cần để sản xuất'
+    : hasWarehouseTransfer
+      ? 'Thành phẩm cần điều chuyển từ Kho'
+      : 'Tồn cần xử lý'
+  const canConfirmQueue =
+    canConfirm &&
+    preview &&
+    !isBackorder &&
+    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient') &&
+    !isCancellationRequested
   const orderStatusMeta = preview
     ? resolveStockDeductOrderStatusMeta(orderPaymentStatus ?? preview.orderPaymentStatus, preview.orderStockStatus)
     : null
@@ -133,7 +152,7 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
   return (
     <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div
-        className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl"
+        className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="stock-deduct-preview-title"
@@ -147,13 +166,7 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
               {orderCode || preview?.orderCode ? (
                 <>
                   Đơn{' '}
-                  {preview?.orderId ? (
-                    <Link className="font-semibold text-[#538463] hover:underline" to={`/orders/${preview.orderId}`}>
-                      {orderCode || preview.orderCode}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold">{orderCode || preview?.orderCode}</span>
-                  )}
+                  <span className="font-semibold">{orderCode || preview?.orderCode}</span>
                 </>
               ) : (
                 'Đang tải...'
@@ -183,7 +196,7 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                     preview.canDeduct ? 'bg-[#b9d4b0]/30 text-[#538463]' : 'bg-amber-50 text-amber-700'
                   }`}
                 >
-                  {preview.canDeduct ? `Đủ tồn ${stockLocationLabel} — có thể xử lý` : `Thiếu tồn ${stockLocationLabel}`}
+                  {stockAvailabilityLabel}
                 </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                   Trạng thái tồn: {getStockStatusLabel(preview.orderStockStatus)}
@@ -194,6 +207,12 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                   </span>
                 ) : null}
               </div>
+
+              {isBackorder ? (
+                <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Đơn có phần Hẹn Giao Sau; chưa phát sinh trừ tồn cho phần chưa đáp ứng.
+                </p>
+              ) : null}
 
               {isCancellationRequested ? (
                 <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
@@ -213,17 +232,21 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                 <div className="mb-4 overflow-hidden rounded-xl border border-slate-100">
                   <table className="w-full table-fixed text-left text-sm">
                     <colgroup>
-                      <col className="w-[44%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[25%]" />
-                      <col className="w-[15%]" />
+                      <col className="w-[38%]" />
+                      <col className="w-[12.4%]" />
+                      <col className="w-[12.4%]" />
+                      <col className="w-[12.4%]" />
+                      <col className="w-[12.4%]" />
+                      <col className="w-[12.4%]" />
                     </colgroup>
                     <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                       <tr className="text-[11px]">
                         <th className="px-4 py-3">Sản Phẩm</th>
-                        <th className="px-4 py-3 text-right">Đã bán</th>
-                        <th className="whitespace-nowrap px-4 py-3 text-right">Đã trừ thành phẩm</th>
-                        <th className="whitespace-nowrap px-4 py-3 text-right">{STOCK_DEDUCT_REMAINING_QTY_LABEL}</th>
+                        <th className="whitespace-nowrap px-3 py-3 text-right">Khách đặt</th>
+                        <th className="whitespace-nowrap px-3 py-3 text-right">Đã trừ Kệ</th>
+                        <th className="whitespace-nowrap px-3 py-3 text-right">Lấy từ Kho</th>
+                        <th className="whitespace-nowrap px-3 py-3 text-right">Cần sản xuất</th>
+                        <th className="whitespace-nowrap px-3 py-3 text-right">Hẹn Giao Sau</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -233,10 +256,14 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                             <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
                             <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{line.orderedQuantity}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{line.finishedDeductedQuantity}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-amber-700">
-                            {line.pendingBomQuantity}
+                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.orderedQuantity}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.finishedDeductedQuantity}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.warehouseTransferQuantity}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
+                            {isBackorder ? 0 : line.pendingBomQuantity}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
+                            {isBackorder ? Math.max(0, line.orderedQuantity - line.finishedDeductedQuantity - line.warehouseTransferQuantity) : 0}
                           </td>
                         </tr>
                       ))}
@@ -246,6 +273,7 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
               ) : null}
 
               <div className="overflow-hidden rounded-xl border border-slate-100">
+                <p className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">{detailSectionTitle}</p>
                 <table className="w-full table-fixed text-left text-sm">
                   <colgroup>
                     <col className="w-[44%]" />
@@ -255,9 +283,9 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                   </colgroup>
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <tr className="text-[11px]">
-                      <th className="px-4 py-3">Sản Phẩm</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Cần trừ</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Tồn hiện có</th>
+                      <th className="px-4 py-3">{isBomReconciliation ? 'Nguyên liệu/Bao bì' : 'Thành phẩm'}</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">{isBomReconciliation ? 'Cần dùng' : 'Cần điều chuyển'}</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Tồn Kho khả dụng</th>
                       <th className="whitespace-nowrap px-4 py-3 text-right">Thiếu</th>
                     </tr>
                   </thead>
@@ -284,7 +312,7 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
 
               {confirmShortages?.length ? (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  <p className="font-semibold">Thiếu tồn {stockLocationLabel} khi xác nhận:</p>
+                  <p className="font-semibold">Thiếu tồn Kho khi xác nhận:</p>
                   <ul className="mt-2 list-disc pl-5">
                     {confirmShortages.map((row) => (
                       <li key={row.materialId}>
@@ -310,14 +338,14 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
               {showConfirmDialog ? (
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">Xác nhận {operationLabel}?</p>
-                  {isBomReconciliation ? (
+                  {willCreateProductionOrder ? (
                     <p className="mt-1">
-                      Hệ thống sẽ trừ nguyên liệu kho tổng theo snapshot BOM của phần thiếu. Thành phẩm đã trừ ở
-                      checkout sẽ không bị trừ lại.
+                      Hệ thống sẽ sản xuất phần còn thiếu theo BOM, điều chuyển Thành phẩm từ Kho lên Kệ, rồi hoàn tất trừ đơn.
+                      Phần đã trừ từ Kệ sẽ không bị trừ lại.
                     </p>
                   ) : (
                     <p className="mt-1">
-                      Hệ thống sẽ chuyển thành phẩm từ Kho sang Kệ Hàng rồi xuất bán cho đơn này.
+                      Hệ thống sẽ điều chuyển Thành phẩm từ Kho lên Kệ Hàng rồi hoàn tất trừ đơn. Phần đã trừ từ Kệ sẽ không bị trừ lại.
                     </p>
                   )}
                   {generatedDocuments.length ? (

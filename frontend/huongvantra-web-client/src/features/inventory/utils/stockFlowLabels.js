@@ -35,7 +35,7 @@ const REQUEST_LINE_STATUS_LABELS = {
 }
 
 const TRANSFER_STATUS_LABELS = {
-  draft: 'Nháp',
+  draft: 'Đang điều chuyển',
   completed: 'Đã hoàn tất điều chuyển',
   cancelled: 'Đã hủy',
 }

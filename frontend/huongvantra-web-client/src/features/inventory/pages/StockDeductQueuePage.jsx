@@ -21,7 +21,6 @@ import {
   getStockStatusClass,
   getStockStatusLabel,
   resolveStockDeductOrderStatusMeta,
-  STOCK_DEDUCT_REMAINING_QTY_LABEL,
 } from '../../orders/utils/orderDisplay.js'
 import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 
@@ -37,6 +36,16 @@ function getStockDeductTabLabel(tab) {
   if (tab?.value === 'waiting') return 'Chờ đóng gói'
   if (tab?.value === 'insufficient') return 'Chờ hàng'
   return tab?.label ?? ''
+}
+
+function getStockDeductLineSummary(line) {
+  const isBackorder = String(line.stockHandlingMode || '').toLowerCase().includes('backorder')
+  const scheduledDeliveryQuantity = isBackorder
+    ? Math.max(0, line.orderedQuantity - line.finishedDeductedQuantity - line.warehouseTransferQuantity)
+    : 0
+  const canSanXuat = isBackorder ? 0 : line.pendingBomQuantity
+
+  return `đặt ${line.orderedQuantity}, đã trừ Kệ ${line.finishedDeductedQuantity}, lấy từ Kho ${line.warehouseTransferQuantity}, cần sản xuất ${canSanXuat}, hẹn giao sau ${scheduledDeliveryQuantity}`
 }
 
 /** Đọc count từ statusCounts API không phân biệt hoa/thường (key có thể là enum string). */
@@ -302,7 +311,7 @@ function StockDeductQueuePage() {
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Trạng thái đóng gói</th>
-                <th className="px-4 py-4">Tồn cần đối soát</th>
+                <th className="px-4 py-4">Tình trạng xử lý tồn</th>
                 <th className="px-4 py-4">Trạng thái đơn</th>
                 <th className="px-4 py-4">Ngày tạo yêu cầu</th>
                 <th className="px-8 py-4 text-right">Tổng tiền</th>
@@ -369,6 +378,12 @@ function StockDeductQueuePage() {
               ) : null}
               {!isLoading
                 ? queues.map((row) => {
+                    const normalizedQueueStatus = String(row.queueStatus || '').toLowerCase()
+                    const isCompletedQueue = normalizedQueueStatus === 'confirmed'
+                    const isCancelledQueue = normalizedQueueStatus === 'cancelled'
+                    const isBackorderQueue = row.rowKind !== 'custom'
+                      && row.lines?.some((line) => String(line.stockHandlingMode || '').toLowerCase().includes('backorder'))
+                    const canConfirmRow = canExecuteDeduct && !isCompletedQueue && !isCancelledQueue && !isBackorderQueue
                     const orderStatusMeta = resolveStockDeductOrderStatusMeta(
                       row.orderPaymentStatus,
                       row.orderStockStatus,
@@ -394,7 +409,7 @@ function StockDeductQueuePage() {
                               <p key={line.skuId}>
                                 {row.rowKind === 'custom'
                                   ? `${line.skuCode || line.skuName}: ×${line.orderedQuantity}`
-                                  : `${line.skuCode || line.skuName}: bán ${line.orderedQuantity}, đã trừ ${line.finishedDeductedQuantity}, ${STOCK_DEDUCT_REMAINING_QTY_LABEL.toLowerCase()} ${line.pendingBomQuantity}`}
+                                  : `${line.skuCode || line.skuName}: ${getStockDeductLineSummary(line)}`}
                               </p>
                             ))}
                             {row.lines.length > 2 ? <p>+{row.lines.length - 2} dòng khác</p> : null}
@@ -404,9 +419,9 @@ function StockDeductQueuePage() {
                       <td className="px-4 py-5">
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                           {row.rowKind === 'custom'
-                            ? (row.queueStatus === 'Confirmed'
+                            ? (isCompletedQueue
                               ? `Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
-                              : row.queueStatus === 'Insufficient'
+                              : normalizedQueueStatus === 'insufficient'
                                 ? `Chờ hàng (${PERSONAL_PRODUCT_LABEL.toLowerCase()})`
                                 : `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`)
                             : getQueueStatusLabel(row.queueStatus)}
@@ -451,21 +466,19 @@ function StockDeductQueuePage() {
                             if (row.rowKind === 'custom') {
                               setPreviewCustom({
                                 ...row,
-                                readOnly: row.queueStatus === 'Confirmed',
+                                readOnly: isCompletedQueue,
                               })
                             } else setPreviewQueue(row)
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
-                            canExecuteDeduct && row.queueStatus !== 'cancelled' && row.queueStatus !== 'Confirmed'
+                            canConfirmRow
                               ? 'bg-[#538463] hover:bg-[#457053]'
                               : 'bg-slate-500 hover:bg-slate-600'
                           }`}
                         >
-                          {row.queueStatus === 'cancelled'
+                          {isCancelledQueue || isCompletedQueue || isBackorderQueue
                             ? 'Xem'
-                            : row.queueStatus === 'Confirmed'
-                              ? 'Xem chi tiết'
-                              : canExecuteDeduct
+                            : canConfirmRow
                                 ? 'Xem & xác nhận'
                                 : canCancelQueue
                                   ? 'Xem & xử lý ngoại lệ'
