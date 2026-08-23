@@ -49,7 +49,7 @@ const EMPTY_LINE = () => ({
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
-  { value: 'Draft', label: 'Nháp' },
+  { value: 'Draft', label: 'Đang điều chuyển' },
   { value: 'Completed', label: 'Đã hoàn tất' },
   { value: 'Cancelled', label: 'Đã hủy' },
 ]
