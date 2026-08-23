@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { getStockStatusLabel, resolveStockDeductOrderStatusMeta } from '../../orders/utils/orderDisplay.js'
+import { formatVnd, getStockStatusLabel, resolveStockDeductOrderStatusMeta } from '../../orders/utils/orderDisplay.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
   cancelStockDeductQueue,
   confirmStockDeductQueue,
   previewStockDeductQueue,
 } from '../services/stockDeductQueueApi.js'
 
-function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canConfirm = false, canCancel = false, onClose, onConfirmed }) {
+function StockDeductPreviewModal({
+  queueId,
+  orderCode,
+  orderPaymentStatus,
+  totalAmount,
+  createdAt,
+  canConfirm = false,
+  canCancel = false,
+  onClose,
+  onConfirmed,
+}) {
   const [preview, setPreview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isConfirming, setIsConfirming] = useState(false)
@@ -227,6 +238,17 @@ function StockDeductPreviewModal({ queueId, orderCode, orderPaymentStatus, canCo
                   </div>
                 </div>
               ) : null}
+
+              <dl className="mb-4 grid grid-cols-1 overflow-hidden rounded-xl border border-slate-100 text-sm sm:grid-cols-2">
+                <div className="border-b border-slate-100 px-4 py-3 sm:border-b-0 sm:border-r">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ngày tạo yêu cầu</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{formatVietnamDateTime(createdAt)}</dd>
+                </div>
+                <div className="px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tổng tiền</dt>
+                  <dd className="mt-1 font-semibold text-slate-800">{formatVnd(totalAmount)}</dd>
+                </div>
+              </dl>
 
               {preview.lines?.length ? (
                 <div className="mb-4 overflow-hidden rounded-xl border border-slate-100">

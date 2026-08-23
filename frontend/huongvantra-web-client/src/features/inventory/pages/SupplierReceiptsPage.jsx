@@ -1,18 +1,15 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
-import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
-import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateSupplierReceipt, canReviewSupplierReceipt } from '../../auth/utils/permissions.js'
 import SupplierReceiptDocument from '../components/SupplierReceiptDocument.jsx'
@@ -25,40 +22,82 @@ import {
   rejectSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'Tất cả' },
-  { value: 'pendingapproval', label: 'Chờ duyệt' },
-  { value: 'completed', label: 'Đã nhận' },
-  { value: 'cancelled', label: 'Đã hủy' },
-]
-
-function getStatusLabel(status) {
-  const normalized = String(status || '').toLowerCase()
-  if (normalized === 'draft') return 'Nháp'
-  if (normalized === 'pendingapproval') return 'Chờ duyệt'
-  if (normalized === 'completed') return 'Đã nhận'
-  if (normalized === 'rejected') return 'Từ chối'
-  if (normalized === 'cancelled') return 'Đã hủy'
-  return status || '—'
-}
-
-function getStatusClass(status) {
-  const normalized = String(status || '').toLowerCase()
-  if (normalized === 'completed') return 'bg-emerald-50 text-emerald-700'
-  if (normalized === 'pendingapproval') return 'bg-amber-50 text-amber-700'
-  if (normalized === 'rejected' || normalized === 'cancelled') return 'bg-rose-50 text-rose-700'
-  return 'bg-slate-100 text-slate-700'
-}
-
-function getItemSummary(receipt) {
-  if (!receipt.items?.length) return 'Chưa có dòng hàng'
-  if (receipt.items.length === 1) return `${receipt.items[0].skuCode} - ${receipt.items[0].skuNameSnapshot}`
-  return `${receipt.items.length} dòng hàng`
-}
-
 function formatReceiptAmount(receipt) {
   if (!receipt.items?.some((item) => item.unitCost !== null && item.unitCost !== undefined)) return '—'
   return formatVnd(receipt.totalAmount || 0)
+}
+
+function getItemName(item) {
+  return item?.skuNameSnapshot || item?.skuCode || 'Mặt hàng chưa xác định'
+}
+
+function getItemSku(item) {
+  return item?.skuCode || '—'
+}
+
+function buildItemPreview(items, visibleItemCount) {
+  const visibleItems = items.slice(0, visibleItemCount)
+  const hiddenItemCount = items.length - visibleItems.length
+  const suffix = hiddenItemCount > 0 ? ` · +${hiddenItemCount} mặt hàng` : ''
+
+  return {
+    names: `${visibleItems.map(getItemName).join(' · ')}${suffix}`,
+    skus: `${visibleItems.map(getItemSku).join(' · ')}${suffix}`,
+  }
+}
+
+function AdaptiveItemPreview({ items }) {
+  const safeItems = useMemo(() => items || [], [items])
+  const cellRef = useRef(null)
+  const nameMeasureRef = useRef(null)
+  const skuMeasureRef = useRef(null)
+  const [visibleItemCount, setVisibleItemCount] = useState(1)
+  const itemKey = safeItems.map((item) => `${item?.skuCode || ''}:${item?.skuNameSnapshot || ''}`).join('|')
+
+  useLayoutEffect(() => {
+    if (!safeItems.length) return undefined
+
+    function updateVisibleItems() {
+      const availableWidth = cellRef.current?.clientWidth || 0
+      if (!availableWidth || !nameMeasureRef.current || !skuMeasureRef.current) return
+
+      let nextVisibleItemCount = 1
+      for (let count = safeItems.length; count >= 1; count -= 1) {
+        const preview = buildItemPreview(safeItems, count)
+        nameMeasureRef.current.textContent = preview.names
+        skuMeasureRef.current.textContent = preview.skus
+        if (
+          nameMeasureRef.current.scrollWidth <= availableWidth
+          && skuMeasureRef.current.scrollWidth <= availableWidth
+        ) {
+          nextVisibleItemCount = count
+          break
+        }
+      }
+      setVisibleItemCount((current) => (current === nextVisibleItemCount ? current : nextVisibleItemCount))
+    }
+
+    updateVisibleItems()
+    const observer = new ResizeObserver(updateVisibleItems)
+    observer.observe(cellRef.current)
+    return () => observer.disconnect()
+  }, [itemKey, safeItems])
+
+  if (!safeItems.length) return <span className="text-slate-500">Chưa có mặt hàng</span>
+
+  const preview = buildItemPreview(safeItems, Math.min(visibleItemCount, safeItems.length))
+  const fullContent = safeItems.map((item) => `${getItemName(item)} (${getItemSku(item)})`).join(' · ')
+
+  return (
+    <div ref={cellRef} className="relative min-w-0" title={fullContent}>
+      <p className="truncate font-medium text-slate-800">{preview.names}</p>
+      <p className="mt-0.5 truncate text-xs text-slate-500">{preview.skus}</p>
+      <div aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap">
+        <span ref={nameMeasureRef} className="inline-block font-medium" />
+        <span ref={skuMeasureRef} className="inline-block text-xs" />
+      </div>
+    </div>
+  )
 }
 
 const ACTION_BTN =
@@ -230,9 +269,8 @@ function ReceiptRowActions({
 function SupplierReceiptsPage() {
   const { receiptId } = useParams()
   const [searchInput, setSearchInput] = useState('')
-  const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
+  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
   const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
 
   useEffect(() => {
@@ -249,29 +287,24 @@ function SupplierReceiptsPage() {
   const canOperate = canOperateSupplierReceipt(session)
   const canReview = canReviewSupplierReceipt(session)
 
-  const statusChipOptions = useMemo(
-    () => applyStatusCounts(STATUS_OPTIONS, data.statusCounts),
-    [data.statusCounts],
-  )
   const currentUserId = session?.userId ?? null
 
   const loadReceipts = useCallback(async () => {
     setIsLoading(true)
     try {
       const result = await fetchSupplierReceipts({
-        status: status || undefined,
         search: searchInput.trim() || undefined,
         page,
         pageSize,
       })
       setData(result)
     } catch (error) {
-      setData({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
+      setData({ items: [], totalItems: 0, totalPages: 1 })
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [page, pageSize, searchInput, status])
+  }, [page, pageSize, searchInput])
 
   useEffect(() => {
     if (receiptId) return undefined
@@ -352,11 +385,6 @@ function SupplierReceiptsPage() {
     setPage(1)
   }
 
-  function handleStatusChange(value) {
-    setStatus(value)
-    setPage(1)
-  }
-
   if (receiptId) {
     return (
       <PageShell>
@@ -416,27 +444,16 @@ function SupplierReceiptsPage() {
         ) : null}
       />
 
-      <div>
-        <StatusFilterChips
-          options={statusChipOptions}
-          value={status}
-          onChange={handleStatusChange}
-        />
-      </div>
-
       <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[980px] table-fixed text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="w-[11%] px-4 py-3 xl:px-6">Mã phiếu</th>
-                <th className="w-[10%] px-3 py-3 xl:px-4">Trạng thái</th>
-                <th className="w-[16%] px-3 py-3 xl:px-4">Nhà cung cấp</th>
-                <th className="w-[16%] px-3 py-3 xl:px-4">Nội dung</th>
-                <th className="w-[9%] px-3 py-3 text-right xl:px-4">Số lượng</th>
-                <th className="w-[11%] px-3 py-3 text-right xl:px-4">Tổng tiền</th>
-                <th className="w-[10%] px-3 py-3 xl:px-4">Người tạo</th>
-                <th className="w-[12%] px-3 py-3 xl:px-4">Thời gian</th>
+                <th className="w-[18%] px-4 py-3 xl:px-6">Mã phiếu</th>
+                <th className="w-[20%] px-3 py-3 xl:px-4">Nhà cung cấp</th>
+                <th className="w-[32%] px-3 py-3 xl:px-4">Nội dung</th>
+                <th className="w-[14%] px-3 py-3 text-right xl:px-4">Tổng tiền</th>
+                <th className="w-[16%] px-3 py-3 xl:px-4">Thời gian</th>
                 <th className="sticky right-0 z-10 w-[4.75rem] bg-slate-50 px-1 py-3 text-center shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)]">
                   Thao tác
                 </th>
@@ -445,39 +462,27 @@ function SupplierReceiptsPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-slate-500">Đang tải...</td>
+                  <td colSpan={6} className="px-6 py-8 text-slate-500">Đang tải...</td>
                 </tr>
               ) : data.items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-slate-500">Chưa có phiếu nhập nhà cung cấp.</td>
+                  <td colSpan={6} className="px-6 py-8 text-slate-500">Chưa có phiếu nhập nhà cung cấp.</td>
                 </tr>
               ) : (
                 data.items.map((receipt) => {
-                  const itemSummary = getItemSummary(receipt)
                   return (
                     <tr key={receipt.id} className="group hover:bg-slate-50/80">
                       <td className="truncate px-4 py-3 font-mono text-xs font-semibold text-[#356647] xl:px-6 xl:text-sm">
                         {receipt.receiptCode}
                       </td>
-                      <td className="px-3 py-3 xl:px-4">
-                        <span className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(receipt.status)}`}>
-                          {getStatusLabel(receipt.status)}
-                        </span>
-                      </td>
                       <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.supplierName || ''}>
                         {receipt.supplierName || '—'}
                       </td>
-                      <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={itemSummary}>
-                        {itemSummary}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-800 xl:px-4">
-                        {formatStockQuantity(receipt.totalQuantity)}
+                      <td className="px-3 py-2.5 xl:px-4">
+                        <AdaptiveItemPreview items={receipt.items} />
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-800 xl:px-4">
                         {formatReceiptAmount(receipt)}
-                      </td>
-                      <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.createdByName || ''}>
-                        {receipt.createdByName || '—'}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 xl:px-4 xl:text-sm">
                         {formatVietnamDateTime(receipt.createdAt)}
