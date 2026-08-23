@@ -39,7 +39,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     {
         if (User.IsInRole("Admin")) return Forbid();
 
-        var result = await _logic.ConfirmQueueAsync(queueId, User.GetUserId(), User.ToCreatorSnapshot(), ct);
+        var result = await _logic.ConfirmWarehouseQueueAsync(queueId, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 

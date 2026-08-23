@@ -52,7 +52,9 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
     {
         return await _db.StockDeductQueues
             .CountAsync(q => !q.IsDeducted &&
-                (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient), ct);
+                (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient) &&
+                (q.OrderStockStatus == null ||
+                    (q.OrderStockStatus != "pending_deduct" && q.OrderStockStatus != "pendingdeduction")), ct);
     }
 
     public async Task<(List<StockDeductQueue> Items, int TotalCount)> GetWaitingPagedAsync(
@@ -89,7 +91,10 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
     private IQueryable<StockDeductQueue> BuildWaitingQuery(string? status, string? search)
     {
         var query = _db.StockDeductQueues
-            .AsQueryable();
+            .AsQueryable()
+            // Queue chỉ trừ tồn Kệ là nghiệp vụ POS/đơn hàng, không thuộc danh sách thao tác của Kho.
+            .Where(q => q.OrderStockStatus == null ||
+                (q.OrderStockStatus != "pending_deduct" && q.OrderStockStatus != "pendingdeduction"));
 
         var normalizedStatus = status?.Trim().ToLowerInvariant();
         query = normalizedStatus switch

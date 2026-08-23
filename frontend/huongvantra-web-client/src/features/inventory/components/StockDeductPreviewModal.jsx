@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { formatVnd, getStockStatusLabel, resolveStockDeductOrderStatusMeta } from '../../orders/utils/orderDisplay.js'
+import { formatVnd, getQueueStatusLabel, getStockStatusLabel, resolveStockDeductOrderStatusMeta } from '../../orders/utils/orderDisplay.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
@@ -14,6 +14,7 @@ function StockDeductPreviewModal({
   queueId,
   orderCode,
   orderPaymentStatus,
+  queueStatus,
   totalAmount,
   createdAt,
   canConfirm = false,
@@ -159,6 +160,9 @@ function StockDeductPreviewModal({
   const orderStatusMeta = preview
     ? resolveStockDeductOrderStatusMeta(orderPaymentStatus ?? preview.orderPaymentStatus, preview.orderStockStatus)
     : null
+  const stockStatusLabel = preview?.orderStockStatus === 'pending_warehouse_transfer'
+    ? 'Chờ xuất Kho điều chuyển Kệ'
+    : getStockStatusLabel(preview?.orderStockStatus)
 
   return (
     <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -202,6 +206,9 @@ function StockDeductPreviewModal({
           {!isLoading && preview ? (
             <>
               <div className="mb-4 flex flex-wrap gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Trạng thái yêu cầu: {getQueueStatusLabel(queueStatus ?? preview.queueStatus)}
+                </span>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     preview.canDeduct ? 'bg-[#b9d4b0]/30 text-[#538463]' : 'bg-amber-50 text-amber-700'
@@ -210,7 +217,7 @@ function StockDeductPreviewModal({
                   {stockAvailabilityLabel}
                 </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  Trạng thái tồn: {getStockStatusLabel(preview.orderStockStatus)}
+                  Trạng thái xử lý Kho: {stockStatusLabel}
                 </span>
                 {orderStatusMeta ? (
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${orderStatusMeta.className}`}>
