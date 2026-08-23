@@ -12,10 +12,12 @@
 services:
 
   # ── Frontend: thay build nginx bằng Vite dev server ────────────────────────
+  # !reset build: bắt buộc — nếu chỉ ghi build: null, Compose vẫn build Dockerfile
+  # production rồi GHI ĐÈ tag node:20-bookworm-slim → mất npm, container restart mãi.
   web-client:
-    build: null                          # hủy Dockerfile production (nginx build)
-    # Alpine image local was missing npm; use the official Debian variant for Vite dev.
+    build: !reset null
     image: node:20-bookworm-slim
+    pull_policy: missing
     container_name: hvt-web-client-dev
     working_dir: /app
     volumes:
@@ -25,7 +27,7 @@ services:
       - "5173:5173"                      # Vite dev server (thay port 3000 của nginx)
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     networks:
       - hvt-network
     depends_on:
