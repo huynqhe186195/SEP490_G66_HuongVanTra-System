@@ -19,7 +19,10 @@ public class PaymentRepository(OrderDbContext _db) : IPaymentRepository
             .Include(p => p.Order)
             .Where(p =>
                 p.PaymentMethod == PaymentMethod.COD &&
+                p.PaymentStatus == PaymentStatus.Pending &&
                 !p.IsCodVerified &&
+                p.Order != null &&
+                p.Order.OrderStatus != OrderStatus.Cancelled &&
                 p.CodWarningDate <= DateTime.UtcNow)
             .OrderByDescending(p => p.CodWarningDate)
             .ToListAsync(ct);
