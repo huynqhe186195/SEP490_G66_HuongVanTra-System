@@ -374,11 +374,18 @@ public class PosTransferPaymentLogic(
             || string.Equals(status, OrderStatus.WaitingMaterials.ToString(), StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, OrderStatus.ReadyToDeliver.ToString(), StringComparison.OrdinalIgnoreCase);
 
-        var isPaid = IsPostPaymentStatus(order.OrderStatus)
-            || string.Equals(
+        var transferPending = transferPayment is not null
+            && !string.Equals(
                 paymentStatus,
                 PaymentStatus.Success.ToString(),
                 StringComparison.OrdinalIgnoreCase);
+        // Đơn chờ đóng gói/SX không được coi là đã thu QR — nếu không trang POS ẩn QR cọc.
+        var isPaid = !transferPending
+            && (IsPostPaymentStatus(order.OrderStatus)
+                || string.Equals(
+                    paymentStatus,
+                    PaymentStatus.Success.ToString(),
+                    StringComparison.OrdinalIgnoreCase));
 
         return new PosOrderPaymentStatusResponse(
             order.Id,

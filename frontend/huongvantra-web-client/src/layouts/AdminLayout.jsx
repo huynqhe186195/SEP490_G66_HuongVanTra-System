@@ -234,6 +234,7 @@ function AdminLayout() {
           mobileOpen={mobileNavOpen}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={toggleSidebarCollapsed}
+          onOpenMobile={() => setMobileNavOpen(true)}
           onNavigate={() => setMobileNavOpen(false)}
           width={sidebarCollapsed ? null : sidebarWidth}
           onWidthChange={sidebarCollapsed ? null : handleSidebarWidthChange}

@@ -41,18 +41,22 @@ public static class OrderStatusTransition
         {
             OrderStatus.WaitingProduction,
             OrderStatus.ReadyToDeliver,
+            OrderStatus.Processing,
             OrderStatus.CancellationRequested,
             OrderStatus.Cancelled
         },
         [OrderStatus.WaitingTransfer] = new()
         {
+            OrderStatus.WaitingProduction,
             OrderStatus.ReadyToDeliver,
+            OrderStatus.Processing,
             OrderStatus.Completed,
             OrderStatus.Cancelled
         },
         [OrderStatus.WaitingProduction] = new()
         {
             OrderStatus.ReadyToDeliver,
+            OrderStatus.Processing,
             OrderStatus.Completed,
             OrderStatus.Cancelled
         },

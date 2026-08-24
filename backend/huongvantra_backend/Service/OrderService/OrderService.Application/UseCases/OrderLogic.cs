@@ -822,6 +822,8 @@ public class OrderLogic(
 
         InventoryStockHandlingResponse? stockHandling = null;
         InventoryStockHandlingResponse? customMaterialsHandling = null;
+        // QR cọc/CK chưa thu: giữ PendingPayment để trang POS còn hiện QR; trừ tồn sau webhook.
+        var skipStockUntilTransferPaid = hasPendingTransfer;
         // POS Completed / WaitingMaterials: trừ kệ HTTP ngay. QR chưa Complete thì không vào đây.
         if (ShouldHandlePosStockSynchronously(order))
         {
@@ -871,13 +873,14 @@ public class OrderLogic(
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
         }
-        else
+        else if (!skipStockUntilTransferPaid)
         {
             ApplyCustomOnlyInventoryStatus(order);
         }
 
         if ((order.OrderChannel is OrderChannel.POS or OrderChannel.COD)
-            && HasCustomIngredients(order))
+            && HasCustomIngredients(order)
+            && !skipStockUntilTransferPaid)
         {
             customMaterialsHandling = await PrepareCustomMaterialsHandlingAsync(
                 order,
@@ -1063,7 +1066,18 @@ public class OrderLogic(
             }
 
             var total = request.Payments.Sum(item => item.Amount);
-            if (total > finalAmount)
+            if (request.AcceptBackorder && request.DepositAmount is > 0)
+            {
+                var deposit = request.DepositAmount.Value;
+                if (request.Payments.Any(item =>
+                        item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer)
+                    && total != deposit)
+                {
+                    throw new OrderValidationException(
+                        $"QR thu cọc phải đúng số tiền cọc ({FormatVnd(deposit)}).");
+                }
+            }
+            else if (total > finalAmount)
                 throw new OrderValidationException("Tổng các khoản thanh toán không được vượt quá thành tiền.");
             if (hasCod && total != finalAmount)
                 throw new OrderValidationException("Khoản COD phải bằng đúng thành tiền của đơn.");
@@ -1119,6 +1133,11 @@ public class OrderLogic(
             && request.PaidAmount <= 0
                 ? request.TransferQrAmount
                 : request.PaidAmount;
+        if (request.AcceptBackorder && request.DepositAmount is > 0
+            && request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer)
+        {
+            requestedAmount = request.DepositAmount.Value;
+        }
         if (requestedAmount <= 0)
             return [];
         // Legacy callers may send cash tendered (including change) via PaidAmount.
@@ -2969,7 +2988,13 @@ public class OrderLogic(
             or OrderStatus.WaitingProduction)
         {
             var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
-            if (!pickupAtStore)
+            // Thành phẩm đã trừ xong nhưng còn gói cá nhân chưa đóng gói → không ReadyToDeliver.
+            if (HasPendingCustomPack(order))
+            {
+                order.OrderStatus = OrderStatus.WaitingProduction;
+                await _inventoryCatalogClient.UpdateQueueOrderStatusAsync(order.Id, order.OrderStatus.ToString(), ct);
+            }
+            else if (!pickupAtStore)
             {
                 order.OrderStatus = OrderStatus.Processing;
             }
@@ -3204,12 +3229,9 @@ public class OrderLogic(
         && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials
         && (order.OrderDetails?.Count ?? 0) > 0;
 
-    private static bool IsCustomOnlyOrder(Order order) =>
-        (order.OrderDetails?.Count ?? 0) == 0
-        && (order.CustomBundles?.Any(b => (b.Ingredients?.Count ?? 0) > 0) ?? false);
-
     /// <summary>
-    /// Áp kết quả kiểm tra NL custom sau thanh toán: WaitingMaterials (backorder) hoặc WaitingProduction (đủ NL).
+    /// Áp kết quả kiểm tra NL custom sau thanh toán: WaitingMaterials (backorder) hoặc WaitingProduction (đủ NL, chờ đóng gói).
+    /// Đơn hỗn hợp thành phẩm + gói cá nhân cũng vào WaitingProduction — không chỉ đơn custom-only.
     /// </summary>
     private static void ApplyCustomMaterialsHandlingToOrder(
         Order order,
@@ -3228,7 +3250,7 @@ public class OrderLogic(
                      customMaterialsHandling.StockHandlingMode,
                      "Immediate",
                      StringComparison.OrdinalIgnoreCase)
-                 && IsCustomOnlyOrder(order))
+                 && HasPendingCustomPack(order))
         {
             order.OrderStatus = PreferHeavierOrderStatus(
                 order.OrderStatus,
@@ -3236,6 +3258,30 @@ public class OrderLogic(
         }
 
         ApplyCustomOnlyInventoryStatus(order);
+    }
+
+    private static bool HasPendingCustomPack(Order order) =>
+        order.CustomBundles?.Any(b =>
+            b.PackingStatus == PackingStatus.Pending && (b.Ingredients?.Count ?? 0) > 0) ?? false;
+
+    /// <summary>
+    /// Còn phiếu thành phẩm (BOM / điều chuyển / backorder) chưa Thủ kho xác nhận.
+    /// </summary>
+    private static bool HasOpenCatalogStockQueue(Order order)
+    {
+        var details = order.OrderDetails ?? [];
+        if (details.Count == 0)
+            return false;
+        if (details.Any(d => d.BackorderQuantity > 0))
+            return true;
+        if (order.OrderStatus == OrderStatus.WaitingTransfer)
+            return true;
+        if (order.InventorySyncStatus == InventorySyncStatus.PendingDeduction)
+            return true;
+        if (order.OrderStatus is OrderStatus.WaitingMaterials or OrderStatus.WaitingProduction
+            && order.InventorySyncStatus is InventorySyncStatus.PendingReconciliation)
+            return true;
+        return false;
     }
 
     /// <summary>
@@ -3989,15 +4035,8 @@ public class OrderLogic(
         if (bundles.Any(b => b.PackingStatus != PackingStatus.Packed))
             return false;
 
-        // Còn dòng thành phẩm chờ nguyên liệu / chờ Thủ kho → chưa advance.
-        if ((order.OrderDetails ?? []).Any(d => d.BackorderQuantity > 0))
-            return false;
-        // PendingReconciliation trên đơn chỉ có SP cá nhân = chờ đóng gói; sau pack vẫn advance.
-        // Chỉ chặn khi đơn có thành phẩm catalog chờ queue Thủ kho.
-        if ((order.OrderDetails?.Count ?? 0) > 0
-            && order.OrderStatus == OrderStatus.WaitingMaterials
-            && order.InventorySyncStatus is InventorySyncStatus.PendingDeduction
-                or InventorySyncStatus.PendingReconciliation)
+        // Thành phẩm còn queue BOM / điều chuyển / backorder → chưa ReadyToDeliver.
+        if (HasOpenCatalogStockQueue(order))
             return false;
 
         var pickupAtStore = string.IsNullOrWhiteSpace(order.ShippingAddress);
