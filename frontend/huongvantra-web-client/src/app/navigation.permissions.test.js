@@ -106,3 +106,18 @@ test('b2b debts path highlights debts item but not POS orders list', () => {
   assert.equal(isNavigationItemActive('/orders', posOrders), true)
   assert.equal(isNavigationItemActive('/orders/cod', posOrders), false)
 })
+
+test('B2B and contract routes are unavailable while the feature is out of scope', () => {
+  const manager = {
+    roles: ['Manager'],
+    modules: ['orders', 'contracts'],
+    permissions: ['CREATE_B2B_ORDER', 'MANAGE_CORPORATE_CUSTOMER'],
+  }
+
+  const paths = collectPaths(getNavigationItemsForSession(manager))
+  assert.equal(paths.includes('/contracts'), false)
+  assert.equal(paths.includes('/orders/create'), false)
+  assert.equal(canAccessPath(manager, '/contracts'), false)
+  assert.equal(canAccessPath(manager, '/contracts/00000000-0000-0000-0000-000000000000'), false)
+  assert.equal(canAccessPath(manager, '/orders/create'), false)
+})

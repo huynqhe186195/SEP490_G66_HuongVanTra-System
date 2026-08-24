@@ -100,6 +100,18 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
+// Contract Management is outside the current release scope. The service is
+// excluded from docker-compose/Gateway; this also protects a manually started instance.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/contracts"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next();
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseHvtSystemActivityAudit();
