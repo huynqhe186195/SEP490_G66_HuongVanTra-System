@@ -85,6 +85,14 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         }
     }
 
+    private static void MaskRevenueFields(IEnumerable<TimeSeriesPointDto> points)
+    {
+        foreach (var point in points)
+        {
+            point.Value = 0;
+        }
+    }
+
     [HttpGet("sales-statistics")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetSalesStatistics(
@@ -156,6 +164,10 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         CancellationToken ct = default)
     {
         var points = await reportLogic.GetRevenueTimeSeriesAsync(quarter, month, year, GetPersonalStatsEmployeeId(), ct);
+        if (!CanViewRevenue())
+        {
+            MaskRevenueFields(points);
+        }
         return Ok(points);
     }
 

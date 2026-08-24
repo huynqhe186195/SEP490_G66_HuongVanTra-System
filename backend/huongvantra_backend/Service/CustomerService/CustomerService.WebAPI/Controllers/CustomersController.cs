@@ -102,7 +102,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("export")]
-    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
     public async Task<IActionResult> ExportCustomers([FromQuery] CustomerExportRequest request, CancellationToken ct = default)
     {
         var result = await _logic.ExportToExcelAsync(request, AccessContext(), ct);
