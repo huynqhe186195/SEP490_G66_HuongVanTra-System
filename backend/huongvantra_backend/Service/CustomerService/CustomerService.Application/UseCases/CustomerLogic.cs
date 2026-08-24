@@ -2288,6 +2288,7 @@ public class CustomerLogic
     {
         var debtByOrder = openDebts.ToDictionary(d => d.OrderId);
         var results = new List<CustomerDebtAllocationResponse>();
+        var allocatedByOrder = new Dictionary<Guid, decimal>();
 
         foreach (var item in allocations)
         {
@@ -2296,11 +2297,14 @@ public class CustomerLogic
             if (!debtByOrder.TryGetValue(item.OrderId, out var debt))
                 throw new CustomerValidationException([$"Không tìm thấy đơn nợ {item.OrderId}."]);
 
-            if (item.Amount > debt.RemainingDebt)
+            var alreadyAllocated = allocatedByOrder.GetValueOrDefault(item.OrderId);
+            var remainingForThisRequest = debt.RemainingDebt - alreadyAllocated;
+            if (item.Amount > remainingForThisRequest)
                 throw new CustomerValidationException([
                     $"Số tiền trừ đơn {debt.OrderCode} vượt nợ còn lại ({debt.RemainingDebt:N0})."]);
 
-            var remainingAfter = debt.RemainingDebt - item.Amount;
+            allocatedByOrder[item.OrderId] = alreadyAllocated + item.Amount;
+            var remainingAfter = debt.RemainingDebt - allocatedByOrder[item.OrderId];
             results.Add(new CustomerDebtAllocationResponse(
                 debt.OrderId,
                 debt.OrderCode,
