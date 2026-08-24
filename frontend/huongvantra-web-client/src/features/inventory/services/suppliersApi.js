@@ -9,6 +9,8 @@ export function mapSupplier(row) {
     phone: row.phone ?? row.Phone ?? '',
     email: row.email ?? row.Email ?? '',
     address: row.address ?? row.Address ?? '',
+    taxCode: row.taxCode ?? row.TaxCode ?? '',
+    paymentTerms: row.paymentTerms ?? row.PaymentTerms ?? '',
     note: row.note ?? row.Note ?? '',
     isDeleted: row.isDeleted ?? row.IsDeleted ?? false,
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
@@ -53,6 +55,8 @@ export async function createSupplier(payload) {
       phone: payload.phone?.trim() || null,
       email: payload.email?.trim() || null,
       address: payload.address?.trim() || null,
+      taxCode: payload.taxCode?.trim() || null,
+      paymentTerms: payload.paymentTerms?.trim() || null,
       note: payload.note?.trim() || null,
     }),
   })
@@ -68,6 +72,8 @@ export async function updateSupplier(id, payload) {
       phone: payload.phone?.trim() || null,
       email: payload.email?.trim() || null,
       address: payload.address?.trim() || null,
+      taxCode: payload.taxCode?.trim() || null,
+      paymentTerms: payload.paymentTerms?.trim() || null,
       note: payload.note?.trim() || null,
     }),
   })

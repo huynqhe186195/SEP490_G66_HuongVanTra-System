@@ -123,7 +123,8 @@ public class StockAdjustmentRequestsController(
     {
         if (User.IsInRole("Admin")
             || User.IsInRole("Warehouse")
-            || !User.HasPermission(PermissionNames.ManageEmployee))
+            || !(User.HasPermission(PermissionNames.ManageEmployee)
+                || User.HasPermission(PermissionNames.CreateShelfReplenishment)))
             return Forbid();
         var requestedBy = User.GetUserId();
         if (requestedBy == Guid.Empty)
@@ -145,7 +146,8 @@ public class StockAdjustmentRequestsController(
     {
         if (User.IsInRole("Admin")
             || User.IsInRole("Warehouse")
-            || !User.HasPermission(PermissionNames.ManageEmployee))
+            || !(User.HasPermission(PermissionNames.ManageEmployee)
+                || User.HasPermission(PermissionNames.CreateShelfReplenishment)))
             return Forbid();
 
         return Ok(await _logic.CheckStockAdjustmentDuplicatesAsync(request.SkuIds ?? [], ct));
@@ -157,7 +159,7 @@ public class StockAdjustmentRequestsController(
     /// nếu thiếu Nguyên liệu/Bao bì, dòng sản phẩm bị từ chối.
     /// </summary>
     [HttpPost("{id:guid}/items/{itemId:guid}/process")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ShelfReplenishmentApproveAccess)]
     public async Task<IActionResult> ProcessItem(Guid id, Guid itemId, CancellationToken ct)
     {
         if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
@@ -169,7 +171,7 @@ public class StockAdjustmentRequestsController(
     }
 
     [HttpPost("{id:guid}/items/{itemId:guid}/confirm-production")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ShelfReplenishmentApproveAccess)]
     public async Task<IActionResult> ConfirmProduction(Guid id, Guid itemId, CancellationToken ct)
     {
         if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
@@ -182,7 +184,7 @@ public class StockAdjustmentRequestsController(
 
     /// <summary>Nhân viên kho xác nhận đã chuyển đủ hàng thực tế lên Kệ Hàng.</summary>
     [HttpPost("{id:guid}/items/{itemId:guid}/confirm-transfer")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ShelfReplenishmentApproveAccess)]
     public async Task<IActionResult> ConfirmTransfer(Guid id, Guid itemId, CancellationToken ct)
     {
         if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
@@ -191,6 +193,36 @@ public class StockAdjustmentRequestsController(
             return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
 
         return Ok(await _workflow.ConfirmTransferAsync(id, itemId, actorId, User.ToCreatorSnapshot(), ct));
+    }
+
+    /// <summary>SC-05: Duyệt toàn bộ yêu cầu (đủ Thành phẩm) → điều chuyển Kho → Kệ atomic/FEFO.</summary>
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Policy = PermissionNames.ShelfReplenishmentApproveAccess)]
+    public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
+        var actorId = User.GetUserId();
+        if (actorId == Guid.Empty)
+            return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
+
+        return Ok(await _workflow.ApproveRequestAsync(id, actorId, User.ToCreatorSnapshot(), ct));
+    }
+
+    /// <summary>SC-05: Từ chối toàn bộ yêu cầu đang chờ — không đổi tồn.</summary>
+    [HttpPost("{id:guid}/reject")]
+    [Authorize(Policy = PermissionNames.ShelfReplenishmentApproveAccess)]
+    public async Task<IActionResult> Reject(
+        Guid id,
+        [FromBody] CancelStockAdjustmentRequest? request,
+        CancellationToken ct)
+    {
+        if (User.IsInRole("Admin") || !User.IsInRole("Warehouse")) return Forbid();
+        var actorId = User.GetUserId();
+        if (actorId == Guid.Empty)
+            return Unauthorized(new { message = "Không xác định được Nhân viên kho." });
+
+        return Ok(await _workflow.RejectRequestAsync(
+            id, actorId, User.ToCreatorSnapshot(), request?.Reason, ct));
     }
 
     [HttpPost("{id:guid}/cancel")]

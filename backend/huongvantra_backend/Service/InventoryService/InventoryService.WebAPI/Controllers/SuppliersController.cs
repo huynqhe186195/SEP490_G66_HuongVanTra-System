@@ -53,14 +53,14 @@ public class SuppliersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.DeleteSupplier)]
     public async Task<IActionResult> SoftDelete(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.SoftDeleteSupplierAsync(id, ct));
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.DeleteSupplier)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.RestoreSupplierAsync(id, ct));

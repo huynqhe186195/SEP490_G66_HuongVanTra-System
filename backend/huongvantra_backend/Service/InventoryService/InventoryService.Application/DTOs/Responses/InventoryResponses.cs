@@ -828,7 +828,9 @@ public record SupplierResponse(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     int TotalReceiptCount,
-    decimal TotalReceiptValue);
+    decimal TotalReceiptValue,
+    string? TaxCode = null,
+    string? PaymentTerms = null);
 
 public record SupplierSimpleResponse(
     Guid Id,

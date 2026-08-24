@@ -10,7 +10,7 @@ export function validateCreateAccountForm({ username, password, fullName, phone,
   const errors = {}
 
   if (!String(username || '').trim()) errors.username = 'Tên đăng nhập là bắt buộc.'
-  if (String(password || '').trim().length < 6) errors.password = 'Mật khẩu phải có ít nhất 6 ký tự.'
+  if (String(password || '').trim().length < 8) errors.password = 'Mật khẩu phải có ít nhất 8 ký tự.'
   if (!String(fullName || '').trim()) errors.fullName = 'Họ và tên là bắt buộc.'
   const selectedRoleIds = Array.isArray(roleIds) ? roleIds : [roleId].filter(Boolean)
   if (selectedRoleIds.length === 0) errors.roleIds = 'Vui lòng chọn ít nhất một vai trò.'

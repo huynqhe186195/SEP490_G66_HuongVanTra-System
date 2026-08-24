@@ -44,17 +44,25 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateOrder,
                     PermissionNames.CreateCustomer)));
 
-            // Yêu cầu bổ sung Kệ Hàng: Manager tạo; Warehouse/Admin vẫn xem qua VIEW_INVENTORY.
-            // Quyền xem của Sale được giữ cho dữ liệu lịch sử, nhưng không còn quyền tạo mới.
+            // Yêu cầu bổ sung Kệ Hàng: Manager tạo (CREATE_SHELF_REPLENISHMENT / legacy MANAGE_EMPLOYEE);
+            // Warehouse/Admin vẫn xem qua VIEW_INVENTORY. Quyền xem của Sale được giữ cho dữ liệu lịch sử.
             options.AddPolicy(PermissionNames.StockAdjustmentReadAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ViewInventory,
                     PermissionNames.ManageEmployee,
-                    PermissionNames.CreatePosOrder)));
+                    PermissionNames.CreatePosOrder,
+                    PermissionNames.CreateShelfReplenishment,
+                    PermissionNames.ApproveShelfReplenishment)));
 
             options.AddPolicy(PermissionNames.StockAdjustmentCreateAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.ManageEmployee)));
+                    PermissionNames.ManageEmployee,
+                    PermissionNames.CreateShelfReplenishment)));
+
+            options.AddPolicy(PermissionNames.ShelfReplenishmentApproveAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.OperateWarehouse,
+                    PermissionNames.ApproveShelfReplenishment)));
 
             // Kiểm kê: Sale quầy / Manager / Thủ kho (kiểm kê Kho tổng) — vị trí siết ở controller.
             options.AddPolicy(PermissionNames.StocktakeCreateAccess, policy =>
@@ -65,6 +73,7 @@ public static class AuthorizationServiceExtensions
 
             options.AddPolicy(PermissionNames.ViewCatalogAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ViewCatalog,
                     PermissionNames.ViewInventory,
                     PermissionNames.ManageCatalog,
                     PermissionNames.ViewCost)));
@@ -91,7 +100,29 @@ public static class AuthorizationServiceExtensions
             options.AddPolicy(PermissionNames.CancelRetailPriceAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ApprovePrice,
-                    PermissionNames.ManageCost)));
+                    PermissionNames.ApproveRetailPriceChange,
+                    PermissionNames.ManageCost,
+                    PermissionNames.RequestRetailPriceChange)));
+
+            options.AddPolicy(PermissionNames.ManageSupplierProductAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageSupplierProduct,
+                    PermissionNames.ManageSuppliers)));
+
+            options.AddPolicy(PermissionNames.ReturnInspectionAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.PerformReturnInspection,
+                    PermissionNames.OperateWarehouse)));
+
+            options.AddPolicy(PermissionNames.ManageShelfStockThresholdAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageStockThreshold,
+                    PermissionNames.ApproveInventory)));
+
+            options.AddPolicy(PermissionNames.ManageWarehouseStockThresholdAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageStockThreshold,
+                    PermissionNames.OperateWarehouse)));
 
             options.AddPolicy(PermissionNames.ShipOrderAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(

@@ -256,7 +256,9 @@ public record CreateSupplierRequest(
     string? Email,
     string? Address,
     string? Note,
-    string? SupplierCode = null);
+    string? SupplierCode = null,
+    string? TaxCode = null,
+    string? PaymentTerms = null);
 
 public record UpdateSupplierRequest(
     string Name,
@@ -264,7 +266,9 @@ public record UpdateSupplierRequest(
     string? Email,
     string? Address,
     string? Note,
-    string? SupplierCode = null);
+    string? SupplierCode = null,
+    string? TaxCode = null,
+    string? PaymentTerms = null);
 
 public record CreateSupplierProductRequest(
     Guid SkuId,

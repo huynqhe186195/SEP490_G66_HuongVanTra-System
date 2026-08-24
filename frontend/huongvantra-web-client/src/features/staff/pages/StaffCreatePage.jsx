@@ -60,13 +60,13 @@ function StaffCreatePage() {
   }
 
   const canSubmit = useMemo(
-    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && form.password.trim().length >= 6 && form.roles.length),
+    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && form.password.trim().length >= 8 && form.roles.length),
     [form.fullName, form.phone, form.username, form.password, form.roles.length],
   )
 
   const handleSave = async () => {
     if (!canSubmit) {
-      showError('Vui lòng nhập đủ họ tên, số điện thoại, tên đăng nhập, mật khẩu (≥6) và vai trò.')
+      showError('Vui lòng nhập đủ họ tên, số điện thoại, tên đăng nhập, mật khẩu (≥8) và vai trò.')
       return
     }
 

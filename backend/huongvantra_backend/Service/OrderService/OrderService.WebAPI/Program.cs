@@ -94,6 +94,9 @@ builder.Services.AddHttpClient<IInventoryCatalogClient, InventoryCatalogClient>(
 {
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    var internalKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalKey))
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalKey);
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<IShiftCatalogClient, ShiftCatalogClient>(client =>
 {

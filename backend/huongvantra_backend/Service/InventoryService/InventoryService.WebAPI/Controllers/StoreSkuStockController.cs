@@ -38,7 +38,7 @@ public class StoreSkuStockController(InventoryLogic _logic) : ControllerBase
 
     /// <summary>Ngưỡng cảnh báo tồn Kệ Hàng do Quản lý đặt; ngưỡng Kho thuộc Thủ kho, đi qua endpoint khác.</summary>
     [HttpPut("{skuId:guid}/threshold")]
-    [Authorize(Policy = PermissionNames.ApproveInventory)]
+    [Authorize(Policy = PermissionNames.ManageShelfStockThresholdAccess)]
     public async Task<IActionResult> UpdateShelfThreshold(Guid skuId, [FromBody] UpdateShelfLowStockThresholdRequest request, CancellationToken ct)
     {
         var result = await _logic.UpdateShelfLowStockThresholdAsync(skuId, request, ct);

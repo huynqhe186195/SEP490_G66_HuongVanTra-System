@@ -557,7 +557,7 @@ function UsersPage() {
             <div className="mt-6 space-y-4">
               {[
                 ['username', 'Tên đăng nhập', 'text', 'VD: nv01', false],
-                ['password', 'Mật khẩu (≥6 ký tự)', 'password', '', false],
+                ['password', 'Mật khẩu (≥8 ký tự)', 'password', '', false],
                 ['fullName', 'Họ và tên', 'text', 'VD: Nguyễn Văn A', false],
                 ['phone', 'Số điện thoại', 'tel', 'Di động 10 số hoặc máy bàn 02… (11 số)', true],
               ].map(([field, label, type, placeholder, isPhone]) => (

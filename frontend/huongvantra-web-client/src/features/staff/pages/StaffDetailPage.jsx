@@ -124,6 +124,11 @@ function StaffDetailPage() {
         showError(saveBlockedReason || 'Vui lòng nhập đủ họ tên và chọn vai trò.')
         return
       }
+      const nextPassword = String(form.newPassword || '').trim()
+      if (nextPassword && nextPassword.length < 8) {
+        showError('Mật khẩu mới phải có ít nhất 8 ký tự.')
+        return
+      }
     }
 
     setIsSaving(true)
@@ -250,13 +255,14 @@ function StaffDetailPage() {
                 </fieldset>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Mật khẩu mới</span>
+                  <span className="text-xs font-semibold text-[#414942]">Mật khẩu mới (≥8 ký tự)</span>
                   <input
                     type="password"
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.newPassword}
                     onChange={handleChange('newPassword')}
                     placeholder="Để trống nếu không đổi"
+                    minLength={8}
                   />
                 </label>
 

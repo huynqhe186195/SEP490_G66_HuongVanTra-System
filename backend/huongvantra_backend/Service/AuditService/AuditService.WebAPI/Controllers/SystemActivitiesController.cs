@@ -7,7 +7,7 @@ namespace AuditService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/audit/system-activities")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Manager")]
 public class SystemActivitiesController(SystemActivityLogic logic) : ControllerBase
 {
     [HttpGet]

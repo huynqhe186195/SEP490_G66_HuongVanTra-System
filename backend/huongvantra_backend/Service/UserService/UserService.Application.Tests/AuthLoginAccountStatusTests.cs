@@ -17,7 +17,7 @@ public class AuthLoginAccountStatusTests
         await DataSeeder.SeedAsync(db);
         var created = await UserServiceTestContext.CreateUserLogic(db).CreateAsync(new CreateUserRequest(
             "deactivated_user",
-            "123456",
+            "12345678",
             [await RoleId(db, "SalePos")],
             "Deactivated User",
             "Sales",
@@ -26,7 +26,7 @@ public class AuthLoginAccountStatusTests
         await UserServiceTestContext.CreateEmployeeLogic(db).DeactivateAsync(created.Employee!.Id);
 
         var ex = await Assert.ThrowsAsync<UserDeactivatedException>(
-            () => CreateAuth(db).LoginAsync(new LoginRequest("deactivated_user", "123456")));
+            () => CreateAuth(db).LoginAsync(new LoginRequest("deactivated_user", "12345678")));
 
         Assert.Equal("Tài khoản đã được cho ngừng hoạt động.", ex.Message);
     }
@@ -38,7 +38,7 @@ public class AuthLoginAccountStatusTests
         await DataSeeder.SeedAsync(db);
         var created = await UserServiceTestContext.CreateUserLogic(db).CreateAsync(new CreateUserRequest(
             "deleted_user",
-            "123456",
+            "12345678",
             [await RoleId(db, "SalePos")],
             "Deleted User",
             "Sales",
@@ -47,7 +47,7 @@ public class AuthLoginAccountStatusTests
         await UserServiceTestContext.CreateUserLogic(db).SoftDeleteAsync(created.Id);
 
         var ex = await Assert.ThrowsAsync<UserDeactivatedException>(
-            () => CreateAuth(db).LoginAsync(new LoginRequest("deleted_user", "123456")));
+            () => CreateAuth(db).LoginAsync(new LoginRequest("deleted_user", "12345678")));
 
         Assert.Equal("Tài khoản đã được cho ngừng hoạt động.", ex.Message);
     }
@@ -59,7 +59,7 @@ public class AuthLoginAccountStatusTests
         await DataSeeder.SeedAsync(db);
         var created = await UserServiceTestContext.CreateUserLogic(db).CreateAsync(new CreateUserRequest(
             "locked_user",
-            "123456",
+            "12345678",
             [await RoleId(db, "SalePos")],
             "Locked User",
             "Sales",
@@ -68,7 +68,7 @@ public class AuthLoginAccountStatusTests
         await UserServiceTestContext.CreateUserLogic(db).LockAsync(created.Id);
 
         var ex = await Assert.ThrowsAsync<UserInactiveException>(
-            () => CreateAuth(db).LoginAsync(new LoginRequest("locked_user", "123456")));
+            () => CreateAuth(db).LoginAsync(new LoginRequest("locked_user", "12345678")));
 
         Assert.Equal("Tài khoản đã bị khoá.", ex.Message);
     }

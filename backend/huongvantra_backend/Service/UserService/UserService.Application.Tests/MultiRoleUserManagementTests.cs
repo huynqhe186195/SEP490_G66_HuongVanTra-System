@@ -44,7 +44,7 @@ public class MultiRoleUserManagementTests
 
         var created = await logic.CreateAsync(new CreateUserRequest(
             "dual_create",
-            "123456",
+            "12345678",
             roleIds,
             "Dual Create",
             "Sales",
@@ -67,7 +67,7 @@ public class MultiRoleUserManagementTests
 
         var created = await logic.CreateAsync(new CreateUserRequest(
             "single_role_create",
-            "123456",
+            "12345678",
             [salePosId],
             "Single Role",
             "Sales",
@@ -86,7 +86,7 @@ public class MultiRoleUserManagementTests
 
         await Assert.ThrowsAsync<RoleNotFoundException>(() => logic.CreateAsync(new CreateUserRequest(
             "invalid_role_create",
-            "123456",
+            "12345678",
             [int.MaxValue],
             "Invalid Role",
             "Sales",
@@ -105,7 +105,7 @@ public class MultiRoleUserManagementTests
         var created = await logic.CreateAsync(
             new CreateEmployeeRequest(
                 "dual_employee",
-                "123456",
+                "12345678",
                 roleIds,
                 "Dual Employee",
                 "Sales",
@@ -132,7 +132,7 @@ public class MultiRoleUserManagementTests
         var created = await logic.CreateAsync(
             new CreateEmployeeRequest(
                 "ops_support_employee",
-                "123456",
+                "12345678",
                 roleIds,
                 "Ops Support",
                 "Operations",
