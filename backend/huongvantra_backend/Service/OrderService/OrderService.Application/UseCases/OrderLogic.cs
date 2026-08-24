@@ -791,6 +791,24 @@ public class OrderLogic(
                     customMaterialsPreview,
                     isPosCompletedOnCreate || order.OrderChannel == OrderChannel.COD);
             }
+
+            // Custom bundles are made to order even when every ingredient is available.
+            // Availability controls the stock status, but must not discard the deposit
+            // agreed for this checkout.
+            if (isCustomOnlyOrder && isDepositCheckout && order.DepositAmount is null)
+            {
+                var minimumDeposit = Math.Round(
+                    order.FinalAmount * 0.5m,
+                    0,
+                    MidpointRounding.AwayFromZero);
+                if (req.DepositAmount!.Value < minimumDeposit)
+                {
+                    throw new OrderValidationException(
+                        $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
+                }
+
+                order.DepositAmount = req.DepositAmount.Value;
+            }
         }
 
         // Gắn entity vào DbContext. Commit thật ở SaveChanges bên dưới (sau trừ tồn / Outbox).
