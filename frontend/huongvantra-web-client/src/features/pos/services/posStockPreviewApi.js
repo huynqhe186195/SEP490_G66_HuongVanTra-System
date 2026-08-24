@@ -26,6 +26,7 @@ export async function previewPosStockHandling(items) {
       skuCode: line.skuCode ?? line.SkuCode ?? '',
       skuName: line.skuName ?? line.SkuName ?? '',
       orderedQuantity: Number(line.orderedQuantity ?? line.OrderedQuantity ?? 0),
+      finishedDeductedQuantity: Number(line.finishedDeductedQuantity ?? line.FinishedDeductedQuantity ?? 0),
       warehouseDeductedQuantity: Number(line.warehouseDeductedQuantity ?? line.WarehouseDeductedQuantity ?? 0),
       pendingBomQuantity: Number(line.pendingBomQuantity ?? line.PendingBomQuantity ?? 0),
     })),

@@ -92,9 +92,7 @@ function CustomBundlePreviewModal({
   const displayOrderId = orderId || bundle?.orderId
   const displayTotalAmount = totalAmount ?? bundle?.totalPrice ?? 0
   const displayCreatedAt = createdAt ?? bundle?.createdAt
-  const stockStatus = orderStockStatus || (String(orderStatus || bundle?.orderStatus || '').toLowerCase() === 'waitingmaterials'
-    ? 'waiting_materials'
-    : 'pending_custom_pack')
+  const stockStatus = orderStockStatus || 'pending_custom_pack'
 
   const handleConfirm = async () => {
     setIsConfirming(true)

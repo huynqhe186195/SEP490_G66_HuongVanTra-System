@@ -58,31 +58,206 @@ function readCount(statusCounts, key) {
 }
 
 function mapCustomBundleToQueueRow(bundle, { packed = false } = {}) {
-  const orderStatus = String(bundle.orderStatus || '')
-  const waitingMaterials = orderStatus.toLowerCase() === 'waitingmaterials'
+  const orderStatus = String(bundle.orderStatus || bundle.OrderStatus || '')
+  const orderId = bundle.orderId ?? bundle.OrderId ?? ''
+  const orderCode = String(bundle.orderCode ?? bundle.OrderCode ?? '').trim()
   return {
     rowKind: 'custom',
-    queueId: `custom:${bundle.id}`,
-    bundleId: bundle.id,
-    orderId: bundle.orderId,
-    orderCode: bundle.orderCode || bundle.orderId?.slice?.(0, 8) || '—',
-    queueStatus: packed ? 'Confirmed' : (waitingMaterials ? 'Insufficient' : 'Waiting'),
-    orderStockStatus: packed ? 'custom_packed' : (waitingMaterials ? 'waiting_materials' : 'pending_custom_pack'),
+    queueId: `custom:${bundle.id ?? bundle.Id}`,
+    bundleId: bundle.id ?? bundle.Id,
+    orderId,
+    // Hiển thị: dùng mã đơn thật; thiếu thì rút gọn orderId (readOrderCode bỏ qua 8 hex → gộp bằng orderId).
+    orderCode: orderCode || (orderId ? String(orderId).replace(/-/g, '').slice(0, 8) : '—'),
+    queueStatus: packed ? 'Confirmed' : 'Waiting',
+    orderStockStatus: packed ? 'custom_packed' : 'pending_custom_pack',
     orderPaymentStatus: orderStatus || 'WaitingProduction',
-    createdAt: packed ? (bundle.packedAt || bundle.createdAt) : bundle.createdAt,
-    totalAmount: bundle.totalPrice,
+    createdAt: packed
+      ? (bundle.packedAt || bundle.PackedAt || bundle.createdAt || bundle.CreatedAt)
+      : (bundle.createdAt || bundle.CreatedAt),
+    totalAmount: Number(bundle.totalPrice ?? bundle.TotalPrice ?? 0),
     isReserved: false,
-    label: bundle.label,
-    packedAt: bundle.packedAt,
-    lines: (bundle.ingredients || []).map((ing) => ({
-      skuId: ing.materialSkuId,
-      skuCode: ing.materialSkuCode,
-      skuName: ing.materialSnapshotName,
-      orderedQuantity: ing.quantity,
-      finishedDeductedQuantity: packed ? ing.quantity : 0,
-      pendingBomQuantity: packed ? 0 : ing.quantity,
+    label: bundle.label ?? bundle.Label,
+    packedAt: bundle.packedAt ?? bundle.PackedAt,
+    lines: (bundle.ingredients || bundle.Ingredients || []).map((ing) => ({
+      skuId: ing.materialSkuId ?? ing.MaterialSkuId,
+      skuCode: ing.materialSkuCode ?? ing.MaterialSkuCode,
+      skuName: ing.materialSnapshotName ?? ing.MaterialSnapshotName,
+      orderedQuantity: ing.quantity ?? ing.Quantity,
+      finishedDeductedQuantity: packed ? (ing.quantity ?? ing.Quantity) : 0,
+      pendingBomQuantity: packed ? 0 : (ing.quantity ?? ing.Quantity),
     })),
   }
+}
+
+const EMPTY_GUID_COMPACT = '0'.repeat(32)
+
+/** Chuẩn hóa Guid (bỏ dấu gạch) để so khớp giữa inventory / order service. */
+function normalizeOrderId(value) {
+  const compact = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[{}]/g, '')
+    .replace(/-/g, '')
+  if (!compact || compact === EMPTY_GUID_COMPACT) return ''
+  return compact
+}
+
+function readOrderId(row) {
+  return normalizeOrderId(row?.orderId ?? row?.OrderId)
+}
+
+function readOrderCode(row) {
+  const code = String(row?.orderCode ?? row?.OrderCode ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+  if (!code || code === '—' || code === '-') return ''
+  // Bỏ qua mã giả = 8 hex từ GUID (mapper cũ).
+  if (/^[0-9a-f]{8}$/.test(code)) return ''
+  return code
+}
+
+/** Khóa gộp: ưu tiên mã đơn thật; không có thì dùng orderId. */
+function orderGroupKey(row) {
+  const code = readOrderCode(row)
+  if (code) return `code:${code}`
+  const id = readOrderId(row)
+  return id ? `id:${id}` : ''
+}
+
+function rowMatchesCatalogKeys(row, catalogKeys) {
+  const code = readOrderCode(row)
+  const id = readOrderId(row)
+  if (code && catalogKeys.has(`code:${code}`)) return true
+  if (id && catalogKeys.has(`id:${id}`)) return true
+  return false
+}
+
+/** Gộp phiếu thành phẩm + gói cá nhân cùng đơn thành một dòng. */
+function mergeCatalogAndCustomRows(catalogRows, customRows) {
+  const byCode = new Map()
+  const byOrderId = new Map()
+  const uniqueGroups = []
+  const ungrouped = []
+
+  const register = (group, id, code) => {
+    if (id) byOrderId.set(id, group)
+    if (code) byCode.set(code, group)
+  }
+
+  const takeGroup = (row) => {
+    const id = readOrderId(row)
+    const code = readOrderCode(row)
+
+    let group = (id && byOrderId.get(id)) || (code && byCode.get(code)) || null
+    if (!group) {
+      if (!id && !code) {
+        ungrouped.push(row)
+        return null
+      }
+      const key = code ? `code:${code}` : `id:${id}`
+      group = {
+        rowKind: 'mixed',
+        queueId: `order:${key}`,
+        orderId: row.orderId ?? row.OrderId,
+        orderCode: row.orderCode ?? row.OrderCode,
+        createdAt: row.createdAt ?? row.CreatedAt,
+        catalog: null,
+        customBundles: [],
+        orderPaymentStatus: row.orderPaymentStatus ?? row.OrderPaymentStatus,
+        orderStockStatus: row.orderStockStatus ?? row.OrderStockStatus,
+        queueStatus: row.queueStatus ?? row.QueueStatus,
+        totalAmount: Number(row.totalAmount ?? row.TotalAmount ?? 0),
+      }
+      uniqueGroups.push(group)
+    }
+    register(group, id, code)
+    return group
+  }
+
+  for (const catalog of catalogRows) {
+    const group = takeGroup(catalog)
+    if (!group) continue
+    // Nhiều phiếu thành phẩm cùng đơn → giữ phiếu mới hơn (đã sort trước khi merge thì last wins).
+    group.catalog = catalog
+    group.orderId = catalog.orderId ?? catalog.OrderId ?? group.orderId
+    const realCode = catalog.orderCode || catalog.OrderCode
+    if (realCode && realCode !== '—') group.orderCode = realCode
+    group.createdAt = catalog.createdAt || catalog.CreatedAt || group.createdAt
+    group.orderPaymentStatus = catalog.orderPaymentStatus || catalog.OrderPaymentStatus || group.orderPaymentStatus
+    group.orderStockStatus = catalog.orderStockStatus || catalog.OrderStockStatus || group.orderStockStatus
+    group.queueStatus = catalog.queueStatus || catalog.QueueStatus || group.queueStatus
+    group.totalAmount = Number(catalog.totalAmount ?? catalog.TotalAmount ?? group.totalAmount ?? 0)
+  }
+
+  for (const custom of customRows) {
+    const group = takeGroup(custom)
+    if (!group) continue
+    group.customBundles.push(custom)
+    group.orderId = group.orderId || custom.orderId || custom.OrderId
+    const customCode = custom.orderCode || custom.OrderCode
+    if ((!group.orderCode || group.orderCode === '—') && customCode && customCode !== '—') {
+      group.orderCode = customCode
+    }
+    if (!group.createdAt) group.createdAt = custom.createdAt
+    if (!group.orderPaymentStatus) group.orderPaymentStatus = custom.orderPaymentStatus
+    group.totalAmount = Number(group.totalAmount || 0) + Number(custom.totalAmount || 0)
+  }
+
+  return [...uniqueGroups, ...ungrouped].map((row) => {
+    if (row.rowKind !== 'mixed') return row
+    const hasCatalog = Boolean(row.catalog)
+    const hasCustom = (row.customBundles || []).length > 0
+    if (hasCatalog && !hasCustom) {
+      return { ...row.catalog, rowKind: 'catalog', customBundles: [] }
+    }
+    if (!hasCatalog && hasCustom && row.customBundles.length === 1) {
+      return row.customBundles[0]
+    }
+    const catalogStatus = String(row.catalog?.queueStatus || '').toLowerCase()
+    const customPending = (row.customBundles || []).some((bundle) =>
+      String(bundle.queueStatus || '').toLowerCase() !== 'confirmed',
+    )
+    const customAllPacked = hasCustom && !customPending
+    return {
+      ...row,
+      queueStatus:
+        catalogStatus === 'cancelled'
+          ? 'Cancelled'
+          : catalogStatus === 'insufficient'
+            ? 'Insufficient'
+            : catalogStatus === 'waiting' || customPending
+              ? 'Waiting'
+              : catalogStatus === 'confirmed' && customAllPacked
+                ? 'Confirmed'
+                : row.queueStatus,
+    }
+  })
+}
+
+function mapCatalogQueueItem(item) {
+  return {
+    ...item,
+    orderId: item.orderId ?? item.OrderId,
+    orderCode: item.orderCode ?? item.OrderCode,
+    createdAt: item.createdAt ?? item.CreatedAt,
+    queueStatus: item.queueStatus ?? item.QueueStatus,
+    orderPaymentStatus: item.orderPaymentStatus ?? item.OrderPaymentStatus,
+    orderStockStatus: item.orderStockStatus ?? item.OrderStockStatus,
+    totalAmount: item.totalAmount ?? item.TotalAmount,
+    queueId: item.queueId ?? item.QueueId ?? item.id ?? item.Id,
+    rowKind: 'catalog',
+  }
+}
+
+/** Tab hiển thị của dòng đã gộp: thành phẩm thiếu hàng → Chờ hàng; còn lại (kể cả gói cá nhân) → Chờ đóng gói. */
+function getMergedRowTab(row) {
+  const catalog = row.rowKind === 'mixed' ? row.catalog : row.rowKind === 'custom' ? null : row
+  const status = String(catalog?.queueStatus || row.queueStatus || '').toLowerCase()
+  if (status === 'insufficient') return 'insufficient'
+  if (status === 'confirmed') return 'confirmed'
+  if (status === 'cancelled') return 'cancelled'
+  return 'waiting'
 }
 
 function StockDeductQueuePage() {
@@ -132,13 +307,22 @@ function StockDeductQueuePage() {
       const tab = TABS.find((t) => t.value === activeTab)
       const includePendingCustom = activeTab === 'waiting' || activeTab === 'insufficient' || activeTab === 'all'
       const includePackedCustom = activeTab === 'confirmed' || activeTab === 'all'
-      const [queuePage, customPendingPage, customPackedPage] = await Promise.all([
+      const siblingStatus = activeTab === 'waiting' ? 'insufficient' : activeTab === 'insufficient' ? 'waiting' : null
+      const [queuePage, siblingQueuePage, customPendingPage, customPackedPage] = await Promise.all([
         fetchPendingStockDeductQueues({
           status: tab?.status,
           search: searchValue.trim() || undefined,
           page,
           pageSize,
         }),
+        siblingStatus
+          ? fetchPendingStockDeductQueues({
+              status: siblingStatus,
+              search: searchValue.trim() || undefined,
+              page: 1,
+              pageSize: 100,
+            }).catch(() => ({ items: [], totalCount: 0 }))
+          : Promise.resolve({ items: [], totalCount: 0 }),
         includePendingCustom
           ? fetchPendingCustomBundles({ page: 1, pageSize: 100 }).catch(() => ({ items: [], totalCount: 0 }))
           : Promise.resolve({ items: [], totalCount: 0 }),
@@ -148,8 +332,10 @@ function StockDeductQueuePage() {
       ])
 
       const search = searchValue.trim().toLowerCase()
-      let customRows = (customPendingPage.items || []).map((b) => mapCustomBundleToQueueRow(b))
-      let packedCustomRows = (customPackedPage.items || []).map((b) => mapCustomBundleToQueueRow(b, { packed: true }))
+      const pendingCustomItems = customPendingPage.items || customPendingPage.items || []
+      const packedCustomItems = customPackedPage.items || customPackedPage.items || []
+      let customRows = pendingCustomItems.map((b) => mapCustomBundleToQueueRow(b))
+      let packedCustomRows = packedCustomItems.map((b) => mapCustomBundleToQueueRow(b, { packed: true }))
       if (search) {
         const match = (row) =>
           String(row.orderCode || '').toLowerCase().includes(search)
@@ -157,38 +343,51 @@ function StockDeductQueuePage() {
         customRows = customRows.filter(match)
         packedCustomRows = packedCustomRows.filter(match)
       }
-      if (activeTab === 'waiting') {
-        customRows = customRows.filter((row) => row.queueStatus === 'Waiting')
-      } else if (activeTab === 'insufficient') {
-        customRows = customRows.filter((row) => row.queueStatus === 'Insufficient')
-      }
-
-      // Trang 1: hiện gói custom trước queue TP; trang sau chỉ queue (tránh lặp custom).
       const customForTab = activeTab === 'confirmed'
         ? packedCustomRows
         : activeTab === 'all'
           ? [...customRows, ...packedCustomRows]
           : customRows
-      const merged = (page === 1 ? [...customForTab, ...(queuePage.items || [])] : (queuePage.items || []))
+      const catalogSource = [
+        ...(queuePage.items || queuePage.items || []),
+        ...(siblingQueuePage.items || siblingQueuePage.items || []),
+      ]
+      const seenQueueIds = new Set()
+      const catalogItems = catalogSource.map(mapCatalogQueueItem).filter((item) => {
+        const id = String(item.queueId || '')
+        if (id && seenQueueIds.has(id)) return false
+        if (id) seenQueueIds.add(id)
+        return true
+      })
+      const merged = mergeCatalogAndCustomRows(catalogItems, customForTab)
         .sort((left, right) => getCreatedAtSortValue(right) - getCreatedAtSortValue(left))
-      setQueues(merged)
-      setTotalCount((queuePage.totalCount || 0) + customForTab.length)
+      const visibleRows = activeTab === 'all'
+        ? merged
+        : merged.filter((row) => getMergedRowTab(row) === activeTab)
+      setQueues(visibleRows)
+      const catalogKeys = new Set()
+      for (const item of catalogItems) {
+        const code = readOrderCode(item)
+        const id = readOrderId(item)
+        if (code) catalogKeys.add(`code:${code}`)
+        if (id) catalogKeys.add(`id:${id}`)
+      }
+      const standaloneCustom = customForTab.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
+      const standaloneOnThisTab = activeTab === 'insufficient'
+        ? 0
+        : standaloneCustom
+      setTotalCount((queuePage.totalCount || queuePage.TotalCount || 0) + standaloneOnThisTab)
 
-      const customWaiting = (customPendingPage.items || []).filter(
-        (b) => String(b.orderStatus || '').toLowerCase() !== 'waitingmaterials',
-      ).length
-      const customInsufficient = (customPendingPage.items || []).filter(
-        (b) => String(b.orderStatus || '').toLowerCase() === 'waitingmaterials',
-      ).length
-      const baseCounts = { ...(queuePage.statusCounts || {}) }
+      const customWaitingStandalone = customRows.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
+      const packedStandalone = packedCustomRows.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
+      const baseCounts = { ...(queuePage.statusCounts || queuePage.StatusCounts || {}) }
       const bump = (key, delta) => {
         const found = Object.keys(baseCounts).find((k) => k.toLowerCase() === key.toLowerCase())
         if (found) baseCounts[found] = (Number(baseCounts[found]) || 0) + delta
         else if (delta) baseCounts[key] = delta
       }
-      bump('Waiting', customWaiting)
-      bump('Insufficient', customInsufficient)
-      bump('Confirmed', packedCustomRows.length)
+      bump('Waiting', customWaitingStandalone)
+      bump('Confirmed', packedStandalone)
       setStatusCounts(baseCounts)
     } catch (error) {
       setQueues([])
@@ -378,16 +577,37 @@ function StockDeductQueuePage() {
               ) : null}
               {!isLoading
                 ? queues.map((row) => {
-                    const normalizedQueueStatus = String(row.queueStatus || '').toLowerCase()
+                    const catalogRow = row.rowKind === 'mixed' ? row.catalog : row.rowKind === 'custom' ? null : row
+                    const customParts = row.rowKind === 'mixed'
+                      ? (row.customBundles || [])
+                      : row.rowKind === 'custom'
+                        ? [row]
+                        : []
+                    const isMixed = row.rowKind === 'mixed' || (Boolean(catalogRow) && customParts.length > 0)
+                    const normalizedQueueStatus = String(
+                      catalogRow?.queueStatus || row.queueStatus || '',
+                    ).toLowerCase()
                     const isCompletedQueue = normalizedQueueStatus === 'confirmed'
+                      && customParts.every((bundle) => String(bundle.queueStatus || '').toLowerCase() === 'confirmed')
                     const isCancelledQueue = normalizedQueueStatus === 'cancelled'
-                    const isBackorderQueue = row.rowKind !== 'custom'
-                      && row.lines?.some((line) => String(line.stockHandlingMode || '').toLowerCase().includes('backorder'))
-                    const canConfirmRow = canExecuteDeduct && !isCompletedQueue && !isCancelledQueue && !isBackorderQueue
-                    const orderStatusMeta = resolveStockDeductOrderStatusMeta(
-                      row.orderPaymentStatus,
-                      row.orderStockStatus,
+                    const isBackorderQueue = Boolean(
+                      catalogRow?.lines?.some((line) =>
+                        String(line.stockHandlingMode || '').toLowerCase().includes('backorder'),
+                      ),
                     )
+                    const catalogCanConfirm = Boolean(
+                      catalogRow && canExecuteDeduct && !isCancelledQueue && !isBackorderQueue
+                      && String(catalogRow.queueStatus || '').toLowerCase() !== 'confirmed',
+                    )
+                    const pendingCustom = customParts.filter((bundle) =>
+                      String(bundle.queueStatus || '').toLowerCase() !== 'confirmed',
+                    )
+                    const customCanConfirm = canExecuteDeduct && pendingCustom.length > 0
+                    const orderStatusMeta = resolveStockDeductOrderStatusMeta(
+                      row.orderPaymentStatus || catalogRow?.orderPaymentStatus,
+                      catalogRow?.orderStockStatus || row.orderStockStatus,
+                    )
+                    const catalogLines = catalogRow?.lines || []
                     return (
                     <tr key={row.queueId} className="transition-colors hover:bg-[#fbf9f1]/30">
                       <td className="px-8 py-5 font-bold text-slate-700">
@@ -398,34 +618,76 @@ function StockDeductQueuePage() {
                         ) : (
                           <span>{row.orderCode}</span>
                         )}
-                        {row.rowKind === 'custom' ? (
-                          <span className="ml-2 inline-flex rounded-full bg-[#e8f0e9] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#356647]">
-                            {PERSONAL_PRODUCT_LABEL}{row.label ? ` · ${row.label}` : ''}
-                          </span>
-                        ) : null}
-                        {row.rowKind !== 'custom' && row.lines?.length ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {catalogRow ? (
+                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                              Thành phẩm
+                            </span>
+                          ) : null}
+                          {customParts.map((bundle) => (
+                            <span
+                              key={bundle.queueId || bundle.bundleId}
+                              className="inline-flex rounded-full bg-[#e8f0e9] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#356647]"
+                            >
+                              {PERSONAL_PRODUCT_LABEL}{bundle.label ? ` · ${bundle.label}` : ''}
+                            </span>
+                          ))}
+                        </div>
+                        {catalogLines.length ? (
                           <div className="mt-2 space-y-1 text-xs font-medium text-slate-500">
-                            {row.lines.slice(0, 2).map((line) => (
+                            {catalogLines.slice(0, 2).map((line) => (
                               <p key={line.skuId}>
-                                {`${line.skuCode || line.skuName}: ${getStockDeductLineSummary(line)}`}
+                                {`Thành phẩm · ${line.skuCode || line.skuName}: ${getStockDeductLineSummary(line)}`}
                               </p>
                             ))}
-                            {row.lines.length > 2 ? <p>+{row.lines.length - 2} dòng khác</p> : null}
+                            {catalogLines.length > 2 ? <p>+{catalogLines.length - 2} dòng thành phẩm khác</p> : null}
+                          </div>
+                        ) : null}
+                        {customParts.length ? (
+                          <div className="mt-2 space-y-1 text-xs font-medium text-[#356647]">
+                            {customParts.map((bundle) => (
+                              <p key={bundle.queueId || bundle.bundleId}>
+                                {PERSONAL_PRODUCT_LABEL}
+                                {bundle.label ? ` · ${bundle.label}` : ''}
+                                {String(bundle.queueStatus || '').toLowerCase() === 'confirmed'
+                                  ? ' — đã đóng gói'
+                                  : ' — chờ đóng gói / trừ Kho'}
+                              </p>
+                            ))}
                           </div>
                         ) : null}
                       </td>
                       <td className="px-4 py-5">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(row.orderStockStatus)}`}
-                        >
-                          {row.rowKind === 'custom' && row.orderStockStatus === 'pending_custom_pack'
-                            ? `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
-                            : row.rowKind === 'custom' && row.orderStockStatus === 'custom_packed'
-                              ? `Đã trừ nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
-                              : row.orderStockStatus === 'pending_warehouse_transfer'
-                                ? 'Chờ xuất Kho điều chuyển Kệ'
-                              : getStockStatusLabel(row.orderStockStatus)}
-                        </span>
+                        <div className="flex flex-col items-start gap-1.5">
+                          {catalogRow ? (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(catalogRow.orderStockStatus)}`}
+                            >
+                              {catalogRow.orderStockStatus === 'pending_warehouse_transfer'
+                                ? 'Thành phẩm: chờ xuất Kho điều chuyển Kệ'
+                                : `Thành phẩm: ${getStockStatusLabel(catalogRow.orderStockStatus) || catalogRow.orderStockStatus}`}
+                            </span>
+                          ) : null}
+                          {customParts.map((bundle) => (
+                            <span
+                              key={`st-${bundle.queueId || bundle.bundleId}`}
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(bundle.orderStockStatus)}`}
+                            >
+                              {bundle.orderStockStatus === 'pending_custom_pack'
+                                ? `Chờ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                                : bundle.orderStockStatus === 'custom_packed'
+                                  ? `Đã trừ nguyên liệu ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                                  : getStockStatusLabel(bundle.orderStockStatus) || bundle.orderStockStatus}
+                            </span>
+                          ))}
+                          {!catalogRow && customParts.length === 0 ? (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(row.orderStockStatus)}`}
+                            >
+                              {getStockStatusLabel(row.orderStockStatus)}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-5">
                         <span
@@ -435,30 +697,60 @@ function StockDeductQueuePage() {
                         </span>
                       </td>
                       <td className="px-4 py-5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (row.rowKind === 'custom') {
-                              setPreviewCustom({
-                                ...row,
-                                readOnly: isCompletedQueue,
-                              })
-                            } else setPreviewQueue(row)
-                          }}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
-                            canConfirmRow
-                              ? 'bg-[#538463] hover:bg-[#457053]'
-                              : 'bg-slate-500 hover:bg-slate-600'
-                          }`}
-                        >
-                          {isCancelledQueue || isCompletedQueue || isBackorderQueue
-                            ? 'Xem'
-                            : canConfirmRow
-                                ? 'Xem & xác nhận'
-                                : canCancelQueue
-                                  ? 'Xem & xử lý ngoại lệ'
+                        <div className="flex flex-col items-end gap-1.5">
+                          {isMixed && catalogRow ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewQueue({ ...catalogRow, customBundles: customParts })}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
+                                catalogCanConfirm || customCanConfirm
+                                  ? 'bg-[#538463] hover:bg-[#457053]'
+                                  : 'bg-slate-500 hover:bg-slate-600'
+                              }`}
+                            >
+                              {isCancelledQueue || isCompletedQueue
+                                ? 'Xem đơn'
+                                : catalogCanConfirm || customCanConfirm
+                                  ? 'Xem & xác nhận'
                                   : 'Xem'}
-                        </button>
+                            </button>
+                          ) : catalogRow ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewQueue(catalogRow)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
+                                catalogCanConfirm
+                                  ? 'bg-[#538463] hover:bg-[#457053]'
+                                  : 'bg-slate-500 hover:bg-slate-600'
+                              }`}
+                            >
+                              {isCancelledQueue || isCompletedQueue || isBackorderQueue || !catalogCanConfirm
+                                ? (isCancelledQueue || isCompletedQueue || isBackorderQueue ? 'Xem' : canCancelQueue ? 'Xem & xử lý ngoại lệ' : 'Xem')
+                                : 'Xem & xác nhận'}
+                            </button>
+                          ) : customParts.map((bundle) => {
+                            const packed = String(bundle.queueStatus || '').toLowerCase() === 'confirmed'
+                            return (
+                              <button
+                                key={`act-${bundle.queueId || bundle.bundleId}`}
+                                type="button"
+                                onClick={() => setPreviewCustom({
+                                  ...bundle,
+                                  readOnly: packed,
+                                })}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
+                                  customCanConfirm && !packed
+                                    ? 'bg-[#538463] hover:bg-[#457053]'
+                                    : 'bg-slate-500 hover:bg-slate-600'
+                                }`}
+                              >
+                                {packed
+                                  ? `Xem ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                                  : 'Xem & xác nhận'}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </td>
                     </tr>
                     )
@@ -478,7 +770,7 @@ function StockDeductQueuePage() {
         />
       </section>
 
-      {previewQueue && previewQueue.rowKind !== 'custom' ? (
+      {previewQueue ? (
         <StockDeductPreviewModal
           queueId={previewQueue.queueId}
           orderCode={previewQueue.orderCode}
@@ -488,6 +780,7 @@ function StockDeductQueuePage() {
           createdAt={previewQueue.createdAt}
           canConfirm={canExecuteDeduct}
           canCancel={canCancelQueue}
+          customBundles={previewQueue.customBundles || []}
           onClose={() => setPreviewQueue(null)}
           onConfirmed={loadData}
         />

@@ -2237,6 +2237,7 @@ function PosPage() {
         pickupContactName = null,
         pickupContactPhone = null,
         depositAmount = null,
+        depositPaymentMethod = null,
     ) => {
         if (isTakeaway) {
             await handleTakeawayPayment(
@@ -2252,9 +2253,12 @@ function PosPage() {
             return;
         }
 
-        // QR quầy: tạo đơn chờ CK (chưa trừ kệ). Trừ tồn lúc SePay webhook Complete.
-        if (isTransferPayment) {
-            const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
+        const collectDepositByQr = depositAmount != null
+            && (depositPaymentMethod || (isTransferPayment ? 'TRANSFER' : 'CASH')) === 'TRANSFER';
+
+        // QR quầy (kể cả thu cọc): tạo đơn chờ CK. Trừ tồn lúc SePay webhook Complete.
+        if (isTransferPayment || collectDepositByQr) {
+            const debtApplyAmount = collectDepositByQr ? 0 : resolveDebtApplyAmount(debtSettlement);
             const backendDebtSettlementJson = debtApplyAmount > 0
                 ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: "VietQR" })
                 : null;
@@ -2281,7 +2285,9 @@ function PosPage() {
             showSuccess(
                 transferDebtSettlement ?
                     `Đã tạo đơn ${result.orderCode}. Quét QR ${formatMoney(actualQrAmount)} đ (gồm trừ nợ ${formatMoney(transferDebtSettlement.amount)} đ).`
-                :   `Đã tạo đơn ${result.orderCode}. Quét mã QR ${formatMoney(actualQrAmount)} đ để thanh toán.`,
+                : collectDepositByQr
+                    ? `Đã tạo đơn ${result.orderCode}. Quét QR ${formatMoney(actualQrAmount)} đ để thu cọc.`
+                    : `Đã tạo đơn ${result.orderCode}. Quét mã QR ${formatMoney(actualQrAmount)} đ để thanh toán.`,
             );
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
@@ -2344,6 +2350,7 @@ function PosPage() {
         pickupContactName = null,
         pickupContactPhone = null,
         depositAmount = null,
+        depositPaymentMethod = null,
     ) =>
         checkoutAttemptRef.current.submit(
             {
@@ -2356,7 +2363,7 @@ function PosPage() {
                 orderDiscountAmountFixed,
                 promotionId: appliedPromotion?.id ?? null,
                 promotionCode: appliedPromotion?.promoCode ?? null,
-                paymentMethod: sessionPaymentMethod,
+                paymentMethod: depositPaymentMethod || sessionPaymentMethod,
                 amountPaidInput,
                 shippingAddress,
                 orderNote,
@@ -2368,6 +2375,7 @@ function PosPage() {
                 pickupContactName,
                 pickupContactPhone,
                 depositAmount,
+                depositPaymentMethod,
             },
             (idempotencyKey) => executePayment( // key gắn header X-Idempotency-Key lúc POST
                 activeDebtSettlement,
@@ -2379,6 +2387,7 @@ function PosPage() {
                 pickupContactName,
                 pickupContactPhone,
                 depositAmount,
+                depositPaymentMethod,
             ),
         );
 
@@ -2396,11 +2405,18 @@ function PosPage() {
         })));
         if (preview.backorderRequired) {
             const lines = preview.lines || [];
+            const availableQuantity = lines.reduce(
+              (sum, line) =>
+                sum
+                + Number(line.finishedDeductedQuantity || 0)
+                + Number(line.warehouseDeductedQuantity || 0),
+              0,
+            );
             setBackorderPrompt({
                 fromStockPreview: true,
                 message: preview.backorderMessage || 'Sản phẩm tạm thời chưa đủ nguyên liệu/Bao bì để đáp ứng đơn hàng.',
                 lines,
-                availableQuantity: 0,
+                availableQuantity,
                 backorderQuantity: lines.reduce((sum, line) => sum + Number(line.pendingBomQuantity || 0), 0),
                 estimatedReadyFrom: null,
             });
@@ -2576,6 +2592,7 @@ function PosPage() {
                 acceptedBackorder?.pickupContactName,
                 acceptedBackorder?.pickupContactPhone,
                 acceptedBackorder?.depositAmount,
+                acceptedBackorder?.depositPaymentMethod,
             );
             setIsPaymentConfirmOpen(false);
             setAcceptedBackorder(null);
@@ -2609,6 +2626,7 @@ function PosPage() {
         pickupContactName,
         pickupContactPhone,
         depositAmount,
+        depositPaymentMethod,
     }) => {
         if (backorderPrompt?.fromStockPreview) {
             setAcceptedBackorder({
@@ -2618,6 +2636,7 @@ function PosPage() {
                 pickupContactName,
                 pickupContactPhone,
                 depositAmount,
+                depositPaymentMethod,
             });
             setBackorderPrompt(null);
             setIsPaymentConfirmOpen(true);
@@ -2635,6 +2654,7 @@ function PosPage() {
                 pickupContactName,
                 pickupContactPhone,
                 depositAmount,
+                depositPaymentMethod,
             );
             // Khách vãng lai đặt đơn chờ hàng sẽ quay lại lấy — lưu thành hồ sơ để lần sau tra được.
             // Thất bại (trùng SĐT, mất mạng) không được ảnh hưởng đơn vừa tạo.
@@ -3555,12 +3575,10 @@ function PosPage() {
                             </div>
 
                             {posTab === 'bundles' ?
-                                <CustomScrollArea className="flex-1" contentClassName="p-4">
-                                    <CustomBundlePanel
-                                        bundles={customBundles}
-                                        onChange={(b) => updateActiveSession({ customBundles: b })}
-                                    />
-                                </CustomScrollArea>
+                                <CustomBundlePanel
+                                    bundles={customBundles}
+                                    onChange={(b) => updateActiveSession({ customBundles: b })}
+                                />
                             :
                                 <CustomScrollArea className="flex-1" contentClassName="px-2.5 py-2">
                                     {isSearchLoading ?
@@ -3750,6 +3768,17 @@ function PosPage() {
         selectedCustomer={selectedCustomer}
         paymentMethodLabel={selectedPaymentMethodLabel}
         backorderDepositAmount={acceptedBackorder?.depositAmount ?? null}
+        depositPaymentMethod={
+          acceptedBackorder?.depositPaymentMethod
+          || (isTransferPayment ? 'TRANSFER' : 'CASH')
+        }
+        onDepositPaymentMethodChange={(method) =>
+          setAcceptedBackorder((prev) =>
+            prev
+              ? { ...prev, depositPaymentMethod: method }
+              : { depositPaymentMethod: method },
+          )
+        }
         appliedPromotion={appliedPromotion}
         appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
@@ -3769,6 +3798,8 @@ function PosPage() {
           isSubmitting={isSubmitting}
           skipDeposit={isTakeaway}
           forceCompleteDelivery={(customBundles || []).some((b) => (b.ingredients || []).length > 0)}
+          customBundles={customBundles}
+          preferredDepositPaymentMethod={isTransferPayment ? 'TRANSFER' : 'CASH'}
           onAccept={handleBackorderAccept}
           onDecline={handleBackorderDecline}
           onCustomerSelected={selectCustomer}

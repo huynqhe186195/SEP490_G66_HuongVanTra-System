@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 import { showError } from '../../../app/toast.js'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { fetchStoreSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
@@ -335,11 +336,32 @@ export default function CustomBundlePanel({ bundles, onChange }) {
     setLabel('')
   }
 
+  const canConfirm = selectedMaterials.length > 0
+
   return (
     <>
       <DetailModal material={detailMaterial} onClose={() => setDetailMaterial(null)} />
 
-      <div className="flex flex-col gap-4">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#c1c9c0]/40 bg-white px-4 py-2.5">
+          <input
+            type="text"
+            placeholder="Tên gói (tuỳ chọn)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#356647]"
+          />
+          <button
+            type="button"
+            onClick={confirmBundle}
+            disabled={!canConfirm}
+            className="shrink-0 rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a5238] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {currentBundle ? 'Cập nhật gói' : 'Thêm vào đơn'}
+          </button>
+        </div>
+
+        <CustomScrollArea className="flex-1" contentClassName="flex flex-col gap-4 p-4">
         {/* Current bundle summary */}
         {currentBundle && (
           <div className="rounded-xl border border-[#356647]/40 bg-[#f3f8f3] p-3">
@@ -612,25 +634,8 @@ export default function CustomBundlePanel({ bundles, onChange }) {
             </div>
           )}
 
-          {selectedMaterials.length > 0 && (
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Tên gói (tuỳ chọn)"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#356647]"
-              />
-              <button
-                type="button"
-                onClick={confirmBundle}
-                className="shrink-0 rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a5238]"
-              >
-                {currentBundle ? 'Cập nhật gói' : 'Thêm vào đơn'}
-              </button>
-            </div>
-          )}
         </div>
+        </CustomScrollArea>
       </div>
     </>
   )

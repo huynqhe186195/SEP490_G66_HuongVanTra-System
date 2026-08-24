@@ -16,12 +16,15 @@ import {
 import { clearToasts, showError } from '../../app/toast'
 import { confirmLeaveIfCashSessionOpen } from '../../features/pos/utils/confirmLeaveIfCashSessionOpen.js'
 
+const DESKTOP_NAV_MEDIA = '(min-width: 1024px)'
+
 function Sidebar({
   items,
   isLoading = false,
   mobileOpen = false,
   collapsed = false,
   onToggleCollapsed,
+  onOpenMobile,
   onNavigate,
   width = null,
   onWidthChange = null,
@@ -40,9 +43,22 @@ function Sidebar({
   })
   const [isScrollIndicatorActive, setIsScrollIndicatorActive] = useState(false)
 
+  const [isDesktopNav, setIsDesktopNav] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(DESKTOP_NAV_MEDIA).matches : true,
+  )
   const authSession = loadAuthSession()
   const userLabel = formatDisplayName(authSession?.username) || 'Quản trị'
-  const isCompact = collapsed
+  const useMobileOverlay = !isDesktopNav && mobileOpen
+  const useMobileRail = !isDesktopNav && !mobileOpen
+  const isCompact = (isDesktopNav && collapsed) || useMobileRail
+
+  useEffect(() => {
+    const media = window.matchMedia(DESKTOP_NAV_MEDIA)
+    const sync = () => setIsDesktopNav(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
 
   // Drag-to-resize (desktop only, not in compact/collapsed mode)
   const dragStartRef = useRef(null)
@@ -251,16 +267,21 @@ function Sidebar({
     ].join(' ')
 
   return (
+    <>
+    {!isDesktopNav ? (
+      <div className="w-[5.25rem] shrink-0" aria-hidden="true" />
+    ) : null}
     <aside
       className={[
-        'relative z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[transform,padding] duration-300 ease-out',
-        'fixed inset-y-0 left-0 rounded-none lg:static lg:z-auto lg:m-4 lg:translate-x-0 lg:rounded-[32px]',
+        'z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[padding] duration-300 ease-out',
+        useMobileOverlay || useMobileRail
+          ? 'fixed inset-y-0 left-0 rounded-none'
+          : 'relative lg:static lg:z-auto lg:m-4 lg:rounded-[32px]',
         isCompact
-          ? 'w-[min(100vw-2rem,5.25rem)] p-3 lg:w-[5.25rem]'
+          ? 'w-[5.25rem] p-3'
           : 'w-[min(100vw-2rem,17rem)] max-w-[85vw] p-4 lg:p-5',
-        mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
       ].join(' ')}
-      style={!isCompact && width ? { width: `${width}px` } : undefined}
+      style={isDesktopNav && !isCompact && width ? { width: `${width}px` } : undefined}
       aria-expanded={!isCompact}
     >
       {/* Header */}
@@ -272,10 +293,13 @@ function Sidebar({
             <div className="flex w-full justify-end">
               <button
                 type="button"
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white transition hover:bg-white/25 lg:inline-flex"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white transition hover:bg-white/25"
                 aria-label="Mở rộng menu"
                 title="Mở rộng menu"
-                onClick={onToggleCollapsed}
+                onClick={() => {
+                  if (isDesktopNav) onToggleCollapsed?.()
+                  else onOpenMobile?.()
+                }}
               >
                 <span className="material-symbols-outlined text-[18px]">chevron_right</span>
               </button>
@@ -605,6 +629,7 @@ function Sidebar({
         </div>
       ) : null}
     </aside>
+    </>
   )
 }
 

@@ -42,10 +42,13 @@ export default function PosPaymentConfirmModal({
   orderNote = '',
   customBundles = [],
   backorderDepositAmount = null,
+  depositPaymentMethod = 'CASH',
+  onDepositPaymentMethodChange,
 }) {
   if (!isOpen) return null
 
   const deposit = backorderDepositAmount == null ? null : Number(backorderDepositAmount)
+  const depositByQr = deposit != null && depositPaymentMethod === 'TRANSFER'
   const remainingAfterDeposit = deposit == null ? 0 : Math.max(0, Number(total) - deposit)
   const note = orderNote?.trim()
   const customerName = selectedCustomer?.fullName || selectedCustomer?.customerSnapshotName || 'Khách lẻ'
@@ -170,8 +173,41 @@ export default function PosPaymentConfirmModal({
               </section>
 
               <section className="rounded-xl border border-[#f0eee6] p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Thanh toán</p>
-                <p className="mt-1 font-semibold text-[#1b1c17]">{paymentMethodLabel}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">
+                  {deposit != null ? 'Thu tiền cọc' : 'Thanh toán'}
+                </p>
+                {deposit != null && onDepositPaymentMethodChange ? (
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'CASH', label: 'Tiền mặt' },
+                      { id: 'TRANSFER', label: 'QR / CK' },
+                    ].map((method) => {
+                      const active = depositPaymentMethod === method.id
+                      return (
+                        <button
+                          key={method.id}
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => onDepositPaymentMethodChange(method.id)}
+                          className={`rounded-lg border px-2 py-2 text-xs font-bold disabled:opacity-50 ${
+                            active
+                              ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                              : 'border-[#c1c9c0] bg-white text-[#414942] hover:bg-[#f6f4ec]'
+                          }`}
+                        >
+                          {method.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-1 font-semibold text-[#1b1c17]">{paymentMethodLabel}</p>
+                )}
+                {depositByQr ? (
+                  <p className="mt-2 text-xs text-[#717971]">
+                    Khách quét QR {formatMoney(deposit)} đ tiền cọc. Phần còn lại thu khi nhận hàng.
+                  </p>
+                ) : null}
               </section>
 
               {appliedPromotion ? (
@@ -249,7 +285,13 @@ export default function PosPaymentConfirmModal({
             disabled={isSubmitting}
             className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
           >
-            {isSubmitting ? 'Đang xử lý...' : deposit != null ? `Xác nhận nhận cọc ${formatMoney(deposit)} đ` : 'Xác nhận thanh toán'}
+            {isSubmitting
+              ? 'Đang xử lý...'
+              : deposit != null
+                ? depositByQr
+                  ? `Tạo QR cọc ${formatMoney(deposit)} đ`
+                  : `Xác nhận nhận cọc ${formatMoney(deposit)} đ`
+                : 'Xác nhận thanh toán'}
           </button>
         </footer>
       </div>

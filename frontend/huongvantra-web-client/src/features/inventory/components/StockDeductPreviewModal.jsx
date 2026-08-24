@@ -9,6 +9,33 @@ import {
   confirmStockDeductQueue,
   previewStockDeductQueue,
 } from '../services/stockDeductQueueApi.js'
+import { confirmPacking } from '../../orders/services/customBundleApi.js'
+import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
+import {
+  buildWarehouseStockBySkuIdMap,
+  fetchSkuStocks,
+  fetchStoreSkuStocks,
+} from '../services/inventoryStockApi.js'
+
+function WorkSection({ title, badge, badgeOk, className = '', children }) {
+  return (
+    <div className={`overflow-hidden rounded-xl border border-slate-100 ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <p className="text-sm font-semibold text-slate-800">{title}</p>
+        {badge ? (
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+              badgeOk ? 'bg-[#b9d4b0]/40 text-[#356647]' : 'bg-amber-100 text-amber-800'
+            }`}
+          >
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  )
+}
 
 function StockDeductPreviewModal({
   queueId,
@@ -19,6 +46,7 @@ function StockDeductPreviewModal({
   createdAt,
   canConfirm = false,
   canCancel = false,
+  customBundles = [],
   onClose,
   onConfirmed,
 }) {
@@ -30,6 +58,8 @@ function StockDeductPreviewModal({
   const [isCancelOpen, setIsCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+  const [customMaterialRows, setCustomMaterialRows] = useState([])
+  const [isLoadingCustomStock, setIsLoadingCustomStock] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -59,37 +89,162 @@ function StockDeductPreviewModal({
     }
   }, [queueId])
 
+  useEffect(() => {
+    let cancelled = false
+    const bundles = customBundles || []
+
+    async function loadCustomStock() {
+      if (!bundles.length) {
+        setCustomMaterialRows([])
+        return
+      }
+      setIsLoadingCustomStock(true)
+      try {
+        const stocks = await fetchSkuStocks().catch(() => fetchStoreSkuStocks().catch(() => []))
+        if (cancelled) return
+        const stockBySkuId = buildWarehouseStockBySkuIdMap(stocks)
+        const rows = []
+        for (const bundle of bundles) {
+          const packed = String(bundle.queueStatus || '').toLowerCase() === 'confirmed'
+          const lines = bundle.lines || []
+          for (const line of lines) {
+            const skuId = line.skuId
+            const required = Number(line.orderedQuantity) || 0
+            const available = Number(stockBySkuId.get(skuId) ?? 0)
+            const shortage = packed ? 0 : Math.max(0, required - available)
+            rows.push({
+              key: `${bundle.bundleId || bundle.queueId}:${skuId || line.skuCode}`,
+              bundleId: bundle.bundleId || bundle.id,
+              bundleLabel: bundle.label || PERSONAL_PRODUCT_LABEL,
+              packed,
+              materialId: skuId,
+              materialCode: line.skuCode || '',
+              materialName: line.skuName || '',
+              requiredQuantity: required,
+              availableQuantity: available,
+              shortageQuantity: shortage,
+            })
+          }
+        }
+        setCustomMaterialRows(rows)
+      } catch {
+        if (!cancelled) setCustomMaterialRows([])
+      } finally {
+        if (!cancelled) setIsLoadingCustomStock(false)
+      }
+    }
+
+    loadCustomStock()
+    return () => {
+      cancelled = true
+    }
+  }, [customBundles])
+
+  const pendingCustomBundles = (customBundles || []).filter(
+    (bundle) => String(bundle.queueStatus || '').toLowerCase() !== 'confirmed',
+  )
+  const hasCustomBundles = (customBundles || []).length > 0
+  const customShortageTotal = customMaterialRows.reduce(
+    (sum, row) => sum + (Number(row.shortageQuantity) || 0),
+    0,
+  )
+  const catalogQueueId = String(preview?.queueId || queueId || '')
+  const catalogNeedsConfirm =
+    Boolean(preview) &&
+    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient')
+  const isCancellationRequested = preview?.orderStockStatus?.toLowerCase() === 'cancellation_requested'
+  const isBomReconciliation = Boolean(preview?.isBomReconciliation)
+  const willCreateProductionOrder = Boolean(preview?.willCreateProductionOrder)
+  const willCreateStockTransfer = Boolean(preview?.willCreateStockTransfer)
+  const isBackorder = preview?.lines?.some((line) => {
+    const mode = String(line.stockHandlingMode || '')
+    const hasWarehouseWork = Number(line.warehouseTransferQuantity) > 0 || Number(line.pendingBomQuantity) > 0
+    return mode.includes('backorder') && !hasWarehouseWork
+  })
+  const hasWarehouseTransfer = preview?.lines?.some((line) => line.warehouseTransferQuantity > 0)
+  const canConfirmQueue =
+    canConfirm &&
+    catalogNeedsConfirm &&
+    !isCancellationRequested &&
+    (!isBackorder || hasCustomBundles)
+  const catalogReady = canConfirmQueue && Boolean(preview?.canDeduct)
+  const customReady =
+    canConfirm &&
+    pendingCustomBundles.length > 0 &&
+    !isLoadingCustomStock &&
+    customShortageTotal <= 0
+  const retryCatalogOnly = canConfirmQueue && !catalogReady && !customReady
+
   const handleConfirm = async () => {
     setIsConfirming(true)
     setConfirmShortages(null)
     setShowConfirmDialog(false)
+    const shouldConfirmCatalog = catalogReady || retryCatalogOnly
+    const shouldPackCustom = customReady
     try {
-      const result = await confirmStockDeductQueue(queueId)
-      if (result.canDeduct === false) {
-        setConfirmShortages(result.shortages || [])
-        setPreview((prev) =>
-          prev
-            ? { ...prev, queueStatus: result.queueStatus, orderStockStatus: result.orderStockStatus, canDeduct: false }
-            : prev,
-        )
-        showError('Chưa đủ tồn để xác nhận. Yêu cầu đóng gói đã chuyển sang Chờ hàng.')
-        onConfirmed?.()
-        return
+      let catalogOk = !shouldConfirmCatalog
+      if (shouldConfirmCatalog) {
+        if (!catalogQueueId || catalogQueueId.startsWith('order:')) {
+          showError('Không xác định được phiếu thành phẩm để trừ tồn.')
+        } else {
+          try {
+            const result = await confirmStockDeductQueue(catalogQueueId)
+            if (result.canDeduct === false) {
+              setConfirmShortages(result.shortages || [])
+              setPreview((prev) =>
+                prev
+                  ? { ...prev, queueStatus: result.queueStatus, orderStockStatus: result.orderStockStatus, canDeduct: false }
+                  : prev,
+              )
+              showError('Thành phẩm chưa đủ — giữ Chờ hàng. Phần còn lại không bị trừ.')
+            } else {
+              catalogOk = true
+            }
+          } catch (error) {
+            if (error.code === 'INSUFFICIENT_STOCK' && error.shortages?.length) {
+              setConfirmShortages(error.shortages)
+            }
+            showError(error.message || 'Không xác nhận được thành phẩm.')
+          }
+        }
       }
 
-      showSuccess(
-        preview?.willCreateProductionOrder
-          ? 'Đã xác nhận: đã sinh lệnh sản xuất và phiếu điều chuyển (nếu cần), trừ tồn Kệ.'
-          : preview?.willCreateStockTransfer
-            ? 'Đã xác nhận: đã sinh phiếu điều chuyển Kho → Kệ và trừ tồn.'
-            : 'Đã xác nhận trừ tồn thành công.',
-      )
+      const packedIds = []
+      const packErrors = []
+      if (shouldPackCustom) {
+        for (const bundle of pendingCustomBundles) {
+          const bundleId = bundle.bundleId || bundle.id
+          if (!bundleId) continue
+          try {
+            await confirmPacking(bundleId)
+            packedIds.push(bundleId)
+          } catch (error) {
+            packErrors.push(error?.message || `Không đóng gói được ${PERSONAL_PRODUCT_LABEL.toLowerCase()}.`)
+          }
+        }
+      }
+
+      if (packedIds.length) {
+        showSuccess(`Đã đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()} và trừ nguyên liệu Kho.`)
+      }
+      if (catalogOk && shouldConfirmCatalog) {
+        showSuccess(
+          preview?.willCreateProductionOrder
+            ? 'Đã xác nhận thành phẩm: sinh lệnh sản xuất / điều chuyển (nếu cần) và trừ tồn.'
+            : preview?.willCreateStockTransfer
+              ? 'Đã xác nhận thành phẩm: điều chuyển Kho → Kệ và trừ tồn.'
+              : 'Đã xác nhận trừ tồn thành phẩm.',
+        )
+      }
+      if (packErrors.length) showError(packErrors[0])
+
       onConfirmed?.()
-      onClose?.()
+      if ((catalogOk || !shouldConfirmCatalog) && packErrors.length === 0) onClose?.()
     } catch (error) {
       if (error.code === 'INSUFFICIENT_STOCK' && error.shortages?.length) {
         setConfirmShortages(error.shortages)
         showError('Vẫn thiếu tồn — cần bổ sung trước khi thử lại.')
+        onConfirmed?.()
       } else {
         showError(error.message)
       }
@@ -118,16 +273,10 @@ function StockDeductPreviewModal({
     }
   }
 
-  const isCancellationRequested = preview?.orderStockStatus?.toLowerCase() === 'cancellation_requested'
   const canCancelQueue =
     canCancel &&
     preview &&
     (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient')
-  const isBomReconciliation = Boolean(preview?.isBomReconciliation)
-  const willCreateProductionOrder = Boolean(preview?.willCreateProductionOrder)
-  const willCreateStockTransfer = Boolean(preview?.willCreateStockTransfer)
-  const isBackorder = preview?.lines?.some((line) => line.stockHandlingMode.includes('backorder'))
-  const hasWarehouseTransfer = preview?.lines?.some((line) => line.warehouseTransferQuantity > 0)
   const generatedDocuments = [
     willCreateProductionOrder ? 'Lệnh sản xuất (SX-…)' : null,
     willCreateStockTransfer ? 'Phiếu điều chuyển Kho → Kệ Hàng (DC-…)' : null,
@@ -151,12 +300,18 @@ function StockDeductPreviewModal({
     : hasWarehouseTransfer
       ? 'Thành phẩm cần điều chuyển từ Kho'
       : 'Tồn cần xử lý'
-  const canConfirmQueue =
-    canConfirm &&
-    preview &&
-    !isBackorder &&
-    (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient') &&
-    !isCancellationRequested
+  const catalogBadge = catalogReady
+    ? 'Đủ — sẽ xử lý khi xác nhận'
+    : catalogNeedsConfirm
+      ? (preview?.canDeduct ? stockAvailabilityLabel : `Chưa đủ — giữ chờ`)
+      : stockAvailabilityLabel
+  const customBadge = pendingCustomBundles.length === 0 && hasCustomBundles
+    ? 'Đã đóng gói'
+    : customReady
+      ? 'Đủ — sẽ đóng gói khi xác nhận'
+      : customShortageTotal > 0
+        ? `Thiếu tổng ${customShortageTotal} — chưa đóng gói`
+        : 'Đang kiểm tra tồn'
   const orderStatusMeta = preview
     ? resolveStockDeductOrderStatusMeta(orderPaymentStatus ?? preview.orderPaymentStatus, preview.orderStockStatus)
     : null
@@ -257,87 +412,191 @@ function StockDeductPreviewModal({
                 </div>
               </dl>
 
-              {preview.lines?.length ? (
-                <div className="mb-4 overflow-hidden rounded-xl border border-slate-100">
-                  <table className="w-full table-fixed text-left text-sm">
-                    <colgroup>
-                      <col className="w-[38%]" />
-                      <col className="w-[12.4%]" />
-                      <col className="w-[12.4%]" />
-                      <col className="w-[12.4%]" />
-                      <col className="w-[12.4%]" />
-                      <col className="w-[12.4%]" />
-                    </colgroup>
-                    <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                      <tr className="text-[11px]">
-                        <th className="px-4 py-3">Sản Phẩm</th>
-                        <th className="whitespace-nowrap px-3 py-3 text-right">Khách đặt</th>
-                        <th className="whitespace-nowrap px-3 py-3 text-right">Đã trừ Kệ</th>
-                        <th className="whitespace-nowrap px-3 py-3 text-right">Lấy từ Kho</th>
-                        <th className="whitespace-nowrap px-3 py-3 text-right">Cần sản xuất</th>
-                        <th className="whitespace-nowrap px-3 py-3 text-right">Hẹn Giao Sau</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {preview.lines.map((line) => (
-                        <tr key={line.skuId}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
-                            <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.orderedQuantity}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.finishedDeductedQuantity}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.warehouseTransferQuantity}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
-                            {isBackorder ? 0 : line.pendingBomQuantity}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
-                            {isBackorder ? Math.max(0, line.orderedQuantity - line.finishedDeductedQuantity - line.warehouseTransferQuantity) : 0}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {hasCustomBundles && (catalogNeedsConfirm || pendingCustomBundles.length > 0) ? (
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">Đơn gồm 2 phần. Mỗi phần xử lý độc lập — chỉ trừ / đóng gói phần đã đủ tồn.</p>
+                  <ul className="mt-2 space-y-1">
+                    <li>
+                      <span className="font-semibold">Thành phẩm:</span>{' '}
+                      {catalogReady
+                        ? willCreateProductionOrder
+                          ? 'đủ nguyên liệu — sẽ sinh lệnh sản xuất / điều chuyển và trừ tồn.'
+                          : 'đủ — sẽ trừ tồn / điều chuyển.'
+                        : 'chưa đủ — giữ phiếu chờ, không trừ lần này.'}
+                    </li>
+                    <li>
+                      <span className="font-semibold">{PERSONAL_PRODUCT_LABEL}:</span>{' '}
+                      {customReady
+                        ? 'đủ nguyên liệu — sẽ đóng gói và trừ Kho.'
+                        : pendingCustomBundles.length
+                          ? 'chưa đủ — chưa đóng gói.'
+                          : 'đã đóng gói.'}
+                    </li>
+                  </ul>
                 </div>
               ) : null}
 
-              <div className="overflow-hidden rounded-xl border border-slate-100">
-                <p className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">{detailSectionTitle}</p>
-                <table className="w-full table-fixed text-left text-sm">
-                  <colgroup>
-                    <col className="w-[44%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[25%]" />
-                    <col className="w-[15%]" />
-                  </colgroup>
-                  <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-                    <tr className="text-[11px]">
-                      <th className="px-4 py-3">{isBomReconciliation ? 'Nguyên liệu/Bao bì' : 'Thành phẩm'}</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">{isBomReconciliation ? 'Cần dùng' : 'Cần điều chuyển'}</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Tồn Kho khả dụng</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Thiếu</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {preview.items.map((row) => (
-                      <tr key={row.materialId} className={row.shortageQuantity > 0 ? 'bg-amber-50/40' : ''}>
-                        <td className="px-4 py-3 font-medium text-slate-800">
-                          {row.materialName || `SKU #${row.materialId}`}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.requiredQuantity}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.availableQuantity}</td>
-                        <td
-                          className={`whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums ${
-                            row.shortageQuantity > 0 ? 'text-amber-700' : 'text-[#538463]'
-                          }`}
-                        >
-                          {row.shortageQuantity > 0 ? row.shortageQuantity : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {preview.lines?.length || preview.items?.length ? (
+                <WorkSection title="Thành phẩm" badge={catalogBadge} badgeOk={catalogReady || Boolean(preview.canDeduct && !catalogNeedsConfirm)}>
+                  {preview.lines?.length ? (
+                    <table className="w-full table-fixed text-left text-sm">
+                      <colgroup>
+                        <col className="w-[38%]" />
+                        <col className="w-[12.4%]" />
+                        <col className="w-[12.4%]" />
+                        <col className="w-[12.4%]" />
+                        <col className="w-[12.4%]" />
+                        <col className="w-[12.4%]" />
+                      </colgroup>
+                      <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <tr className="text-[11px]">
+                          <th className="px-4 py-3">Sản Phẩm</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right">Khách đặt</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right">Đã trừ Kệ</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right">Lấy từ Kho</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right">Cần sản xuất</th>
+                          <th className="whitespace-nowrap px-3 py-3 text-right">Hẹn Giao Sau</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {preview.lines.map((line) => (
+                          <tr key={line.skuId}>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
+                              <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.orderedQuantity}</td>
+                            <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.finishedDeductedQuantity}</td>
+                            <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{line.warehouseTransferQuantity}</td>
+                            <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
+                              {isBackorder ? 0 : line.pendingBomQuantity}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-amber-700">
+                              {isBackorder ? Math.max(0, line.orderedQuantity - line.finishedDeductedQuantity - line.warehouseTransferQuantity) : 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+
+                  {preview.items?.length ? (
+                    <div className={preview.lines?.length ? 'border-t border-slate-100' : ''}>
+                      <p className="bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {detailSectionTitle}
+                      </p>
+                      <table className="w-full table-fixed text-left text-sm">
+                        <colgroup>
+                          <col className="w-[44%]" />
+                          <col className="w-[16%]" />
+                          <col className="w-[25%]" />
+                          <col className="w-[15%]" />
+                        </colgroup>
+                        <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+                          <tr className="text-[11px]">
+                            <th className="px-4 py-3">{isBomReconciliation ? 'Nguyên liệu/Bao bì' : 'Thành phẩm'}</th>
+                            <th className="whitespace-nowrap px-4 py-3 text-right">{isBomReconciliation ? 'Cần dùng' : 'Cần điều chuyển'}</th>
+                            <th className="whitespace-nowrap px-4 py-3 text-right">Tồn Kho khả dụng</th>
+                            <th className="whitespace-nowrap px-4 py-3 text-right">Thiếu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {preview.items.map((row) => (
+                            <tr key={row.materialId} className={row.shortageQuantity > 0 ? 'bg-amber-50/40' : ''}>
+                              <td className="px-4 py-3 font-medium text-slate-800">
+                                {row.materialName || `SKU #${row.materialId}`}
+                              </td>
+                              <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.requiredQuantity}</td>
+                              <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{row.availableQuantity}</td>
+                              <td
+                                className={`whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums ${
+                                  row.shortageQuantity > 0 ? 'text-amber-700' : 'text-[#538463]'
+                                }`}
+                              >
+                                {row.shortageQuantity > 0 ? row.shortageQuantity : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </WorkSection>
+              ) : null}
+
+              {hasCustomBundles ? (
+                <WorkSection
+                  className="mt-4"
+                  title={PERSONAL_PRODUCT_LABEL}
+                  badge={isLoadingCustomStock ? 'Đang tải tồn...' : customBadge}
+                  badgeOk={customReady || (pendingCustomBundles.length === 0 && hasCustomBundles)}
+                >
+                  {isLoadingCustomStock ? (
+                    <p className="px-4 py-3 text-sm text-slate-500">Đang tải tồn Kho nguyên liệu...</p>
+                  ) : customMaterialRows.length ? (
+                    <table className="w-full table-fixed text-left text-sm">
+                      <colgroup>
+                        <col className="w-[44%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[20%]" />
+                        <col className="w-[18%]" />
+                      </colgroup>
+                      <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <tr className="text-[11px]">
+                          <th className="px-4 py-3">Mặt hàng cần trừ từ Kho</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right">Cần trừ</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right">Tồn Kho</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right">Thiếu</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {customMaterialRows.map((row) => (
+                          <tr key={row.key} className={row.shortageQuantity > 0 ? 'bg-amber-50/40' : ''}>
+                            <td className="px-4 py-3 font-medium text-slate-800">
+                              <p>{row.materialName || `SKU #${row.materialId}`}</p>
+                              {row.materialCode ? (
+                                <p className="font-mono text-xs font-normal text-slate-500">{row.materialCode}</p>
+                              ) : null}
+                              {row.packed ? (
+                                <p className="mt-0.5 text-xs font-normal text-[#356647]">Đã đóng gói</p>
+                              ) : null}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">
+                              {row.requiredQuantity}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">
+                              {row.availableQuantity}
+                            </td>
+                            <td
+                              className={`whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums ${
+                                row.shortageQuantity > 0 ? 'text-amber-700' : 'text-[#538463]'
+                              }`}
+                            >
+                              {row.shortageQuantity > 0 ? row.shortageQuantity : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <ul className="divide-y divide-slate-50 text-sm">
+                      {(customBundles || []).map((bundle) => {
+                        const packed = String(bundle.queueStatus || '').toLowerCase() === 'confirmed'
+                        return (
+                          <li key={bundle.bundleId || bundle.queueId} className="px-4 py-3">
+                            <p className="font-medium text-slate-800">
+                              {bundle.label || PERSONAL_PRODUCT_LABEL}
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#356647]">
+                              {packed ? 'Đã đóng gói / đã trừ nguyên liệu Kho' : 'Chờ đóng gói / trừ nguyên liệu Kho'}
+                            </p>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </WorkSection>
+              ) : null}
 
               {confirmShortages?.length ? (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -366,18 +625,42 @@ function StockDeductPreviewModal({
 
               {showConfirmDialog ? (
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-900">Xác nhận {operationLabel}?</p>
-                  {willCreateProductionOrder ? (
-                    <p className="mt-1">
-                      Hệ thống sẽ sản xuất phần còn thiếu theo BOM, điều chuyển Thành phẩm từ Kho lên Kệ, rồi hoàn tất trừ đơn.
-                      Phần đã trừ từ Kệ sẽ không bị trừ lại.
-                    </p>
-                  ) : (
-                    <p className="mt-1">
-                      Hệ thống sẽ điều chuyển Thành phẩm từ Kho lên Kệ Hàng rồi hoàn tất trừ đơn. Phần đã trừ từ Kệ sẽ không bị trừ lại.
-                    </p>
-                  )}
-                  {generatedDocuments.length ? (
+                  <p className="font-semibold text-slate-900">
+                    {catalogReady && customReady
+                      ? 'Xác nhận xử lý cả hai phần đã đủ tồn?'
+                      : catalogReady
+                        ? 'Chỉ xác nhận thành phẩm — sản phẩm cá nhân giữ chờ?'
+                        : customReady
+                          ? `Chỉ đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()} — thành phẩm giữ chờ?`
+                          : `Xác nhận ${operationLabel}?`}
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {catalogNeedsConfirm ? (
+                      <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="font-semibold text-slate-900">Thành phẩm</p>
+                        <p className="mt-0.5">
+                          {catalogReady
+                            ? willCreateProductionOrder
+                              ? 'Sẽ sinh lệnh sản xuất / điều chuyển (nếu cần) rồi trừ tồn. Phần đã trừ Kệ không trừ lại.'
+                              : 'Sẽ điều chuyển (nếu cần) rồi trừ tồn thành phẩm.'
+                            : 'Chưa đủ — lần này không trừ, phiếu thành phẩm vẫn chờ.'}
+                        </p>
+                      </li>
+                    ) : null}
+                    {hasCustomBundles ? (
+                      <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="font-semibold text-slate-900">{PERSONAL_PRODUCT_LABEL}</p>
+                        <p className="mt-0.5">
+                          {customReady
+                            ? 'Sẽ đóng gói và trừ nguyên liệu trên Kho.'
+                            : pendingCustomBundles.length
+                              ? 'Chưa đủ nguyên liệu — lần này không đóng gói.'
+                              : 'Đã đóng gói trước đó.'}
+                        </p>
+                      </li>
+                    ) : null}
+                  </ul>
+                  {generatedDocuments.length && catalogReady ? (
                     <div className="mt-2 rounded-lg border border-[#538463]/20 bg-white px-3 py-2">
                       <p className="font-semibold text-slate-900">Chứng từ sẽ được sinh tự động:</p>
                       <ul className="mt-1 list-disc pl-5">
@@ -472,14 +755,24 @@ function StockDeductPreviewModal({
               Hủy yêu cầu
             </button>
           ) : null}
-          {canConfirmQueue && !showConfirmDialog && !isCancelOpen ? (
+          {(canConfirmQueue || (canConfirm && pendingCustomBundles.length > 0)) && !showConfirmDialog && !isCancelOpen ? (
             <button
               type="button"
               disabled={isConfirming}
               onClick={() => setShowConfirmDialog(true)}
               className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isConfirming ? 'Đang xử lý...' : preview.canDeduct ? `Xác nhận ${operationLabel}` : 'Thử xử lý lại'}
+              {isConfirming
+                ? 'Đang xử lý...'
+                : catalogReady && customReady
+                  ? 'Xác nhận 2 phần đã đủ'
+                  : catalogReady
+                    ? 'Xác nhận thành phẩm'
+                    : customReady
+                      ? `Đóng gói ${PERSONAL_PRODUCT_LABEL.toLowerCase()}`
+                      : preview?.canDeduct
+                        ? `Xác nhận ${operationLabel}`
+                        : 'Thử xử lý lại'}
             </button>
           ) : null}
         </div>
