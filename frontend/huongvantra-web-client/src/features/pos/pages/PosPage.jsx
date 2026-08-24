@@ -577,11 +577,12 @@ function PosPage() {
   const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
   const isTransferTakeaway = isTakeaway && isTransferPayment
 
-  // Offline: quầy chỉ tiền mặt; Bán COD chỉ COD (ẩn CK / VietQR).
+  // Offline is deliberately restricted to counter CASH. COD and VietQR always
+  // require the server, so do not present an offline payment option for them.
   const paymentMethods = (isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS)
     .filter((m) => {
       if (isOnline) return true
-      if (isTakeaway) return m.id === 'COD'
+      if (isTakeaway) return false
       return m.id === 'CASH'
     })
 
@@ -1657,11 +1658,12 @@ function PosPage() {
     // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = !hasCorporateCustomer && (isTakeaway
         ? canPayTakeaway && Boolean(shelfOnDuty) && !isSubmitting
-        : cashSessionOpen
+          : cashSessionOpen
           && shelfOnDuty
           && !shelfDayStatus.dayEndDone
           && (isTransferPayment ? canPayTransfer : canPayCash)
-          && !isSubmitting);
+          && !isSubmitting)
+        && (isOnline || (!isTakeaway && paymentMethod === 'CASH'));
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
