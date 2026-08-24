@@ -49,14 +49,30 @@ public class ProductDeletionValidationController(InventoryDbContext _db) : Contr
             ProductionOrderStatus.Rejected,
         };
 
-        var activeProductionCounts = await _db.ProductionOrders.AsNoTracking()
-            .Where(order => activeProductionStatuses.Contains(order.Status))
-            .SelectMany(order => order.Lines.Select(line => new { line.MaterialSkuId, order.Id })
-                .Concat(order.OutputLines.Select(line => new { MaterialSkuId = line.FinishedSkuId, order.Id })))
-            .Where(row => skuIds.Contains(row.MaterialSkuId))
-            .GroupBy(row => row.MaterialSkuId)
-            .Select(group => new { SkuId = group.Key, Count = group.Select(row => row.Id).Distinct().Count() })
-            .ToDictionaryAsync(row => row.SkuId, row => row.Count, ct);
+        // Keep the two navigations as separate SQL queries. A correlated Concat here
+        // becomes CROSS APPLY, which MySQL/Pomelo cannot translate at runtime.
+        var activeMaterialReferences = await _db.ProductionOrderLines.AsNoTracking()
+            .Where(line => line.Order != null
+                && activeProductionStatuses.Contains(line.Order.Status)
+                && skuIds.Contains(line.MaterialSkuId))
+            .Select(line => new { SkuId = line.MaterialSkuId, OrderId = line.ProductionOrderId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var activeOutputReferences = await _db.ProductionOrderOutputLines.AsNoTracking()
+            .Where(line => line.Order != null
+                && activeProductionStatuses.Contains(line.Order.Status)
+                && skuIds.Contains(line.FinishedSkuId))
+            .Select(line => new { SkuId = line.FinishedSkuId, OrderId = line.ProductionOrderId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var activeProductionCounts = activeMaterialReferences
+            .Concat(activeOutputReferences)
+            .GroupBy(row => row.SkuId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => row.OrderId).Distinct().Count());
 
         var pendingQueueCounts = await _db.StockDeductQueueItems.AsNoTracking()
             .Where(item => skuIds.Contains(item.SkuId)
