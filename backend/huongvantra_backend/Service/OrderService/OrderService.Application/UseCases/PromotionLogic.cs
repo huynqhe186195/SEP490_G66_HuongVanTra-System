@@ -455,10 +455,13 @@ public class PromotionLogic(
         IReadOnlyCollection<PromotionCalculationItem> items,
         decimal manualDiscount)
     {
+        if (manualDiscount > 0)
+            throw new OrderValidationException(
+                "Không thể áp dụng đồng thời mã khuyến mãi và giảm giá thủ công.");
+
         var itemList = items.ToList();
         var totalAmount = itemList.Sum(i => i.SubTotal);
-        var safeManualDiscount = Math.Min(Math.Max(0, manualDiscount), totalAmount);
-        var baseAfterManualDiscount = Math.Max(0, totalAmount - safeManualDiscount);
+        var baseAfterManualDiscount = totalAmount;
 
         if (promotion.MinimumOrderAmount > 0 &&
             baseAfterManualDiscount < promotion.MinimumOrderAmount)
