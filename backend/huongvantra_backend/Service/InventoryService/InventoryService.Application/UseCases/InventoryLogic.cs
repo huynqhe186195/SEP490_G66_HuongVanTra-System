@@ -2980,7 +2980,7 @@ public class InventoryLogic(
                     "Warehouse",
                     NotificationTypes.LowStockAlert,
                     $"Sản phẩm {stock.SkuCode} sắp hết: còn {available}, ngưỡng {stock.ShelfLowStockThreshold}",
-                    $"/inventory/stocks");
+                    "/inventory/statistics");
             }
         }
     }
