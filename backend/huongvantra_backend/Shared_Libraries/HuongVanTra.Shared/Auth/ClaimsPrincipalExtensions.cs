@@ -30,7 +30,10 @@ public static class ClaimsPrincipalExtensions
     }
 
     public static IEnumerable<string> GetRoles(this ClaimsPrincipal principal) =>
-        principal.FindAll(ClaimTypes.Role).Select(c => c.Value);
+        principal.FindAll(ClaimTypes.Role)
+            .Concat(principal.FindAll("role"))
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     public static IEnumerable<string> GetPermissions(this ClaimsPrincipal principal) =>
         principal.FindAll("permission").Select(c => c.Value);

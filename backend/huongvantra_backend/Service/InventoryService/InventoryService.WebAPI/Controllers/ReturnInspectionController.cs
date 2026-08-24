@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class ReturnInspectionController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ReturnInspectionAccess)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? disposition,
         [FromQuery] string? search,
@@ -26,16 +26,16 @@ public class ReturnInspectionController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("by-return/{returnId:guid}")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ReturnInspectionAccess)]
     public async Task<IActionResult> GetByReturnId(Guid returnId, CancellationToken ct)
     {
         var result = await _logic.GetReturnInspectionsByReturnIdAsync(returnId, ct);
         return Ok(result);
     }
 
-    /// <summary>Quyết định Bán lại / Tiêu hủy — chỉ Thủ kho (OPERATE_WAREHOUSE).</summary>
+    /// <summary>Quyết định Bán lại / Tiêu hủy — Thủ kho (PERFORM_RETURN_INSPECTION / legacy OPERATE_WAREHOUSE).</summary>
     [HttpPost("{id:guid}/inspect")]
-    [Authorize(Policy = PermissionNames.OperateWarehouse)]
+    [Authorize(Policy = PermissionNames.ReturnInspectionAccess)]
     public async Task<IActionResult> Inspect(
         Guid id,
         [FromBody] InspectReturnRequest request,

@@ -29,8 +29,14 @@ public static class JwtServiceExtensions
                     ValidateAudience = audience is not null,
                     ValidAudience = audience,
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero,
+                    // JWT outbound thường ghi claim ngắn "role"; IsInRole/[Authorize(Roles)] cần khớp.
+                    RoleClaimType = "role",
+                    NameClaimType = "username",
                 };
+
+                // Giữ cả ClaimTypes.Role lẫn "role" sau khi đọc token.
+                options.MapInboundClaims = false;
 
                 // Invalid/expired token must not break [AllowAnonymous] read endpoints.
                 options.Events = new JwtBearerEvents

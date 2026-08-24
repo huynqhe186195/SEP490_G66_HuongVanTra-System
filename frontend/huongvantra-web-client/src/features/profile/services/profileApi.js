@@ -33,8 +33,8 @@ export async function updateMyProfile(payload) {
   if (newPassword && !currentPassword) {
     throw new Error('Nhập mật khẩu hiện tại để đổi mật khẩu mới.')
   }
-  if (newPassword && newPassword.length < 6) {
-    throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự.')
+  if (newPassword && newPassword.length < 8) {
+    throw new Error('Mật khẩu mới phải có ít nhất 8 ký tự.')
   }
 
   const updated = await apiRequestAuth('/api/auth/update-profile', {

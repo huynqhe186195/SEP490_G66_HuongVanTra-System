@@ -53,8 +53,8 @@ public class UserCreateUpdateValidationTests
     }
 
     [Theory]
-    [InlineData("123456~")]
-    [InlineData("123/456")]
+    [InlineData("12345678~")]
+    [InlineData("12345678/")]
     public async Task Create_invalid_password_returns_vietnamese_message(string password)
     {
         await using var db = UserServiceTestContext.CreateDb();
@@ -131,8 +131,8 @@ public class UserCreateUpdateValidationTests
     }
 
     [Theory]
-    [InlineData("123456~")]
-    [InlineData("123/456")]
+    [InlineData("12345678~")]
+    [InlineData("12345678/")]
     public async Task Update_invalid_password_returns_vietnamese_message(string password)
     {
         var ex = await UpdateAndCatch(null, password, fullName: null);
@@ -210,14 +210,14 @@ public class UserCreateUpdateValidationTests
     private static CreateUserRequest ValidCreate(
         string username,
         int roleId,
-        string password = "123456",
+        string password = "12345678",
         string fullName = "Nguyen Van A") =>
         ValidCreate(username, (List<int>?)[roleId], password, fullName);
 
     private static CreateUserRequest ValidCreate(
         string username,
         List<int>? roleIds,
-        string password = "123456",
+        string password = "12345678",
         string fullName = "Nguyen Van A") =>
         new(username, password, roleIds, fullName, "Sales", 0, null);
 

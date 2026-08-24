@@ -20,7 +20,7 @@ public static class DataSeeder
             PermissionNames.CreatePosOrder,
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
-            PermissionNames.ViewCatalog
+            PermissionNames.ViewCatalog,
         ]),
         ("SaleCod", "Nhân viên bán / thu COD",
         [
@@ -29,7 +29,7 @@ public static class DataSeeder
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
             PermissionNames.VerifyCod,
-            PermissionNames.ViewCatalog
+            PermissionNames.ViewCatalog,
         ]),
         ("Sale", "Nhân viên kinh doanh (legacy → dùng SalePos/SaleCod)",
         [
@@ -37,7 +37,7 @@ public static class DataSeeder
             PermissionNames.CreatePosOrder,
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
-            PermissionNames.ViewCatalog
+            PermissionNames.ViewCatalog,
         ]),
         ("Warehouse", "Thủ kho Kho tổng",
         [
@@ -50,15 +50,20 @@ public static class DataSeeder
             PermissionNames.ViewProductRequest,
             PermissionNames.ViewCost,
             PermissionNames.ShipOrder,
+            PermissionNames.ApproveShelfReplenishment,
+            PermissionNames.PerformReturnInspection,
+            PermissionNames.ManageStockThreshold,
+            PermissionNames.ManageSuppliers,
+            PermissionNames.ManageSupplierProduct,
         ]),
         ("Accountant", "Kế toán",
         [
             PermissionNames.ViewOrder,
             PermissionNames.ViewAllCustomers,
             PermissionNames.ViewInventory,
-            PermissionNames.ManageSuppliers,
             PermissionNames.ManageCost,
             PermissionNames.ViewCost,
+            PermissionNames.ViewCatalog,
             PermissionNames.ViewCustomer,
             PermissionNames.CreateOrder,
             PermissionNames.ManageCorporateCustomer,
@@ -71,8 +76,6 @@ public static class DataSeeder
             PermissionNames.CreatePosOrder,
             PermissionNames.CreateCodOrder,
             PermissionNames.ViewOrder,
-            PermissionNames.ViewCatalog,
-            PermissionNames.ManageCatalog,
             PermissionNames.ViewAllCustomers,
             PermissionNames.ManageEmployee,
             PermissionNames.CreateCustomer,
@@ -84,13 +87,21 @@ public static class DataSeeder
             PermissionNames.ApproveInventory,
             PermissionNames.RejectStockDeduct,
             PermissionNames.ViewCost,
+            PermissionNames.ViewCatalog,
+            PermissionNames.ManageCatalog,
+            PermissionNames.SyncCatalog,
             PermissionNames.ViewProductRequest,
             PermissionNames.ApproveProductRequest,
-            PermissionNames.SyncCatalog,
+            PermissionNames.CreateShelfReplenishment,
+            PermissionNames.ManageStockThreshold,
+            PermissionNames.PerformReturnInspection,
             PermissionNames.ManageCorporateCustomer,
             PermissionNames.CreateB2BOrder,
             PermissionNames.ShipOrder,
             PermissionNames.ConfirmB2BDelivery,
+            PermissionNames.ManageSuppliers,
+            PermissionNames.DeleteSupplier,
+            PermissionNames.ManageSupplierProduct,
         ])
     ];
 
@@ -276,6 +287,7 @@ public static class DataSeeder
                 PermissionNames.ViewOrder,
                 PermissionNames.ViewCustomer,
                 PermissionNames.ViewAllCustomers,
+                PermissionNames.ViewCatalog,
                 PermissionNames.ApprovePrice,
                 PermissionNames.ApproveContract,
                 PermissionNames.ManageBusinessPolicy,

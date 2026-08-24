@@ -24,7 +24,7 @@ public class AuthPermissionUnionTests
         var userLogic = UserServiceTestContext.CreateUserLogic(db);
         await userLogic.CreateAsync(new CreateUserRequest(
             "dual_login",
-            "123456",
+            "12345678",
             roleIds,
             "Dual Login",
             "Sales",
@@ -36,7 +36,7 @@ public class AuthPermissionUnionTests
             new RefreshTokenRepository(db),
             Configuration());
 
-        var response = await auth.LoginAsync(new LoginRequest("dual_login", "123456"));
+        var response = await auth.LoginAsync(new LoginRequest("dual_login", "12345678"));
 
         Assert.Equal(["SaleCod", "SalePos"], response.Roles.OrderBy(role => role));
         Assert.Contains(PermissionNames.CreatePosOrder, response.Permissions);

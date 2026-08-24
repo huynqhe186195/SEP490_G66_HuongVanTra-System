@@ -28,12 +28,14 @@ import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequ
 import { formatCreatorRole } from '../utils/inventoryCreatorDisplay.js'
 import { fetchInventorySettings, fetchSkuStocks } from '../services/inventoryStockApi.js'
 import {
+  approveStockAdjustmentRequest,
   cancelStockAdjustmentRequest,
   confirmStockAdjustmentRequestTransfer,
   fetchStockAdjustmentRequestById,
   fetchStockAdjustmentRequests,
   getAdjustmentRequestStatusPresentation,
   processStockAdjustmentRequestItem,
+  rejectStockAdjustmentRequest,
 } from '../services/stockAdjustmentRequestApi.js'
 import {
   getStockFlowErrorMessage,
@@ -196,6 +198,9 @@ function StockAdjustmentRequestOperationsPage() {
   const [processResult, setProcessResult] = useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isApproving, setIsApproving] = useState(false)
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
 
   const activeQuickFilter = quickFilters.find((tab) => tab.key === activeTab) ?? quickFilters[0]
@@ -373,6 +378,44 @@ function StockAdjustmentRequestOperationsPage() {
       showError(getStockFlowErrorMessage(error, 'Không thể xác nhận chuyển hàng lên Kệ.'))
     } finally {
       setProcessingItemId(null)
+    }
+  }
+
+  async function handleApprove(request) {
+    if (!request?.id) {
+      showError('Không xác định được yêu cầu cần duyệt.')
+      return
+    }
+    setIsApproving(true)
+    try {
+      await approveStockAdjustmentRequest(request.id)
+      showSuccess(`Đã duyệt và chuyển hàng lên Kệ cho ${request.requestCode}.`)
+      await loadData()
+      await refreshDetail(request.id)
+    } catch (error) {
+      showError(getStockFlowErrorMessage(error, 'Không duyệt được yêu cầu.'))
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  async function handleReject(id) {
+    if (!rejectReason.trim()) {
+      showError('Vui lòng nhập lý do từ chối.')
+      return
+    }
+    setActingId(id)
+    try {
+      await rejectStockAdjustmentRequest(id, rejectReason)
+      showSuccess('Đã từ chối yêu cầu.')
+      setRejectTarget(null)
+      setRejectReason('')
+      await loadData()
+      await refreshDetail(id)
+    } catch (error) {
+      showError(getStockFlowErrorMessage(error, 'Không từ chối được yêu cầu.'))
+    } finally {
+      setActingId(null)
     }
   }
 
@@ -708,8 +751,11 @@ function StockAdjustmentRequestOperationsPage() {
                 currentUserId={currentUserId}
                 activeTab={activeTab}
                 processingItemId={processingItemId}
+                isApproving={isApproving}
                 onProcessItem={handleProcessItem}
                 onConfirmTransfer={handleConfirmTransfer}
+                onApprove={handleApprove}
+                onReject={setRejectTarget}
                 onCancel={setCancelTarget}
               />
             ) : (
@@ -759,6 +805,45 @@ function StockAdjustmentRequestOperationsPage() {
                 className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
               >
                 Xác nhận hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rejectTarget ? (
+        <div className="inventory-modal fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800">Từ chối yêu cầu {rejectTarget.requestCode}</h3>
+            <p className="mt-2 text-sm text-slate-600">Từ chối toàn bộ yêu cầu đang chờ — không thay đổi tồn kho.</p>
+            <label className="mt-4 block space-y-2">
+              <span className="text-xs font-semibold text-slate-500">Lý do từ chối *</span>
+              <textarea
+                rows={3}
+                required
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectTarget(null)
+                  setRejectReason('')
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                disabled={actingId === rejectTarget.id}
+                onClick={() => handleReject(rejectTarget.id)}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                Xác nhận từ chối
               </button>
             </div>
           </div>

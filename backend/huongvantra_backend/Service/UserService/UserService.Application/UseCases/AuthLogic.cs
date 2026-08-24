@@ -2,6 +2,7 @@ using UserService.Application.Authorization;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
@@ -82,6 +83,8 @@ public class AuthLogic(
         if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
             throw new UserValidationException("Mật khẩu hiện tại không đúng.");
 
+        UserInputValidator.ValidateNewPassword(request.NewPassword);
+
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.SessionVersion = checked(user.SessionVersion + 1);
         user.UpdatedAt = DateTime.UtcNow;
@@ -93,6 +96,8 @@ public class AuthLogic(
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
+        UserInputValidator.ValidateNewPassword(request.NewPassword);
+
         var user = await userRepo.GetByUsernameAsync(request.Username)
             ?? throw new UserNotFoundByUsernameException(request.Username);
 
@@ -177,7 +182,7 @@ public class AuthLogic(
             claims.Add(new Claim("full_name", user.Employee.FullName.Trim()));
             claims.Add(new Claim("name", user.Employee.FullName.Trim()));
         }
-        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
+        claims.AddRange(roles.Select(r => new Claim("role", r)));
         claims.AddRange(permissions.Select(p => new Claim("permission", p)));
 
         var token = new JwtSecurityToken(

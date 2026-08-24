@@ -159,8 +159,7 @@ public class PasswordResetLogic(
         var newPassword = request.NewPassword ?? string.Empty;
         if (string.IsNullOrWhiteSpace(token))
             throw new UserValidationException("Thiếu mã đặt lại mật khẩu.");
-        if (newPassword.Length < 6)
-            throw new UserValidationException("Mật khẩu mới phải có ít nhất 6 ký tự.");
+        UserInputValidator.ValidateNewPassword(newPassword);
         if (newPassword.Length > 100)
             throw new UserValidationException("Mật khẩu mới không được vượt quá 100 ký tự.");
 

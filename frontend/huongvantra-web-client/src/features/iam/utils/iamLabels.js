@@ -66,9 +66,25 @@ export const PERMISSION_LABELS = {
     label: 'Quản lý danh mục hàng',
     hint: 'Tạo và cập nhật sản phẩm, danh mục, biến thể SKU',
   },
+  VIEW_CATALOG: {
+    label: 'Xem danh mục hàng',
+    hint: 'Xem sản phẩm, danh mục và SKU (không sửa)',
+  },
+  SYNC_CATALOG: {
+    label: 'Đồng bộ danh mục xuống quầy',
+    hint: 'Đồng bộ danh mục kho xuống danh mục bán tại quầy',
+  },
   APPROVE_PRICE: {
-    label: 'Duyệt đổi giá bán',
-    hint: 'Được phép phê duyệt yêu cầu thay đổi giá bán',
+    label: 'Duyệt đổi giá bán (cũ)',
+    hint: 'Quyền cũ — nên dùng Duyệt yêu cầu đổi giá bán',
+  },
+  REQUEST_RETAIL_PRICE_CHANGE: {
+    label: 'Yêu cầu đổi giá bán',
+    hint: 'Kế toán tạo yêu cầu thay đổi giá bán lẻ',
+  },
+  APPROVE_RETAIL_PRICE_CHANGE: {
+    label: 'Duyệt yêu cầu đổi giá bán',
+    hint: 'Phê duyệt hoặc từ chối yêu cầu đổi giá bán lẻ',
   },
   APPROVE_CONTRACT: {
     label: 'Duyệt hợp đồng',
@@ -100,11 +116,19 @@ export const PERMISSION_LABELS = {
   },
   MANAGE_SUPPLIERS: {
     label: 'Quản lý nhà cung cấp',
-    hint: 'Thêm, sửa nhà cung cấp và sản phẩm theo NCC',
+    hint: 'Thêm, sửa hồ sơ nhà cung cấp (Manager, Thủ kho)',
+  },
+  DELETE_SUPPLIER: {
+    label: 'Ẩn/khôi phục nhà cung cấp',
+    hint: 'Ẩn hoặc khôi phục nhà cung cấp (chỉ Manager)',
+  },
+  MANAGE_SUPPLIER_PRODUCT: {
+    label: 'Quản lý mặt hàng nhà cung cấp',
+    hint: 'Thêm, sửa sản phẩm và giá chào theo NCC',
   },
   MANAGE_COST: {
     label: 'Quản lý giá vốn',
-    hint: 'Cập nhật giá vốn và tạo yêu cầu đổi giá bán',
+    hint: 'Cập nhật giá vốn sản phẩm',
   },
   VIEW_COST: {
     label: 'Xem giá vốn',
@@ -125,6 +149,22 @@ export const PERMISSION_LABELS = {
   APPROVE_PRODUCT_REQUEST: {
     label: 'Duyệt yêu cầu tạo/xóa hàng',
     hint: 'Phê duyệt hoặc từ chối yêu cầu tạo/xóa sản phẩm',
+  },
+  CREATE_SHELF_REPLENISHMENT: {
+    label: 'Tạo yêu cầu bổ sung kệ',
+    hint: 'Quản lý tạo yêu cầu bổ sung hàng từ kho lên kệ',
+  },
+  APPROVE_SHELF_REPLENISHMENT: {
+    label: 'Xử lý yêu cầu bổ sung kệ',
+    hint: 'Thủ kho xử lý / xác nhận chuyển hàng lên kệ',
+  },
+  PERFORM_RETURN_INSPECTION: {
+    label: 'Kiểm tra hàng trả',
+    hint: 'Quyết định bán lại hoặc tiêu hủy hàng khách trả',
+  },
+  MANAGE_STOCK_THRESHOLD: {
+    label: 'Quản lý ngưỡng tồn',
+    hint: 'Đặt ngưỡng cảnh báo tồn kệ (Quản lý) hoặc tồn kho (Thủ kho)',
   },
 }
 

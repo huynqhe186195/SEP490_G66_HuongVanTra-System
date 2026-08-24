@@ -24,8 +24,8 @@ function ResetPasswordPage() {
     event.preventDefault()
     setError('')
 
-    if (password.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự.')
+    if (password.length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự.')
       return
     }
     if (password !== confirm) {

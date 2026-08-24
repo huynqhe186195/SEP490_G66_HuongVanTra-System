@@ -444,6 +444,16 @@ export function canManageSuppliers(session) {
   return isAccountantRole(session)
 }
 
+export function canDeleteSupplier(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'DELETE_SUPPLIER')
+}
+
+export function canManageSupplierProducts(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'MANAGE_SUPPLIER_PRODUCT') || hasPermission(session, 'MANAGE_SUPPLIERS')
+}
+
 /** Manager duyệt yêu cầu tạo/xóa hàng hóa; Admin chỉ theo dõi. */
 export function canDecideProductApprovals(session) {
   if (isBusinessOpsBlocked(session)) return false
