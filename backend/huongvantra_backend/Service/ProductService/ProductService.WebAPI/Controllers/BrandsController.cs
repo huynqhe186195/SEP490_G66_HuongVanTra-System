@@ -11,10 +11,12 @@ namespace ProductService.WebAPI.Controllers;
 public class BrandsController(BrandLogic _brandLogic) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetAll([FromQuery] bool? isDeleted) =>
         Ok(await _brandLogic.GetAllAsync(isDeleted));
 
     [HttpGet("{id:int}")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _brandLogic.GetByIdAsync(id));
 

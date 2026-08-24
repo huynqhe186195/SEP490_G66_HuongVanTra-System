@@ -28,6 +28,7 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<ProductDeletionRequestRevision> ProductDeletionRequestRevisions => Set<ProductDeletionRequestRevision>();
     public DbSet<RetailPriceChangeRequest> RetailPriceChangeRequests => Set<RetailPriceChangeRequest>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,5 +54,6 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new ProductDeletionRequestRevisionConfiguration());
         modelBuilder.ApplyConfiguration(new RetailPriceChangeRequestConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationRecipientConfiguration());
     }
 }

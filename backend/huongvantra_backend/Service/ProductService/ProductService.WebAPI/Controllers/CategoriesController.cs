@@ -12,10 +12,12 @@ namespace ProductService.WebAPI.Controllers;
 public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetAll([FromQuery] bool? isDeleted) =>
         Ok(await _categoryLogic.GetAllAsync(isDeleted, User.GetCatalogViewScope()));
 
     [HttpGet("{id:int}")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _categoryLogic.GetByIdAsync(id));
 

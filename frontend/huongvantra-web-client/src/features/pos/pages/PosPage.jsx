@@ -63,7 +63,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canCreateCustomer, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canSyncCatalog as canRunCatalogSync, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import {
@@ -287,7 +287,7 @@ function PosPage() {
   const location = useLocation()
   const authSession = useAuthSession()
   const authUserId = authSession?.userId ? String(authSession.userId) : null
-  const canSyncCatalog = canUsePosCounterMode(authSession)
+  const canSyncCatalog = canRunCatalogSync(authSession)
   const allowedSalesModes = useMemo(() => {
     const allowCounter = canUsePosCounterMode(authSession)
     const allowCod = canUsePosCodMode(authSession)

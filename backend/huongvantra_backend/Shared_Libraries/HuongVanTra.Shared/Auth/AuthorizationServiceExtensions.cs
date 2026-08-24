@@ -65,9 +65,7 @@ public static class AuthorizationServiceExtensions
 
             options.AddPolicy(PermissionNames.ViewCatalogAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.ViewInventory,
-                    PermissionNames.ManageCatalog,
-                    PermissionNames.ViewCost)));
+                    PermissionNames.ViewCatalog)));
 
             // Lập hợp đồng B2B cần thấy cả nguyên liệu/bao bì — không phụ thuộc role Thủ kho.
             options.AddPolicy(PermissionNames.ContractCatalogAccess, policy =>

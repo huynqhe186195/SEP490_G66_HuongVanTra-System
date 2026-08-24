@@ -121,10 +121,12 @@ public class DataSeederRoleNormalizationTests
         var legacyPermissions = await PermissionNamesForRole(db, "Sale");
 
         Assert.Contains(PermissionNames.CreatePosOrder, salePosPermissions);
+        Assert.Contains(PermissionNames.ViewCatalog, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.CreateCodOrder, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.VerifyCod, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.ManageCatalog, salePosPermissions);
         Assert.Contains(PermissionNames.CreateCodOrder, saleCodPermissions);
+        Assert.Contains(PermissionNames.ViewCatalog, saleCodPermissions);
         Assert.Contains(PermissionNames.VerifyCod, saleCodPermissions);
         Assert.DoesNotContain(PermissionNames.CreatePosOrder, saleCodPermissions);
         Assert.DoesNotContain(PermissionNames.ManageCatalog, saleCodPermissions);
@@ -132,6 +134,37 @@ public class DataSeederRoleNormalizationTests
             salePosPermissions.OrderBy(value => value),
             legacyPermissions.OrderBy(value => value));
         Assert.DoesNotContain(PermissionNames.ManageCatalog, legacyPermissions);
+    }
+
+    [Fact]
+    public async Task Catalog_permissions_follow_manager_write_and_staff_read_baseline()
+    {
+        await using var db = UserServiceTestContext.CreateDb();
+        await DataSeeder.SeedAsync(db);
+
+        var managerPermissions = await PermissionNamesForRole(db, "Manager");
+        var warehousePermissions = await PermissionNamesForRole(db, "Warehouse");
+
+        Assert.Contains(PermissionNames.ViewCatalog, managerPermissions);
+        Assert.Contains(PermissionNames.ManageCatalog, managerPermissions);
+        Assert.Contains(PermissionNames.ViewCatalog, warehousePermissions);
+        Assert.DoesNotContain(PermissionNames.ManageCatalog, warehousePermissions);
+    }
+
+    [Fact]
+    public async Task Admin_receives_product_request_approval_permission()
+    {
+        await using var db = UserServiceTestContext.CreateDb();
+
+        await DataSeeder.SeedAsync(db);
+
+        var admin = await db.Roles
+            .Include(role => role.RolePermissions)
+            .SingleAsync(role => role.RoleName == DataSeeder.AdminRoleName);
+        var approvalPermission = await db.Permissions
+            .SingleAsync(permission => permission.PermissionCode == PermissionNames.ApproveProductRequest);
+
+        Assert.Contains(admin.RolePermissions, assignment => assignment.PermissionId == approvalPermission.Id);
     }
 
     private static Task<Role> Role(UserDbContext db, string roleName) =>

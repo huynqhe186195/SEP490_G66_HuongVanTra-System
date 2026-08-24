@@ -121,13 +121,12 @@ export function canSimulateOrderCompleted(session) {
 
 export function canManageCatalog(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'MANAGE_CATALOG')) return true
-  return isWarehouseRole(session)
+  return hasPermission(session, 'MANAGE_CATALOG')
 }
 
 /** Chỉ Thủ kho được tạo mới sản phẩm / danh mục / SKU. */
 export function canCreateCatalog(session) {
-  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
+  return canManageCatalog(session)
 }
 
 /** Chỉ Thủ kho được ẩn / kích hoạt lại sản phẩm, danh mục. */
@@ -136,7 +135,7 @@ export function canHideCatalog(session) {
 }
 
 export function canCreateProductDeletionRequest(session) {
-  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
+  return canManageCatalog(session)
 }
 
 export function canAccessWarehouseInventory(session) {
@@ -149,7 +148,8 @@ export function canManageProducts(session) {
 }
 
 export function canSyncCatalog(session) {
-  return !canCreateCatalog(session) && (canManageCatalog(session) || canAdjustStoreStock(session))
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'SYNC_CATALOG')
 }
 
 export function canViewOrders(session) {

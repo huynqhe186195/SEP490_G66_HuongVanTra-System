@@ -42,20 +42,31 @@ public class NotificationLogic(ProductDbContext _db)
         request ??= new GetNotificationsRequest();
         ProductInputValidator.ValidatePagination(request.Page, request.PageSize);
 
-        var query = BuildRecipientQuery(actor).AsNoTracking();
+        var actorId = RequireActorId(actor);
+        var recipientStates = _db.NotificationRecipients
+            .Where(x => x.RecipientUserId == actorId);
+        var query = from notification in BuildRecipientQuery(actor)
+                    join state in recipientStates on notification.Id equals state.NotificationId into states
+                    from state in states.DefaultIfEmpty()
+                    select new
+                    {
+                        Notification = notification,
+                        IsRead = state != null && state.IsRead,
+                        ReadAt = state == null ? null : state.ReadAt,
+                    };
 
         if (request.UnreadOnly)
             query = query.Where(x => !x.IsRead);
 
         var total = await query.CountAsync(ct);
-        var items = await query
-            .OrderByDescending(x => x.CreatedAt)
+        var items = await query.AsNoTracking()
+            .OrderByDescending(x => x.Notification.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(ct);
 
         return new PagedResponse<NotificationResponse>(
-            items.Select(MapToResponse).ToList(),
+            items.Select(x => MapToResponse(x.Notification, x.IsRead, x.ReadAt)).ToList(),
             request.Page,
             request.PageSize,
             total,
@@ -66,8 +77,15 @@ public class NotificationLogic(ProductDbContext _db)
         ProductApprovalActorSnapshot actor,
         CancellationToken ct = default)
     {
-        var unread = await BuildRecipientQuery(actor).AsNoTracking()
-            .CountAsync(x => !x.IsRead, ct);
+        var actorId = RequireActorId(actor);
+        var recipientStates = _db.NotificationRecipients
+            .Where(x => x.RecipientUserId == actorId);
+        var unread = await (
+            from notification in BuildRecipientQuery(actor)
+            join state in recipientStates on notification.Id equals state.NotificationId into states
+            from state in states.DefaultIfEmpty()
+            where state == null || !state.IsRead
+            select notification.Id).CountAsync(ct);
 
         return new NotificationSummaryResponse(unread);
     }
@@ -77,37 +95,69 @@ public class NotificationLogic(ProductDbContext _db)
         ProductApprovalActorSnapshot actor,
         CancellationToken ct = default)
     {
+        var actorId = RequireActorId(actor);
         var entity = await BuildRecipientQuery(actor).FirstOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new ProductValidationException("Không tìm thấy thông báo.");
 
-        if (!entity.IsRead)
+        var recipient = await _db.NotificationRecipients
+            .FirstOrDefaultAsync(x => x.NotificationId == entity.Id && x.RecipientUserId == actorId, ct);
+        if (recipient is null)
         {
             var readAt = DateTime.UtcNow;
-            entity.IsRead = true;
-            entity.ReadAt = readAt;
-            entity.ReadBy = NormalizeActorId(actor);
-            entity.UpdatedAt = readAt;
+            recipient = new NotificationRecipient
+            {
+                NotificationId = entity.Id,
+                RecipientUserId = actorId,
+                IsRead = true,
+                ReadAt = readAt,
+                CreatedAt = readAt,
+            };
+            _db.NotificationRecipients.Add(recipient);
+            await _db.SaveChangesAsync(ct);
+        }
+        else if (!recipient.IsRead)
+        {
+            var readAt = DateTime.UtcNow;
+            recipient.IsRead = true;
+            recipient.ReadAt = readAt;
+            recipient.UpdatedAt = readAt;
             await _db.SaveChangesAsync(ct);
         }
 
-        return MapToResponse(entity);
+        return MapToResponse(entity, recipient.IsRead, recipient.ReadAt);
     }
 
     public async Task<NotificationSummaryResponse> MarkAllReadAsync(
         ProductApprovalActorSnapshot actor,
         CancellationToken ct = default)
     {
-        var unread = await BuildRecipientQuery(actor).Where(x => !x.IsRead).ToListAsync(ct);
-        if (unread.Count > 0)
+        var actorId = RequireActorId(actor);
+        var unreadNotificationIds = await GetUnreadNotificationIdsAsync(actor, actorId, ct);
+        if (unreadNotificationIds.Count > 0)
         {
             var readAt = DateTime.UtcNow;
-            var readBy = NormalizeActorId(actor);
-            foreach (var entity in unread)
+            var recipients = await _db.NotificationRecipients
+                .Where(x => x.RecipientUserId == actorId && unreadNotificationIds.Contains(x.NotificationId))
+                .ToDictionaryAsync(x => x.NotificationId, ct);
+            foreach (var notificationId in unreadNotificationIds)
             {
-                entity.IsRead = true;
-                entity.ReadAt = readAt;
-                entity.ReadBy = readBy;
-                entity.UpdatedAt = readAt;
+                if (recipients.TryGetValue(notificationId, out var recipient))
+                {
+                    recipient.IsRead = true;
+                    recipient.ReadAt = readAt;
+                    recipient.UpdatedAt = readAt;
+                }
+                else
+                {
+                    _db.NotificationRecipients.Add(new NotificationRecipient
+                    {
+                        NotificationId = notificationId,
+                        RecipientUserId = actorId,
+                        IsRead = true,
+                        ReadAt = readAt,
+                        CreatedAt = readAt,
+                    });
+                }
             }
 
             await _db.SaveChangesAsync(ct);
@@ -175,7 +225,7 @@ public class NotificationLogic(ProductDbContext _db)
 
         return new BroadcastNotificationResponse(
             entities.Count,
-            entities.Select(MapToResponse).ToList());
+            entities.Select(entity => MapToResponse(entity, false, null)).ToList());
     }
 
     // Thông báo nhắm tới cá nhân (RecipientUserId) hoặc tới toàn bộ một vai trò (RecipientRoleName).
@@ -197,7 +247,25 @@ public class NotificationLogic(ProductDbContext _db)
         return _db.Notifications.Where(x => false);
     }
 
-    private static NotificationResponse MapToResponse(Notification entity) => new(
+    private async Task<List<Guid>> GetUnreadNotificationIdsAsync(
+        ProductApprovalActorSnapshot actor,
+        Guid actorId,
+        CancellationToken ct)
+    {
+        var recipientStates = _db.NotificationRecipients
+            .Where(x => x.RecipientUserId == actorId);
+        return await (
+            from notification in BuildRecipientQuery(actor)
+            join state in recipientStates on notification.Id equals state.NotificationId into states
+            from state in states.DefaultIfEmpty()
+            where state == null || !state.IsRead
+            select notification.Id).ToListAsync(ct);
+    }
+
+    private static NotificationResponse MapToResponse(
+        Notification entity,
+        bool isRead,
+        DateTime? readAt) => new(
         entity.Id,
         entity.Type,
         entity.Title,
@@ -205,9 +273,13 @@ public class NotificationLogic(ProductDbContext _db)
         entity.Link,
         entity.ReferenceId,
         entity.ReferenceType,
-        entity.IsRead,
-        entity.ReadAt,
+        isRead,
+        readAt,
         entity.CreatedAt);
+
+    private static Guid RequireActorId(ProductApprovalActorSnapshot actor) =>
+        NormalizeActorId(actor) ?? throw new ProductValidationException(
+            "Tài khoản không hợp lệ để thao tác thông báo.");
 
     private static Guid? NormalizeActorId(ProductApprovalActorSnapshot actor) =>
         actor.UserId.HasValue && actor.UserId.Value != Guid.Empty ? actor.UserId.Value : null;

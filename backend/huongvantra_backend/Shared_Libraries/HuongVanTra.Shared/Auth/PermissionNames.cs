@@ -12,6 +12,7 @@ public static class PermissionNames
     public const string ManageEmployee = "MANAGE_EMPLOYEE";
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
+    public const string ViewCatalog = "VIEW_CATALOG";
     public const string ManageCatalog = "MANAGE_CATALOG";
     public const string ApprovePrice = "APPROVE_PRICE";
     public const string ApproveContract = "APPROVE_CONTRACT";
@@ -28,9 +29,9 @@ public static class PermissionNames
     public const string ManageCost = "MANAGE_COST";
     public const string ViewCost = "VIEW_COST";
     public const string SubmitWarehouseReport = "SUBMIT_WAREHOUSE_REPORT";
-    public const string BroadcastNotification = "BROADCAST_NOTIFICATION";
     public const string ViewProductRequest = "VIEW_PRODUCT_REQUEST";
     public const string ApproveProductRequest = "APPROVE_PRODUCT_REQUEST";
+    public const string SyncCatalog = "SYNC_CATALOG";
 
     // ── Composite policy names (không seed DB) ───────────────────────────
     public const string ViewCustomerAccess = "VIEW_CUSTOMER_ACCESS";
@@ -88,6 +89,7 @@ public static class PermissionNames
         ManageEmployee,
         ManageUser,
         ManageRole,
+        ViewCatalog,
         ManageCatalog,
         ApprovePrice,
         ApproveContract,
@@ -102,9 +104,9 @@ public static class PermissionNames
         ManageCost,
         ViewCost,
         SubmitWarehouseReport,
-        BroadcastNotification,
         ViewProductRequest,
         ApproveProductRequest,
+        SyncCatalog,
         ManageCorporateCustomer,
         CreateB2BOrder,
         ShipOrder,

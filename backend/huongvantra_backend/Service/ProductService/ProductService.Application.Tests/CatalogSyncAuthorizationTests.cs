@@ -10,25 +10,25 @@ namespace ProductService.Application.Tests;
 public class CatalogSyncAuthorizationTests
 {
     [Fact]
-    public void PendingAndSyncEndpoints_RequireCreatePosOrderPermission()
+    public void PendingAndSyncEndpoints_RequireDedicatedSyncCatalogPermission()
     {
-        AssertCreatePosPolicy(nameof(CatalogSyncController.GetPending));
-        AssertCreatePosPolicy(nameof(CatalogSyncController.Sync));
+        AssertSyncCatalogPolicy(nameof(CatalogSyncController.GetPending));
+        AssertSyncCatalogPolicy(nameof(CatalogSyncController.Sync));
     }
 
     public static TheoryData<string, string[], bool> CatalogSyncActors => new()
     {
-        { "SalePos", [PermissionNames.CreatePosOrder], true },
-        { "SalePos+SaleCod", [PermissionNames.CreatePosOrder, PermissionNames.CreateCodOrder], true },
-        { "Sale", [PermissionNames.CreatePosOrder], true },
-        { "Manager", [PermissionNames.CreatePosOrder], true },
-        { "Admin", PermissionNames.All, true },
+        { "SalePos", [PermissionNames.CreatePosOrder], false },
+        { "SalePos+SaleCod", [PermissionNames.CreatePosOrder, PermissionNames.CreateCodOrder], false },
+        { "Sale", [PermissionNames.CreatePosOrder], false },
+        { "Manager", [PermissionNames.SyncCatalog], true },
+        { "Admin", [PermissionNames.SyncCatalog], true },
         { "SaleCod", [PermissionNames.CreateCodOrder, PermissionNames.VerifyCod], false },
     };
 
     [Theory]
     [MemberData(nameof(CatalogSyncActors))]
-    public async Task CreatePosOrderPolicy_EnforcesExpectedActorAccess(
+    public async Task SyncCatalogPolicy_EnforcesExpectedActorAccess(
         string _,
         string[] permissions,
         bool expectedAllowed)
@@ -36,7 +36,7 @@ public class CatalogSyncAuthorizationTests
         var identity = new ClaimsIdentity(
             permissions.Select(permission => new Claim("permission", permission)),
             authenticationType: "test");
-        var requirement = new PermissionRequirement(PermissionNames.CreatePosOrder);
+        var requirement = new PermissionRequirement(PermissionNames.SyncCatalog);
         var context = new AuthorizationHandlerContext(
             [requirement],
             new ClaimsPrincipal(identity),
@@ -47,14 +47,14 @@ public class CatalogSyncAuthorizationTests
         Assert.Equal(expectedAllowed, context.HasSucceeded);
     }
 
-    private static void AssertCreatePosPolicy(string methodName)
+    private static void AssertSyncCatalogPolicy(string methodName)
     {
         var method = typeof(CatalogSyncController).GetMethod(methodName)
             ?? throw new InvalidOperationException($"Missing method {methodName}.");
         var attribute = method.GetCustomAttribute<AuthorizeAttribute>()
             ?? throw new InvalidOperationException($"Missing AuthorizeAttribute on {methodName}.");
 
-        Assert.Equal(PermissionNames.CreatePosOrder, attribute.Policy);
+        Assert.Equal(PermissionNames.SyncCatalog, attribute.Policy);
         Assert.Null(attribute.Roles);
     }
 }
