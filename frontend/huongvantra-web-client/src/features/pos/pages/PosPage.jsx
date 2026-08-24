@@ -1963,7 +1963,7 @@ function PosPage() {
       // createPosOrderOffline → posApi.submitPosOrder → ordersApi.createOrder → POST /api/v1/orders
       const result = await createOrder(payload, { idempotencyKey })
 
-    if (method === 'CASH' && collectedNow > 0) {
+    if (!result.isOffline && method === 'CASH' && collectedNow > 0) {
       // Chỉ refresh quỹ trên UI. BE đã cộng CashSalesTotal trong RecordCashSaleAsync sau khi commit đơn.
       await recordCashSale()
     }
@@ -2576,10 +2576,14 @@ function PosPage() {
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         if (!navigator.onLine) {
-            showError(
-                "Cần kết nối mạng để kiểm tra Kệ/Kho/BOM và xác nhận khách có đồng ý chờ hàng trước khi thu tiền.",
-            );
-            return;
+            if (isTakeaway || paymentMethod !== 'CASH') {
+                showError('Ngoại tuyến chỉ hỗ trợ bán tại quầy bằng tiền mặt. VietQR và COD cần kết nối mạng.');
+                return;
+            }
+            if (customBundles.length > 0 || appliedPromotion || debtSettlement || selectedCustomer) {
+                showError('Đơn offline chỉ hỗ trợ khách lẻ, không khuyến mãi, không công nợ và không combo/BOM. Kết nối mạng để dùng các nghiệp vụ này.');
+                return;
+            }
         }
         setIsSubmitting(true);
         try {
