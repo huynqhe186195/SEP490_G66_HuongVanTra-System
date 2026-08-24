@@ -160,6 +160,15 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
         EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
+        // Sale may correct ordinary profile data only. Customer group and tier
+        // are business-controlled values: group changes belong to Manager and
+        // tier changes are driven by the completed-order workflow.
+        if (!access.CanViewAllCustomers && input.CustomerGroup != customer.CustomerGroup)
+            throw new CustomerForbiddenException("Sale chỉ được cập nhật thông tin hồ sơ cơ bản của khách hàng.");
+
+        if (input.TierId.HasValue && input.TierId != customer.TierId)
+            throw new CustomerValidationException(["Không thể thay đổi hạng khách hàng từ cập nhật hồ sơ. Hạng được hệ thống tự động cập nhật theo đơn hoàn tất."]);
+
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, id, ct))
             throw new DuplicatePhoneNumberException(input.PhoneNumber);
 

@@ -31,6 +31,7 @@ public static class AuthorizationServiceExtensions
             options.AddPolicy(PermissionNames.EditCustomerProfile, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateCustomer,
+                    PermissionNames.CreateOrder,
                     PermissionNames.ManageCorporateCustomer)));
 
             options.AddPolicy(PermissionNames.CreateCustomerProfile, policy =>

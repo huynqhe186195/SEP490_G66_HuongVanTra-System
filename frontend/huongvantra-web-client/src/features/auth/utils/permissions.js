@@ -85,11 +85,12 @@ export function canCreateCustomer(session) {
   )
 }
 
-/** Sửa hồ sơ KH: Manager (CREATE_CUSTOMER) và Kế toán (MANAGE_CORPORATE_CUSTOMER). Admin chỉ xem. */
+/** Sửa hồ sơ cơ bản: Manager và Sale; server vẫn khóa tier/debt/group cho Sale. */
 export function canEditCustomer(session) {
   if (isBusinessOpsBlocked(session)) return false
   return (
     hasPermission(session, 'CREATE_CUSTOMER')
+    || hasPermission(session, 'CREATE_ORDER')
     || hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
   )
 }
