@@ -69,7 +69,7 @@ function compareNullable(left, right) {
 
 const HISTORY_SOURCE_LABELS = {
   supplier_receipt: 'Phiếu nhập NCC',
-  manual_admin_accounting: 'Kế toán cập nhật',
+  manual_admin_accounting: 'Cập nhật trực tiếp',
   product_catalog_update: 'Cập nhật catalog SP',
   approved_price_change_request: 'Duyệt yêu cầu đổi giá',
 }
@@ -330,7 +330,7 @@ export default function CostProfitReportPage() {
       <PageHeader
         compact
         title="Bảng giá vốn trung bình & giá bán"
-        titleInfo="Giá vốn trung bình cập nhật từ Phiếu nhập NCC đã duyệt. Chỉ Kế toán được chỉnh giá bán; Admin/Manager chỉ xem."
+        titleInfo="Giá vốn trung bình cập nhật từ Phiếu nhập NCC đã duyệt. Chỉ Manager được chỉnh giá bán; Accountant/Admin chỉ xem."
         rightContent={(
           <button
             type="button"
@@ -411,7 +411,7 @@ export default function CostProfitReportPage() {
 
       {!canEditSalePrice ? (
         <p className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Bạn đang xem ở chế độ chỉ đọc. Chỉ tài khoản <strong>Kế toán</strong> mới chỉnh được giá bán.
+          Bạn đang xem ở chế độ chỉ đọc. Chỉ tài khoản <strong>Manager</strong> mới chỉnh được giá bán.
         </p>
       ) : null}
 
