@@ -51,6 +51,10 @@ builder.Services.AddScoped<EmployeeLogic>();
 builder.Services.AddScoped<ShiftLogic>();
 builder.Services.AddHvtSystemActivityAudit("UserService");
 
+// SEC-01: doc + validate ngay tai startup (khong de trong options callback vi callback chay lazy).
+// Fully-qualified: namespace HuongVanTra.Shared.Auth trung ten voi UserService.Application.Authorization.
+var jwtSecret = HuongVanTra.Shared.Auth.JwtSecretGuard.RequireSecret(builder.Configuration);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -62,8 +66,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
 
@@ -84,7 +87,7 @@ builder.Services.AddMassTransit(x =>
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
-            h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+            h.Password(builder.Configuration["RabbitMQ:Password"] ?? throw new InvalidOperationException("RabbitMQ:Password chua duoc cau hinh"));
         });
     });
 });

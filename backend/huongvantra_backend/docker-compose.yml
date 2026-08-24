@@ -8,18 +8,20 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Ho_Chi_Minh
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hvtroot123}
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD chua duoc dat trong .env - xem .env.example}"
       MYSQL_USER: ${MYSQL_USER:-hvtuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hvtpass123}
-    ports:
-      - "127.0.0.1:3307:3306"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env - xem .env.example}"
+    # SEC-05: production KHONG publish port MySQL ra host. Truy cap DB tren VPS:
+    #   docker compose exec mysql mysql -u root -p
+    # Can noi bang GUI tu may ca nhan: SSH tunnel (xem README).
+    # Dev muon mo port 3307: dung docker-compose.dev.yml
     volumes:
       - mysql_data:/var/lib/mysql
       - ./Scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - hvt-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-hvtroot123}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD chua duoc dat trong .env}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,10 +34,9 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hvt}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-hvtrabbit123}
-    ports:
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
+    # SEC-05: khong publish 5672/15672. Management UI chi dung khi debug:
+    #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d rabbitmq
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -48,6 +49,11 @@ services:
       start_period: 20s
 
   # ─── Services ─────────────────────────────────────────────────────────────────
+  # SEC-05: cac microservice KHONG publish port ra host. Frontend chi di qua gateway
+  # (port 5000); giao tiep noi bo dung DNS cua Docker network (http://<service>:8080).
+  # Can goi truc tiep 1 service de debug:
+  #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d <service>
+  # Chi gateway (5000) va web-client (3000) duoc publish o production.
 
   customer-service:
     build:
@@ -59,16 +65,14 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;ConvertZeroDateTime=True;"
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;ConvertZeroDateTime=True;"
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       InventoryService__BaseUrl: http://inventory-service:8080
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
-    ports:
-      - "127.0.0.1:5001:8080"
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
     networks:
       - hvt-network
     depends_on:
@@ -93,14 +97,14 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_user_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_user_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;"
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       CustomerService__BaseUrl: http://customer-service:8080
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
       # eSMS — đặt trong .env: ESMS_API_KEY, ESMS_SECRET_KEY, ESMS_BRANDNAME; Sms__Enabled=true khi gửi thật
       Sms__Enabled: ${SMS_ENABLED:-false}
       Sms__Provider: Esms
@@ -110,8 +114,6 @@ services:
       Sms__Sandbox: ${ESMS_SANDBOX:-1}
       Sms__OtpTemplate: "${ESMS_OTP_TEMPLATE:-HVT: Ma OTP dat lai mat khau la {otp}. Hieu luc {minutes} phut. Khong chia se ma nay.}"
       PasswordReset__ExposeOtpInResponse: ${PASSWORD_RESET_EXPOSE_OTP:-true}
-    ports:
-      - "127.0.0.1:5002:8080"
     networks:
       - hvt-network
     depends_on:
@@ -136,15 +138,15 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;"
       InventoryService__BaseUrl: http://inventory-service:8080
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
-      InternalApi__Key: ${INTERNAL_API_KEY:-hvt-internal-dev-key-change-me}
+      InternalApi__Key: "${INTERNAL_API_KEY:?INTERNAL_API_KEY chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-dpxbfgxqq}
       Cloudinary__ApiKey: ${CLOUDINARY_API_KEY}
       Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET}
@@ -153,8 +155,6 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL}
-    ports:
-      - "127.0.0.1:5003:8080"
     networks:
       - hvt-network
     depends_on:
@@ -179,23 +179,25 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_order_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_order_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
       CustomerService__BaseUrl: http://customer-service:8080
       ProductService__BaseUrl: http://product-service:8080
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
-      InternalApi__Key: ${INTERNAL_API_KEY:-hvt-internal-dev-key-change-me}
+      InternalApi__Key: "${INTERNAL_API_KEY:?INTERNAL_API_KEY chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
+      # SEC-01: secret webhook thanh toan lay tu .env. De trong => endpoint webhook tra 401 (fail-closed).
+      Sepay__WebhookSecret: "${SEPAY_WEBHOOK_SECRET:-}"
+      PosTransferPayment__AllowSimulateWebhook: "${POS_ALLOW_SIMULATE_WEBHOOK:-false}"
+      PosTransferPayment__SimulateWebhookSecret: "${POS_SIMULATE_WEBHOOK_SECRET:-}"
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       DEMO_EMAIL_OVERRIDE: ${DEMO_EMAIL_OVERRIDE}
-    ports:
-      - "127.0.0.1:5004:8080"
     networks:
       - hvt-network
     depends_on:
@@ -224,18 +226,16 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_inventory_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_inventory_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       Inventory__SimulateWarehouse: "false"
       ProductService__BaseUrl: http://product-service:8080
-      InternalApi__Key: ${INTERNAL_API_KEY:-hvt-internal-dev-key-change-me}
-    ports:
-      - "127.0.0.1:5005:8080"
+      InternalApi__Key: "${INTERNAL_API_KEY:?INTERNAL_API_KEY chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
     networks:
       - hvt-network
     depends_on:
@@ -265,15 +265,13 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_audit_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_audit_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:?MYSQL_PASSWORD chua duoc dat trong .env};CharSet=utf8mb4;"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      RabbitMQ__Password: "${RABBITMQ_PASS:?RABBITMQ_PASS chua duoc dat trong .env - xem .env.example}"
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
-    ports:
-      - "127.0.0.1:5007:8080"
     networks:
       - hvt-network
     depends_on:
@@ -298,7 +296,7 @@ services:
       TZ: Asia/Ho_Chi_Minh
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Secret: "${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env - xem .env.example, khong co gia tri mac dinh}"
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:3000}

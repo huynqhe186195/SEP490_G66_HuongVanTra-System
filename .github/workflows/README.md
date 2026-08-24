@@ -74,14 +74,37 @@ git revert HEAD
 git push origin main     # workflow tự chạy lại, deploy bản đã revert
 ```
 
-Cách 2 — xử lý trực tiếp trên VPS:
+Cách 2 — xử lý trực tiếp trên VPS (**chỉ khi cách 1 không dùng được**):
+
+> `git reset --hard` ghi đè mọi thay đổi chưa commit trên file đã track. Chạy `git status`
+> trước để chắc chắn không có gì cần giữ. Không kèm `-v` / `--volumes` vào lệnh compose —
+> data MySQL/RabbitMQ phải giữ nguyên.
 
 ```bash
 cd /opt/hvt
-git reset --hard <commit-hash-cũ>
+git status                          # kiểm tra trước, đừng bỏ qua bước này
+git checkout <commit-hash-cũ>       # detached HEAD, không xoá lịch sử
 cd backend/huongvantra_backend
 docker compose build && docker compose up -d
 ```
+
+Sau khi vá xong ở local và push lên `main`, quay lại nhánh chuẩn: `cd /opt/hvt && git checkout main`.
+
+## Biến bắt buộc trong `.env` trên VPS
+
+Compose dùng cú pháp `${VAR:?...}` cho các secret — **thiếu biến thì `docker compose build`
+dừng ngay và workflow deploy fail**, không có giá trị mặc định nào được dùng thay. Kiểm tra
+`/opt/hvt/backend/huongvantra_backend/.env` có đủ:
+
+| Biến | Ghi chú |
+|------|---------|
+| `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` | |
+| `RABBITMQ_PASS` | |
+| `JWT_SECRET` | ≥ 32 ký tự |
+| `INTERNAL_API_KEY` | **SEC-02** — dùng cho `X-Internal-Api-Key` giữa các service; product/order/inventory phải cùng một giá trị |
+
+Sinh giá trị mới: `openssl rand -hex 32`. Không dán giá trị thật vào commit message, task,
+issue hay chat. Xem `.env.example` để biết danh sách đầy đủ.
 
 ## Kiểm tra & gỡ lỗi
 

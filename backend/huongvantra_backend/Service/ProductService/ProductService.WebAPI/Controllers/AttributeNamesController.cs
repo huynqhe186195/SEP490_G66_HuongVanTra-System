@@ -10,11 +10,15 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/attribute-names")]
 public class AttributeNamesController(AttributeNameLogic _logic) : ControllerBase
 {
+    // Taxonomy đọc-chỉ: mọi role đăng nhập đều cần để lọc/hiển thị (kể cả POS),
+    // nên chỉ chặn anonymous thay vì siết theo permission.
     [HttpGet]
+    [Authorize]
     public async Task<IActionResult> GetAll([FromQuery] bool? isDeleted) =>
         Ok(await _logic.GetAllAsync(isDeleted));
 
     [HttpGet("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _logic.GetByIdAsync(id));
 

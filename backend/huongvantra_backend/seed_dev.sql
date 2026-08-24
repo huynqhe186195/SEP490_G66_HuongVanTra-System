@@ -2,7 +2,7 @@
 -- HuongVanTra — Dev Seed Data
 -- Ngày tạo: 2026-06-28
 -- ============================================================
--- Chạy: mysql -u hvtuser -phvtpass123 < seed_dev.sql
+-- Chạy: mysql -u hvtuser -p < seed_dev.sql   (nhập mật khẩu khi được hỏi, không hardcode)
 --   hoặc copy-paste từng SECTION vào DBeaver / MySQL Workbench
 --
 -- NOTES:

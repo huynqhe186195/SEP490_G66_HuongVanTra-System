@@ -2,6 +2,7 @@ using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
 using InventoryService.WebAPI.Extensions;
+using InventoryService.WebAPI.Filters;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -106,9 +107,11 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     /// <summary>
     /// Đồng bộ OrderStatus resolved từ OrderService vào queue để frontend hiển thị đúng.
     /// OrderService gọi sau khi resolve WaitingTransfer/WaitingProduction/WaitingMaterials.
+    /// Chỉ service-to-service: bắt buộc X-Internal-Api-Key, không mở cho frontend.
     /// </summary>
     [HttpPatch("update-order-status/{orderId:guid}")]
-    [AllowAnonymous] // Internal service-to-service call
+    [AllowAnonymous]
+    [RequireInternalApiKey]
     public async Task<IActionResult> UpdateOrderStatus(
         Guid orderId,
         [FromBody] UpdateQueueOrderStatusRequest request,

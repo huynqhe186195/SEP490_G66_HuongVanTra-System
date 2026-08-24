@@ -47,20 +47,24 @@ Read the acceptance and UAT guide here:
 
 # Lần tới nếu muốn dọn dẹp định kỳ, bạn có thể dùng:
 
-  # Chỉ xóa build cache (an toàn nhất)
+  # Chỉ xóa build cache (an toàn nhất, dùng được cả trên VPS)
   docker builder prune -f
 
-  # Xóa tất cả: cache + images không dùng + containers stopped
-  docker system prune -f
+  # Xóa images không dùng + containers đã stop (KHÔNG chạm volumes)
+  docker image prune -f
+  docker container prune -f
 
-  # Xóa triệt để kể cả volumes (NGUY HIỂM — mất data mysql/rabbitmq)
-  docker system prune -f --volumes
+  > REL-01: các lệnh có `--volumes` / `-v` / `docker volume rm` đã được bỏ khỏi README
+  > vì chúng xóa data MySQL + RabbitMQ và không thể phục hồi. Nếu thực sự cần reset data
+  > **ở máy dev**, xem mục [Reset data (DEV-ONLY)](#reset-data-dev-only). Trên VPS thì
+  > tuyệt đối không dùng.
 
   # Script SQL đã có hvt_inventory_db và grant đủ quyền. Vấn đề là MySQL volume đã được khởi tạo từ trước — file init.sql chỉ chạy một lần duy nhất khi volume còn mới, nên database hvt_inventory_db và quyền cho hvtuser chưa được tạo trong lần này. (lỗi khi chạy migration)
 
-  Cách fix: chạy thủ công lệnh SQL vào container MySQL đang chạy:
+  Cách fix: chạy thủ công lệnh SQL vào container MySQL đang chạy (mật khẩu lấy từ
+  `MYSQL_ROOT_PASSWORD` trong `.env`, không hardcode vào README/commit):
 
-  docker exec -it hvt-mysql mysql -uroot -phvtroot123 -e "
+  docker compose exec mysql mysql -u root -p -e "
   CREATE DATABASE IF NOT EXISTS \`hvt_inventory_db\`
     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   GRANT ALL PRIVILEGES ON \`hvt_inventory_db\`.* TO 'hvtuser'@'%';
@@ -79,40 +83,28 @@ Read the acceptance and UAT guide here:
 
   ❯ còn cách khác không?
 
-  Có 2 cách khác:
+  Có — nhưng cả hai cách còn lại đều **xóa toàn bộ data MySQL**, nên chỉ dùng ở máy dev:
+  xem mục [Reset data (DEV-ONLY)](#reset-data-dev-only). Trên VPS/production chỉ dùng lệnh
+  `docker compose exec mysql ...` ở trên — đó là cách duy nhất an toàn và giữ được data.
 
-  Cách 1: Xóa volume MySQL và khởi động lại từ đầu
-  docker compose down -v
-  docker compose up -d
-  -v xóa volume → MySQL khởi động lại từ đầu → init.sql chạy lại → tất cả database và quyền được tạo đúng. Nhược điểm: mất toàn bộ data hiện có trong MySQL.
+# Nếu muốn build sạch sẽ docker, chạy theo thứ tự sau:
 
-  ---
-  Cách 2: Rebuild chỉ MySQL với volume mới 
-  docker compose down
-  docker volume rm huongvantra_backend_mysql_data
-  docker compose up -d
-  Tương tự cách 1 nhưng xóa volume tường minh hơn. Cũng mất data.
-
-  ---
-  Nếu có data quan trọng cần giữ thì dùng lệnh docker exec mình đã đề xuất ở trên — đó là cách an toàn nhất. Còn nếu đây là môi trường dev và data không quan trọng thì cách 1 (down -v + up) tiện nhất.
-
-  # Nếu muốn build sạch sẽ docker, chạy theo thứ tự sau:
-
-  Bước 1: Dừng và xóa toàn bộ container
+  Bước 1: Dừng và xóa container (KHÔNG kèm -v nên data DB vẫn còn)
   docker compose down
 
-  Bước 2: Xóa tất cả image, cache build, network không dùng
-  docker system prune -af
+  Bước 2: Xóa image + build cache không dùng
+  docker image prune -af
+  docker builder prune -f
 
-  ▎ Flag -a xóa tất cả image (kể cả image còn tag), -f không hỏi xác nhận.
+  ▎ Flag -a xóa cả image còn tag nhưng không được container nào dùng, -f không hỏi xác nhận.
+  ▎ Cố tình KHÔNG dùng `docker system prune --volumes`: lệnh đó xóa luôn volume DB.
 
   Bước 3: Rebuild và chạy lại toàn bộ
   docker compose up -d --build
 
   ---
-  Lưu ý quan trọng: Data trong DB (MySQL, RabbitMQ) vẫn an toàn vì nằm trong volumes. Nếu muốn xóa luôn cả data DB thì thêm flag --volumes vào bước 1:
-
-  docker compose down --volumes  # XÓA LUÔN DATA DB - cẩn thận!
+  Lưu ý quan trọng: Data trong DB (MySQL, RabbitMQ) vẫn an toàn vì nằm trong volumes,
+  miễn là không thêm `-v` / `--volumes` vào bước 1.
 ========================================================================================================================================================
 
   Lần đầu (setup một lần duy nhất)
@@ -177,6 +169,86 @@ Read the acceptance and UAT guide here:
 
 =========================================================================================================================
 
+## Port & truy cập hạ tầng (SEC-05)
+
+Production (`docker-compose.yml`) **chỉ publish 2 port** ra host:
+
+| Port | Service | Ghi chú |
+|------|---------|---------|
+| `3000` | `web-client` | nginx serve build production |
+| `5000` | `gateway` | mọi request của frontend đi qua đây |
+
+MySQL, RabbitMQ và 6 microservice (customer/user/product/order/inventory/audit) **không còn
+publish port ra host**. Chúng vẫn gọi nhau bình thường trong `hvt-network` bằng DNS của Docker
+(`http://product-service:8080`, `Server=mysql;Port=3306`), nên không ảnh hưởng chức năng.
+
+### Mở port debug ở máy dev
+
+```powershell
+cd backend\huongvantra_backend
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Overlay dev mở lại, bind vào `127.0.0.1` (không ra LAN): MySQL `3307`, RabbitMQ `5672` +
+Management UI `15672`, và các service `5001` (customer) / `5002` (user) / `5003` (product) /
+`5004` (order) / `5005` (inventory) / `5007` (audit). Frontend dev chạy Vite ở `5173` thay cho `3000`.
+
+Chỉ cần một service:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d product-service
+```
+
+### Truy cập DB / RabbitMQ trên VPS
+
+Không còn `mysql -h <vps-ip> -P 3307` được nữa. Hai cách:
+
+1. **Dùng CLI trong container** (mật khẩu lấy từ `.env` trên VPS, đừng dán vào chat/commit):
+
+   ```bash
+   cd /opt/hvt/backend/huongvantra_backend
+   docker compose exec mysql mysql -u root -p
+   ```
+
+2. **SSH tunnel** nếu muốn dùng MySQL Workbench / DBeaver từ máy cá nhân. Vì MySQL không
+   publish port ra host VPS nữa, tunnel phải trỏ vào **IP container** trong `hvt-network`:
+
+   ```bash
+   # trên VPS: lấy IP container
+   docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' hvt-mysql
+   ```
+
+   ```powershell
+   # trên máy cá nhân (thay 172.x.x.x bằng IP vừa lấy)
+   ssh -L 3307:172.x.x.x:3306 <user>@116.118.3.5
+   ```
+
+   Sau đó Workbench connect `127.0.0.1:3307`. Lưu ý IP container đổi mỗi lần recreate, nên
+   cách 1 vẫn là cách nhanh và ổn định hơn cho việc chạy SQL.
+
+RabbitMQ Management UI (`15672`) chỉ dùng khi debug ở máy dev, không mở trên VPS.
+
+## Reset data (DEV-ONLY)
+
+> **CẢNH BÁO:** mục này xóa vĩnh viễn toàn bộ data MySQL + RabbitMQ. Chỉ chạy trên **máy dev**.
+> **TUYỆT ĐỐI không chạy trên VPS/production** — không có backup tự động, data mất là mất.
+> Trên VPS, muốn sửa DB thì dùng `docker compose exec mysql ...` (xem mục trên).
+
+Dùng khi DB local lẫn seed cũ (`SKU-DEMO-*`, Matcha/Ceylon, đơn rác) và muốn setup lại từ đầu:
+
+```powershell
+cd backend\huongvantra_backend
+
+# DEV-ONLY: -v xóa volume mysql_data + rabbitmq_data
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Xóa volume làm `Scripts/init-databases.sql` chạy lại (nó chỉ chạy khi volume còn mới), nên các
+database + quyền cho `hvtuser` được tạo đúng. Sau đó seed lại theo các bước C → F bên dưới.
+
+=========================================================================================================================
+
 ## Quy trình máy mới / data đang lung tung (chuẩn Hương Vân)
 
 Dùng khi vừa `git pull`, DB local lẫn seed cũ (`SKU-DEMO-*`, Matcha/Ceylon, đơn rác), hoặc muốn setup sạch từ đầu.
@@ -193,15 +265,10 @@ copy .env.example .env
 # Điền VITE_CLOUDINARY_CLOUD_NAME + VITE_CLOUDINARY_UPLOAD_PRESET
 ```
 
-### B. Xóa data cũ (bắt buộc nếu DB lung tung)
+### B. Xóa data cũ (chỉ khi DB lung tung — DEV-ONLY)
 
-> Cảnh báo: mất toàn bộ MySQL/RabbitMQ local.
-
-```powershell
-cd D:\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-```
+Làm theo mục [Reset data (DEV-ONLY)](#reset-data-dev-only) ở trên. Nếu DB local vẫn dùng được
+thì **bỏ qua bước này** và đi thẳng sang C.
 
 Đợi containers `healthy` (~1–2 phút). UserService tự seed tài khoản:
 
@@ -267,7 +334,7 @@ Nạp: map NCC↔SKU, PN Draft/Pending/Completed, BOM, đơn mẫu, ca/quỹ, ki
 
 - `run-seed-catalog-inventory.ps1` — tạo catalog Matcha/Ceylon legacy.
 - `seed-demo-data.sql` — tạo `SKU-DEMO-*` + đơn demo cũ.
-- Soft-delete từng SKU rác nếu đã `down -v` — không cần.
+- Soft-delete từng SKU rác nếu vừa reset data ở máy dev — không cần.
 
 ## Nạp catalog Hương Vân bằng Excel + ZIP ảnh
 

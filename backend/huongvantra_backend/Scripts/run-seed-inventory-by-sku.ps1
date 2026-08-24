@@ -1,6 +1,7 @@
 param(
     [string]$MySqlContainer = "hvt-mysql",
-    [string]$MySqlRootPassword = "hvtroot123",
+    # SEC-01: mat khau lay tu $env:MYSQL_ROOT_PASSWORD (xem .env.example), khong hardcode trong script.
+    [string]$MySqlRootPassword = $(if ($env:MYSQL_ROOT_PASSWORD) { $env:MYSQL_ROOT_PASSWORD } else { throw "Chua dat `$env:MYSQL_ROOT_PASSWORD - xem .env.example, hoac truyen -MySqlRootPassword <mat_khau>." }),
     [switch]$SkipGenerate
 )
 

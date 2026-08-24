@@ -11,11 +11,15 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/categories")]
 public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
 {
+    // Taxonomy đọc-chỉ: mọi role đăng nhập đều cần để lọc/hiển thị (kể cả POS).
+    // GetAll còn phụ thuộc claim của user qua GetCatalogViewScope() nên buộc phải authenticated.
     [HttpGet]
+    [Authorize]
     public async Task<IActionResult> GetAll([FromQuery] bool? isDeleted) =>
         Ok(await _categoryLogic.GetAllAsync(isDeleted, User.GetCatalogViewScope()));
 
     [HttpGet("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _categoryLogic.GetByIdAsync(id));
 

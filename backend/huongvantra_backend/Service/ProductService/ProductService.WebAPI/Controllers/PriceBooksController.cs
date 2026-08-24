@@ -10,7 +10,9 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/price-books")]
 public class PriceBooksController(PriceBookLogic _priceBookLogic) : ControllerBase
 {
+    // Bảng giá là dữ liệu nhạy cảm (giá sỉ, giá hợp đồng B2B) → siết theo permission.
     [HttpGet]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
@@ -19,6 +21,7 @@ public class PriceBooksController(PriceBookLogic _priceBookLogic) : ControllerBa
         Ok(await _priceBookLogic.GetPagedAsync(new GetPriceBooksRequest(search, isActive, page, pageSize)));
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _priceBookLogic.GetByIdAsync(id));
 

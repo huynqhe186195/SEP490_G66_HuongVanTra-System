@@ -93,3 +93,26 @@ project.fragment.lock.json
 **/dist-ssr/
 **/.vite/
 *.local
+
+# REL-02: artifact tam, khong thuoc source release
+# Backup SQL/txt cua cac lan fix data thu cong o may dev
+/tmp-backup/
+# Ban Excel o root la OUTPUT cua cac script trong
+# frontend/huongvantra-web-client/scripts/ (chung ghi ra ../../../*.xlsx).
+# Template that su duoc serve tu frontend/.../public/templates/.
+/FileMau_YeuCauTaoHangHoaMoi.xlsx
+/FileMau_YeuCauTaoHangHoaMoi_CoDuLieu.xlsx
+/FileMau_YeuCauTaoHangHoaMoi_CoDuLieu_Nhieu.xlsx
+
+# QA-01: output cua Scripts/run-tests-coverage.ps1
+**/TestResults/
+*.trx
+coverage.cobertura.xml
+coverage.opencover.xml
+
+# QA-02: output cua Playwright
+**/playwright-report/
+**/test-results/
+**/blob-report/
+**/playwright/.cache/
+**/.auth/

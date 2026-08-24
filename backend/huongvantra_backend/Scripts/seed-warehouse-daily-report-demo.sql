@@ -1,7 +1,7 @@
 -- Seed mau: Bao cao cuoi ngay thu kho (hvt_inventory_db)
 -- PowerShell:
 --   Get-Content -Raw -Encoding UTF8 .\Scripts\seed-warehouse-daily-report-demo.sql |
---     docker exec -i hvt-mysql mysql -uhvtuser -phvtpass123 --default-character-set=utf8mb4 hvt_inventory_db
+--     docker exec -i -e "MYSQL_PWD=$env:MYSQL_PASSWORD" hvt-mysql mysql -uhvtuser --default-character-set=utf8mb4 hvt_inventory_db
 -- Xoa: Id/code DEMO-EOD- hoac GUID prefix aaaaaaaa-e0d1-...
 
 SET NAMES utf8mb4;

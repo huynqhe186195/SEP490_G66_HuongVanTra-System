@@ -2,7 +2,7 @@
 -- HuongVanTra - Inventory Workflow 1 make-to-stock demo seed
 --
 -- Apply from backend/huongvantra_backend:
---   cmd /c "docker exec -i hvt-mysql mysql --default-character-set=utf8mb4 -uroot -phvtroot123 < Scripts\seed_make_to_stock_demo.sql"
+--   docker exec -i -e "MYSQL_PWD=$env:MYSQL_ROOT_PASSWORD" hvt-mysql mysql --default-character-set=utf8mb4 -uroot < Scripts\seed_make_to_stock_demo.sql
 --
 -- Scope:
 --   - Product catalog demo data for raw materials and jasmine tea finished goods.

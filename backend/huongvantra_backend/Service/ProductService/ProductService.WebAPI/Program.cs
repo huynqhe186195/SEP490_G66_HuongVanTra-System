@@ -75,7 +75,7 @@ builder.Services.AddMassTransit(x =>
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
-            h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+            h.Password(builder.Configuration["RabbitMQ:Password"] ?? throw new InvalidOperationException("RabbitMQ:Password chua duoc cau hinh"));
         });
 
         cfg.ReceiveEndpoint("product-cost-price-updated", e =>

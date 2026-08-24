@@ -13,7 +13,7 @@ public static class JwtServiceExtensions
         IConfiguration configuration)
     {
         var jwtSection = configuration.GetSection("Jwt");
-        var secret = jwtSection["Secret"] ?? throw new InvalidOperationException("Jwt:Secret is missing.");
+        var secret = JwtSecretGuard.RequireSecret(configuration);
         var issuer = jwtSection["Issuer"];
         var audience = jwtSection["Audience"];
 

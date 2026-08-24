@@ -17,6 +17,8 @@ if ([string]::IsNullOrWhiteSpace($GatewayInventoryProbe)) {
 }
 
 if (-not $HealthUrls -or $HealthUrls.Count -eq 0) {
+    # SEC-05: port 5003-5005 chi mo khi chay kem docker-compose.dev.yml.
+    # Production (chi publish 5000/3000) => set $env:HVTPOSIMS_HEALTH_URLS hoac bo qua buoc health.
     $HealthUrls = @(
         "http://localhost:5003/health",
         "http://localhost:5004/health",

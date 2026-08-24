@@ -7,10 +7,14 @@ public class ProductDbContextFactory : IDesignTimeDbContextFactory<ProductDbCont
 {
     public ProductDbContext CreateDbContext(string[] args)
     {
+        // SEC-01: khong hardcode mat khau DB. Dat PRODUCT_DB_CONNECTION truoc khi chay dotnet ef.
+        var connectionString = Environment.GetEnvironmentVariable("PRODUCT_DB_CONNECTION")
+            ?? throw new InvalidOperationException(
+                "Chua dat bien moi truong PRODUCT_DB_CONNECTION. Vi du (PowerShell): " +
+                "$env:PRODUCT_DB_CONNECTION = 'Server=localhost;Port=3307;Database=hvt_product_db;User=hvtuser;Password=<mat_khau>;'");
+
         var optionsBuilder = new DbContextOptionsBuilder<ProductDbContext>();
-        optionsBuilder.UseMySql(
-            "Server=localhost;Port=3307;Database=hvt_product_db;User=hvtuser;Password=hvtpass123;",
-            new MySqlServerVersion(new Version(8, 0, 0)));
+        optionsBuilder.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 0)));
         return new ProductDbContext(optionsBuilder.Options);
     }
 }

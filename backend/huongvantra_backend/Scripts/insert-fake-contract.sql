@@ -1,5 +1,5 @@
 -- Fake data hợp đồng mua bán hàng hóa để test
--- Chạy trong MySQL container: docker compose exec mysql mysql -u root -phvtroot123 hvt_document_db < Scripts/insert-fake-contract.sql
+-- Chạy trong MySQL container: docker compose exec -e "MYSQL_PWD=$env:MYSQL_ROOT_PASSWORD" mysql mysql -u root hvt_document_db < Scripts/insert-fake-contract.sql
 
 USE hvt_document_db;
 

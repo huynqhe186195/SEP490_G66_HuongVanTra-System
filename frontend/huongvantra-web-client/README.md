@@ -26,4 +26,39 @@ npm install
 npm run dev
 ```
 
+# Chạy E2E test (Playwright)
+
+Bộ test E2E chặn toàn bộ request `/api/**` ở tầng network, nên **không cần bật backend/Docker**.
+Playwright tự khởi động Vite dev server, tự tắt khi xong.
+
+```bash
+npm ci
+npm run test:e2e
+```
+
+Lần đầu chạy sẽ tự tải browser Chromium (script `pretest:e2e`).
+
+Xem report sau khi chạy (khi test fail sẽ có kèm screenshot, video và trace):
+
+```bash
+npm run test:e2e:report
+```
+
+Chạy ở chế độ giao diện để debug từng bước:
+
+```bash
+npm run test:e2e:ui
+```
+
+Các flow đang được phủ (`e2e/`):
+
+| File | Flow |
+| --- | --- |
+| `login.spec.js` | Đăng nhập: chưa có phiên, validate form, sai mật khẩu, đăng nhập thành công |
+| `product-rbac.spec.js` | Phân quyền trang Sản phẩm và trang phân quyền Admin |
+| `sc05-shelf-replenishment.spec.js` | SC-05 Yêu cầu bổ sung Kệ Hàng: danh sách, empty state, quyền tạo, quyền xem |
+| `pos.spec.js` | POS: mở màn hình, nút thanh toán, chặn tài khoản không có quyền |
+| `notification.spec.js` | Thông báo: badge, dropdown, đánh dấu đã đọc hết, điều hướng theo link |
+
+
 

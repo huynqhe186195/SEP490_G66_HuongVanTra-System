@@ -7,7 +7,7 @@
 --
 -- Windows:
 --   docker cp backend/huongvantra_backend/Scripts/seed-tool-nl-inventory.sql hvt-mysql:/tmp/seed-tool-nl.sql
---   docker exec hvt-mysql mysql -uhvtuser -phvtpass123 --default-character-set=utf8mb4 -e "source /tmp/seed-tool-nl.sql"
+--   docker exec -e "MYSQL_PWD=$env:MYSQL_PASSWORD" hvt-mysql mysql -uhvtuser --default-character-set=utf8mb4 -e "source /tmp/seed-tool-nl.sql"
 -- =============================================================================
 
 SET NAMES utf8mb4;

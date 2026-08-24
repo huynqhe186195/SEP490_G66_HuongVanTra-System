@@ -94,6 +94,10 @@ builder.Services.AddHttpClient<IInventoryCatalogClient, InventoryCatalogClient>(
 {
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    // Cần cho các endpoint nội bộ của Inventory (vd stock-deduct-queue/update-order-status).
+    var inventoryInternalKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(inventoryInternalKey))
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", inventoryInternalKey);
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<IShiftCatalogClient, ShiftCatalogClient>(client =>
 {
@@ -148,7 +152,7 @@ builder.Services.AddMassTransit(x =>
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
-            h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+            h.Password(builder.Configuration["RabbitMQ:Password"] ?? throw new InvalidOperationException("RabbitMQ:Password chua duoc cau hinh"));
         });
 
         cfg.ReceiveEndpoint("order-service.stock-deducted", e =>
@@ -198,9 +202,7 @@ app.Run();
 
 public sealed class ServiceJwtProvider(IConfiguration configuration)
 {
-    private readonly string _secret = configuration["Jwt:Secret"]
-        ?? configuration["Jwt:Key"]
-        ?? throw new InvalidOperationException("Jwt:Secret is missing.");
+    private readonly string _secret = HuongVanTra.Shared.Auth.JwtSecretGuard.RequireSecret(configuration);
     private readonly string _issuer = configuration["Jwt:Issuer"] ?? "HuongVanTra";
     private readonly string _audience = configuration["Jwt:Audience"] ?? "HuongVanTra";
 

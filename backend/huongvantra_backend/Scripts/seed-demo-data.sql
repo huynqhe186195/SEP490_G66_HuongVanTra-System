@@ -5,11 +5,11 @@
 --   2. Các service đã start ít nhất 1 lần (seed tier + user admin/sale01)
 --
 -- Cách chạy (PowerShell — khuyến nghị):
---   Get-Content .\Scripts\seed-demo-data.sql -Raw | docker exec -i hvt-mysql mysql -uhvtuser -phvtpass123
+--   Get-Content .\Scripts\seed-demo-data.sql -Raw | docker exec -i -e "MYSQL_PWD=$env:MYSQL_PASSWORD" hvt-mysql mysql -uhvtuser
 --
 -- Hoặc docker cp (giữ UTF-8):
 --   docker cp .\Scripts\seed-demo-data.sql hvt-mysql:/tmp/seed-demo-data.sql
---   docker exec hvt-mysql mysql -uhvtuser -phvtpass123 -e "source /tmp/seed-demo-data.sql"
+--   docker exec -e "MYSQL_PWD=$env:MYSQL_PASSWORD" hvt-mysql mysql -uhvtuser -e "source /tmp/seed-demo-data.sql"
 --
 -- Lưu ý: chuỗi tiếng Việt dùng biến @... = CONVERT(UNHEX(...) USING utf8mb4)
 -- để tránh lỗi font (T??i 100g) khi pipe qua PowerShell.
