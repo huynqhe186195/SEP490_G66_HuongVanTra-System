@@ -5,7 +5,7 @@ import { validateCreateAccountForm } from './accountValidation.js'
 
 const validForm = {
   username: 'dual_user',
-  password: '123456',
+  password: '12345678',
   fullName: 'Dual User',
   phone: '0900000000',
 }

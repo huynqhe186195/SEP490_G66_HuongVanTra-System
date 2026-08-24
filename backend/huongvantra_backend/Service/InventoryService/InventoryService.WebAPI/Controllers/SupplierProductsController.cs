@@ -58,7 +58,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("by-supplier/{supplierId:guid}")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> Create(
         Guid supplierId,
         [FromBody] CreateSupplierProductRequest request,
@@ -70,7 +70,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
 
     /// <summary>Import danh mục hàng cung ứng từ Excel. Dòng lỗi bị bỏ qua, dòng hợp lệ vẫn được ghi.</summary>
     [HttpPost("by-supplier/{supplierId:guid}/import")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> Import(
         Guid supplierId,
         [FromBody] ImportSupplierProductsRequest request,
@@ -80,7 +80,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateSupplierProductRequest request,
@@ -90,7 +90,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}/price")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> UpdatePrice(
         Guid id,
         [FromBody] UpdateSupplierProductPriceRequest request,
@@ -100,14 +100,14 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.DeactivateSupplierProductAsync(id, ct));
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.ManageSuppliers)]
+    [Authorize(Policy = PermissionNames.ManageSupplierProductAccess)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.RestoreSupplierProductAsync(id, ct));

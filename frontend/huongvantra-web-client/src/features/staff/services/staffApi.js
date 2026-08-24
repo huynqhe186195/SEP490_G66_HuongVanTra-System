@@ -234,7 +234,11 @@ export async function updateStaffAccount(employeeId, payload) {
   }
 
   if (payload.newPassword?.trim()) {
-    await resetPassword(current.username, payload.newPassword.trim())
+    const nextPassword = payload.newPassword.trim()
+    if (nextPassword.length < 8) {
+      throw new Error('Mật khẩu mới phải có ít nhất 8 ký tự.')
+    }
+    await resetPassword(current.username, nextPassword)
   }
 }
 

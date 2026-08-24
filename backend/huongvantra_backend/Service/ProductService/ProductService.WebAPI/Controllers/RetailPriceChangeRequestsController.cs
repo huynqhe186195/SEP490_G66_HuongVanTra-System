@@ -31,7 +31,7 @@ public class RetailPriceChangeRequestsController(RetailPriceChangeRequestLogic _
         Ok(await _logic.GetByIdAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ManageCost)]
+    [Authorize(Policy = PermissionNames.RequestRetailPriceChange)]
     public async Task<IActionResult> Create([FromBody] CreateRetailPriceChangeRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, User.ToProductApprovalActorSnapshot(), ct);
@@ -39,17 +39,16 @@ public class RetailPriceChangeRequestsController(RetailPriceChangeRequestLogic _
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Policy = PermissionNames.ApprovePrice)]
+    [Authorize(Policy = PermissionNames.ApproveRetailPriceChange)]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveRetailPriceChangeRequest request, CancellationToken ct = default) =>
         Ok(await _logic.ApproveAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Policy = PermissionNames.ApprovePrice)]
+    [Authorize(Policy = PermissionNames.ApproveRetailPriceChange)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectRetailPriceChangeRequest request, CancellationToken ct = default) =>
         Ok(await _logic.RejectAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
-    // Giữ Roles: hủy yêu cầu đổi giá cho phép cả Admin và Accountant; APPROVE_PRICE chỉ Admin
-    // và MANAGE_COST chỉ Accountant nên không có permission đơn nào bao trọn đúng cặp Admin+Accountant.
+    // Hủy yêu cầu đổi giá: Admin (APPROVE_*) hoặc Kế toán (REQUEST_*/MANAGE_COST).
     [HttpPost("{id:guid}/cancel")]
     [Authorize(Policy = PermissionNames.CancelRetailPriceAccess)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRetailPriceChangeRequest request, CancellationToken ct = default) =>

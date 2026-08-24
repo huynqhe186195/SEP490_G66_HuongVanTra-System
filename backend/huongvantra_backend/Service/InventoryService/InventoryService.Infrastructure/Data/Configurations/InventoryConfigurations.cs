@@ -498,6 +498,8 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
         builder.Property(e => e.Phone).HasMaxLength(20);
         builder.Property(e => e.Email).HasMaxLength(255);
         builder.Property(e => e.Address).HasMaxLength(500);
+        builder.Property(e => e.TaxCode).HasMaxLength(20);
+        builder.Property(e => e.PaymentTerms).HasMaxLength(255);
         builder.Property(e => e.Note).HasMaxLength(1000);
         // Unique toàn hệ thống, không phân biệt hoa thường, không phụ thuộc collation toàn cục.
         builder.HasIndex(e => e.NormalizedSupplierCode).IsUnique();

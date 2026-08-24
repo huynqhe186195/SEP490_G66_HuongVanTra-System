@@ -9591,6 +9591,8 @@ public class InventoryLogic(
             Phone = NormalizeSnapshotText(request.Phone),
             Email = NormalizeSnapshotText(request.Email),
             Address = NormalizeSnapshotText(request.Address),
+            TaxCode = NormalizeSnapshotText(request.TaxCode),
+            PaymentTerms = NormalizeSnapshotText(request.PaymentTerms),
             Note = NormalizeSnapshotText(request.Note),
             IsDeleted = false,
             CreatedAt = now,
@@ -9625,6 +9627,8 @@ public class InventoryLogic(
         supplier.Phone = NormalizeSnapshotText(request.Phone);
         supplier.Email = NormalizeSnapshotText(request.Email);
         supplier.Address = NormalizeSnapshotText(request.Address);
+        supplier.TaxCode = NormalizeSnapshotText(request.TaxCode);
+        supplier.PaymentTerms = NormalizeSnapshotText(request.PaymentTerms);
         supplier.Note = NormalizeSnapshotText(request.Note);
         supplier.UpdatedAt = DateTime.UtcNow;
 
@@ -9664,7 +9668,8 @@ public class InventoryLogic(
         return new SupplierResponse(
             s.Id, s.SupplierCode, s.Name, s.Phone, s.Email, s.Address, s.Note, s.IsDeleted,
             s.CreatedAt, s.UpdatedAt,
-            stats.Count, stats.TotalValue);
+            stats.Count, stats.TotalValue,
+            s.TaxCode, s.PaymentTerms);
     }
 
     /// <summary>Trim mã người dùng nhập; chuỗi rỗng hoặc chỉ khoảng trắng coi như không nhập.</summary>

@@ -332,3 +332,16 @@ export async function cancelStockAdjustmentRequest(id, reason) {
   })
   return data
 }
+
+export async function approveStockAdjustmentRequest(id) {
+  return apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/approve`, {
+    method: 'POST',
+  })
+}
+
+export async function rejectStockAdjustmentRequest(id, reason) {
+  return apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+}

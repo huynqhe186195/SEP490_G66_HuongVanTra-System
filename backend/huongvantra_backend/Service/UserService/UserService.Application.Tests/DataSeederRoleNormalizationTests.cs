@@ -121,12 +121,14 @@ public class DataSeederRoleNormalizationTests
         var legacyPermissions = await PermissionNamesForRole(db, "Sale");
 
         Assert.Contains(PermissionNames.CreatePosOrder, salePosPermissions);
+        Assert.Contains(PermissionNames.SyncCatalog, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.CreateCodOrder, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.VerifyCod, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.ManageCatalog, salePosPermissions);
         Assert.Contains(PermissionNames.CreateCodOrder, saleCodPermissions);
         Assert.Contains(PermissionNames.VerifyCod, saleCodPermissions);
         Assert.DoesNotContain(PermissionNames.CreatePosOrder, saleCodPermissions);
+        Assert.DoesNotContain(PermissionNames.SyncCatalog, saleCodPermissions);
         Assert.DoesNotContain(PermissionNames.ManageCatalog, saleCodPermissions);
         Assert.Equal(
             salePosPermissions.OrderBy(value => value),

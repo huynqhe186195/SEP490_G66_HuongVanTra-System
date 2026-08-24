@@ -8,7 +8,7 @@ import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd, formatVndInput, parseVndInput, sanitizeVndInput } from '../../../utils/vietnamCurrency.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canManageSuppliers } from '../../auth/utils/permissions.js'
+import { canManageSupplierProducts } from '../../auth/utils/permissions.js'
 import { fetchSupplierReceiptSkus } from '../../products/services/productSkusApi.js'
 import { isSupplierReceiptEligibleSku } from '../../products/services/productsApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
@@ -866,7 +866,7 @@ export default function SupplierProductsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false)
 
   const searchTimerRef = useRef(null)
-  const canManage = canManageSuppliers(loadAuthSession())
+  const canManage = canManageSupplierProducts(loadAuthSession())
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null
 

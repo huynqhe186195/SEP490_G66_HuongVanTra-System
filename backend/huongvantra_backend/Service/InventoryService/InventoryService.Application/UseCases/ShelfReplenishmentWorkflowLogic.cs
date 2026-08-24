@@ -178,6 +178,170 @@ public class ShelfReplenishmentWorkflowLogic(
             $"Đã tạo và lưu Lệnh sản xuất {order.ProductionCode} cho {shortage} Thành phẩm còn thiếu.", order, checks);
     }
 
+    /// <summary>
+    /// SC-05: Duyệt toàn bộ yêu cầu khi đủ Thành phẩm trên Kho. Chặn tự duyệt;
+    /// kiểm tồn tất cả dòng trước khi ghi; tạo một phiếu điều chuyển rồi Complete (FEFO/atomic/slip/ledger).
+    /// </summary>
+    public async Task<StockAdjustmentRequestResponse> ApproveRequestAsync(
+        Guid requestId,
+        Guid actorId,
+        CreatorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        if (actorId == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người duyệt.");
+
+        var request = await _requestRepo.GetByIdAsync(requestId, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy Yêu cầu bổ sung Kệ Hàng.");
+
+        if (request.Status != StockAdjustmentRequestStatus.Pending)
+            throw new InventoryValidationException("Chỉ có thể duyệt yêu cầu đang chờ xử lý.");
+
+        if (request.RequestedBy == actorId)
+            throw new InventoryValidationException("Người tạo yêu cầu không được tự duyệt.");
+
+        var openLines = request.Items
+            .Where(item => !StockAdjustmentFulfillment.IsLineClosed(item.Status))
+            .ToList();
+        if (openLines.Count == 0)
+            throw new InventoryValidationException("Yêu cầu không còn dòng nào để duyệt.");
+
+        if (openLines.Any(item =>
+                item.Status != StockAdjustmentRequestItemStatus.Pending
+                || item.ApprovedQuantity > 0
+                || item.FulfilledQuantity > 0
+                || item.AutoProductionOrderId.HasValue))
+        {
+            throw new InventoryValidationException(
+                "Yêu cầu đã được xử lý từng dòng. Hãy dùng thao tác theo sản phẩm hoặc tạo yêu cầu mới.");
+        }
+
+        var existingTransfers = await _requestRepo.GetTransfersBySourceRequestAsync(request.Id, ct);
+        if (existingTransfers.Count > 0)
+            throw new InventoryValidationException("Yêu cầu đã có phiếu điều chuyển liên quan, không thể duyệt lại toàn bộ.");
+
+        var shortages = new List<string>();
+        foreach (var item in openLines)
+        {
+            var aggregateStock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
+            var finishedBatchOnHand = await _warehouseBatchRepo.SumQuantityOnHandAsync(item.SkuId, "Warehouse", ct);
+            var finishedGoodsOnHand = Math.Max(
+                0,
+                Math.Min(aggregateStock?.WarehouseQuantityOnHand ?? 0, finishedBatchOnHand));
+            if (finishedGoodsOnHand < item.QuantityDelta)
+            {
+                shortages.Add(
+                    $"{item.SkuCode}: cần {item.QuantityDelta}, tồn Kho {finishedGoodsOnHand}");
+            }
+        }
+
+        if (shortages.Count > 0)
+        {
+            throw new InventoryValidationException(
+                "Không đủ Thành phẩm trên Kho để duyệt toàn bộ yêu cầu. " +
+                string.Join("; ", shortages.Take(8)) +
+                (shortages.Count > 8 ? "…" : string.Empty));
+        }
+
+        foreach (var item in openLines)
+        {
+            item.ApprovedQuantity = item.QuantityDelta;
+            item.Status = StockAdjustmentRequestItemStatus.Approved;
+            item.ReviewNote = "Đã duyệt toàn bộ yêu cầu; hệ thống điều chuyển Kho → Kệ.";
+        }
+
+        StockAdjustmentFulfillment.RecalculateRequestStatus(request);
+        request.ReviewedBy = actorId;
+        request.ReviewedByName = actor.CreatedByName;
+        request.ReviewedByRoleName = actor.CreatedByRoleName;
+        request.ReviewedAt = DateTime.UtcNow;
+        request.ReviewNote = "Đã duyệt và điều chuyển đủ lên Kệ Hàng.";
+        await _requestRepo.SaveChangesAsync(ct);
+
+        var transfer = await _stockTransferLogic.CreateAsync(
+            new UpsertStockTransferRequest(
+                $"Duyệt yêu cầu {request.RequestCode} — điều chuyển toàn bộ lên Kệ Hàng.",
+                openLines.Select(item => new UpsertStockTransferLineRequest(
+                    item.SkuId,
+                    item.SkuCode,
+                    item.SkuSnapshotName,
+                    null,
+                    item.QuantityDelta,
+                    item.Id)).ToList(),
+                request.Id,
+                null),
+            actorId,
+            actor,
+            ct);
+
+        await _stockTransferLogic.CompleteAsync(transfer.TransferId, actorId, actor, ct);
+
+        var refreshed = await _inventoryLogic.GetStockAdjustmentRequestAsync(request.Id, ct)
+            ?? throw new InventoryNotFoundException("Không tải lại được yêu cầu sau khi duyệt.");
+
+        _ = _notificationClient.SendDirectAsync(
+            refreshed.RequestedBy,
+            NotificationTypes.StockAdjustmentRequestReviewed,
+            $"Yêu cầu {refreshed.RequestCode} đã được duyệt và bổ sung lên Kệ Hàng",
+            $"/inventory/stock-adjustment-requests/{refreshed.Id}");
+
+        return refreshed;
+    }
+
+    /// <summary>SC-05: Từ chối toàn bộ yêu cầu đang Pending — không ảnh hưởng tồn kho.</summary>
+    public async Task<StockAdjustmentReviewResponse> RejectRequestAsync(
+        Guid requestId,
+        Guid actorId,
+        CreatorSnapshot actor,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        if (actorId == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người từ chối.");
+
+        var note = reason?.Trim();
+        if (string.IsNullOrWhiteSpace(note))
+            throw new InventoryValidationException("Vui lòng nhập lý do từ chối.");
+
+        var request = await _requestRepo.GetByIdAsync(requestId, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy Yêu cầu bổ sung Kệ Hàng.");
+
+        if (request.Status != StockAdjustmentRequestStatus.Pending)
+            throw new InventoryValidationException("Chỉ có thể từ chối yêu cầu đang chờ xử lý.");
+
+        if (request.RequestedBy == actorId)
+            throw new InventoryValidationException("Người tạo yêu cầu không được tự từ chối để đóng vòng duyệt.");
+
+        foreach (var item in request.Items.Where(i => !StockAdjustmentFulfillment.IsLineClosed(i.Status)))
+        {
+            item.ApprovedQuantity = 0;
+            item.RejectedQuantity = item.QuantityDelta;
+            item.RejectionReason = note;
+            item.Status = StockAdjustmentRequestItemStatus.Rejected;
+        }
+
+        request.Status = StockAdjustmentRequestStatus.Rejected;
+        request.ReviewedBy = actorId;
+        request.ReviewedByName = actor.CreatedByName;
+        request.ReviewedByRoleName = actor.CreatedByRoleName;
+        request.ReviewedAt = DateTime.UtcNow;
+        request.ReviewNote = note;
+        await _requestRepo.SaveChangesAsync(ct);
+
+        _ = _notificationClient.SendDirectAsync(
+            request.RequestedBy,
+            NotificationTypes.StockAdjustmentRequestRejected,
+            $"Yêu cầu {request.RequestCode} đã bị từ chối",
+            $"/inventory/stock-adjustment-requests/{request.Id}");
+
+        return new StockAdjustmentReviewResponse(
+            request.Id,
+            request.RequestCode,
+            request.Status.ToString().ToLowerInvariant(),
+            request.ReviewedAt,
+            []);
+    }
+
     public async Task TryFulfillCompletedProductionAsync(
         Guid productionOrderId,
         Guid actorId,

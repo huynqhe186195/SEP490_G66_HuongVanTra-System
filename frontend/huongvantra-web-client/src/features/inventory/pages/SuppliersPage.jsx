@@ -8,7 +8,7 @@ import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canManageSuppliers } from '../../auth/utils/permissions.js'
+import { canDeleteSupplier, canManageSuppliers } from '../../auth/utils/permissions.js'
 import {
   createSupplier,
   deleteSupplier,
@@ -17,9 +17,18 @@ import {
   updateSupplier,
 } from '../services/suppliersApi.js'
 
-import { validatePhoneNumber } from '../../customers/utils/customerValidation.js'
+import { normalizeTaxCodeInput, validatePhoneNumber, validateTaxCode } from '../../customers/utils/customerValidation.js'
 
-const EMPTY_FORM = { supplierCode: '', name: '', phone: '', email: '', address: '', note: '' }
+const EMPTY_FORM = {
+  supplierCode: '',
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  taxCode: '',
+  paymentTerms: '',
+  note: '',
+}
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -49,6 +58,13 @@ function validateField(field, value) {
     case 'address':
       if (trimmed.length > 500) return 'Địa chỉ tối đa 500 ký tự.'
       return ''
+    case 'taxCode': {
+      if (!trimmed) return ''
+      return validateTaxCode(trimmed, { required: false }) || ''
+    }
+    case 'paymentTerms':
+      if (trimmed.length > 255) return 'Điều khoản thanh toán tối đa 255 ký tự.'
+      return ''
     case 'note':
       if (trimmed.length > 1000) return 'Ghi chú tối đa 1000 ký tự.'
       return ''
@@ -59,7 +75,7 @@ function validateField(field, value) {
 
 function validateForm(form) {
   const errors = {}
-  for (const field of ['supplierCode', 'name', 'phone', 'email', 'address', 'note']) {
+  for (const field of ['supplierCode', 'name', 'phone', 'email', 'address', 'taxCode', 'paymentTerms', 'note']) {
     const msg = validateField(field, form[field])
     if (msg) errors[field] = msg
   }
@@ -84,6 +100,9 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
       value = value.startsWith('+') ? '+' + value.slice(1).replace(/\+/g, '') : value.replace(/\+/g, '')
       value = value.slice(0, value.startsWith('+') ? 12 : 11)
     }
+    if (field === 'taxCode') {
+      value = normalizeTaxCodeInput(value)
+    }
     setForm((prev) => ({ ...prev, [field]: value }))
     if (touched[field]) {
       setErrors((prev) => ({ ...prev, [field]: validateField(field, value) }))
@@ -99,7 +118,16 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
     e.preventDefault()
     const nextErrors = validateForm(form)
     setErrors(nextErrors)
-    setTouched({ supplierCode: true, name: true, phone: true, email: true, address: true, note: true })
+    setTouched({
+      supplierCode: true,
+      name: true,
+      phone: true,
+      email: true,
+      address: true,
+      taxCode: true,
+      paymentTerms: true,
+      note: true,
+    })
     if (Object.keys(nextErrors).length > 0) {
       showError('Vui lòng kiểm tra lại thông tin đã nhập.')
       return
@@ -110,6 +138,8 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
       phone: form.phone.trim(),
       email: form.email.trim(),
       address: form.address.trim(),
+      taxCode: form.taxCode.trim(),
+      paymentTerms: form.paymentTerms.trim(),
       note: form.note.trim(),
     }
     setSaving(true)
@@ -214,6 +244,32 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
             />
             {fieldError('address')}
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-[#414942]">Mã số thuế</label>
+              <input
+                className={inputCls('taxCode')}
+                value={form.taxCode}
+                onChange={set('taxCode')}
+                onBlur={handleBlur('taxCode')}
+                placeholder="Tuỳ chọn"
+                maxLength={14}
+              />
+              {fieldError('taxCode')}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-[#414942]">Điều khoản TT</label>
+              <input
+                className={inputCls('paymentTerms')}
+                value={form.paymentTerms}
+                onChange={set('paymentTerms')}
+                onBlur={handleBlur('paymentTerms')}
+                placeholder="VD: Net 30, COD…"
+                maxLength={255}
+              />
+              {fieldError('paymentTerms')}
+            </div>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#414942]">Ghi chú</label>
             <textarea
@@ -274,7 +330,9 @@ export default function SuppliersPage() {
   const searchTimerRef = useRef(null)
   const searchRef = useRef('')
 
-  const canManage = canManageSuppliers(loadAuthSession())
+  const session = loadAuthSession()
+  const canManage = canManageSuppliers(session)
+  const canDelete = canDeleteSupplier(session)
 
   const load = useCallback(
     async (p = 1, q = searchRef.current, showDeleted = includeDeleted) => {
@@ -402,19 +460,19 @@ export default function SuppliersPage() {
               <th className="pb-2 pr-4 text-right">Số phiếu nhập</th>
               <th className="pb-2 pr-4 text-right">Tổng giá trị nhập</th>
               <th className="pb-2 pr-4">Trạng thái</th>
-              {canManage && <th className="pb-2"></th>}
+              {(canManage || canDelete) && <th className="pb-2"></th>}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage || canDelete ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
                   Đang tải...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage || canDelete ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
                   Không có nhà cung cấp nào.
                 </td>
               </tr>
@@ -443,32 +501,36 @@ export default function SuppliersPage() {
                   <td className="py-3 pr-4">
                     <StatusChip isDeleted={s.isDeleted} />
                   </td>
-                  {canManage && (
+                  {(canManage || canDelete) && (
                     <td className="py-3">
                       <div className="flex items-center gap-2">
                         {!s.isDeleted ? (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => openEdit(s)}
-                              className="rounded-lg border border-[#c1c9c0] px-3 py-1 text-xs font-semibold text-[#414942] hover:bg-[#e8f0e9] hover:border-[#356647] hover:text-[#356647]">
-                              Sửa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(s)}
-                              className="rounded-lg border border-[#c1c9c0] px-3 py-1 text-xs font-semibold text-[#414942] hover:bg-red-50 hover:border-red-400 hover:text-red-600">
-                              Ẩn
-                            </button>
+                            {canManage ? (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(s)}
+                                className="rounded-lg border border-[#c1c9c0] px-3 py-1 text-xs font-semibold text-[#414942] hover:bg-[#e8f0e9] hover:border-[#356647] hover:text-[#356647]">
+                                Sửa
+                              </button>
+                            ) : null}
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(s)}
+                                className="rounded-lg border border-[#c1c9c0] px-3 py-1 text-xs font-semibold text-[#414942] hover:bg-red-50 hover:border-red-400 hover:text-red-600">
+                                Ẩn
+                              </button>
+                            ) : null}
                           </>
-                        ) : (
+                        ) : canDelete ? (
                           <button
                             type="button"
                             onClick={() => handleRestore(s)}
                             className="rounded-lg border border-[#c1c9c0] px-3 py-1 text-xs font-semibold text-[#414942] hover:bg-[#e8f0e9] hover:border-[#356647] hover:text-[#356647]">
                             Khôi phục
                           </button>
-                        )}
+                        ) : null}
                       </div>
                     </td>
                   )}

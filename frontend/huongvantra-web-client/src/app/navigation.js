@@ -74,7 +74,7 @@ export const navigationItems = [
     path: '/inventory/return-inspections',
     module: 'inventory_returns',
     icon: 'rule',
-    roles: ['inventoryManager'],
+    roles: ['agencyManager', 'inventoryManager'],
   },
   {
     label: 'Chờ đóng gói / trừ Kho',
@@ -210,7 +210,7 @@ export const navigationItems = [
     path: '/admin/system-activities',
     module: 'system_activity_log',
     icon: 'manage_search',
-    roles: ['admin'],
+    roles: ['admin', 'agencyManager'],
   },
   {
     label: 'Tích hợp',
@@ -477,10 +477,9 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const exchange = takeNavLeaf(byPath, consumed, '/orders/exchange', 'Trả / đổi hàng')
   if (exchange) orderChildren.push(exchange)
 
-  // Kiểm tra hàng trả chỉ dành cho Thủ kho (nhóm Kho tổng) — không gắn vào sidebar Manager/Admin.
-  if (byPath.has('/inventory/return-inspections')) {
-    consumed.add('/inventory/return-inspections')
-  }
+  // Kiểm tra hàng trả: Thủ kho + Manager (INV-10 / PERFORM_RETURN_INSPECTION).
+  const returnInspect = takeNavLeaf(byPath, consumed, '/inventory/return-inspections', 'Kiểm tra hàng trả')
+  if (returnInspect) orderChildren.push(returnInspect)
 
   if (!isAdmin) {
     const waiting = takeNavLeaf(byPath, consumed, '/orders/stock-deduct', 'Chờ đóng gói / trừ Kho')
@@ -1120,7 +1119,8 @@ export function canAccessModule(session, module) {
   if (String(module).toLowerCase() === 'inventory_returns') {
     const permissions = session?.permissions ?? []
     if (
-      permissions.includes('OPERATE_WAREHOUSE')
+      permissions.includes('PERFORM_RETURN_INSPECTION')
+      || permissions.includes('OPERATE_WAREHOUSE')
       || permissions.includes('APPROVE_INVENTORY')
       || permissions.includes('VIEW_INVENTORY')
     ) {
@@ -1186,12 +1186,17 @@ export function canAccessPath(session, pathname, search = '') {
     }
   }
 
-  // Kiểm tra hàng trả: chỉ Thủ kho (OPERATE_WAREHOUSE). Quản lý không thao tác.
+  // Kiểm tra hàng trả: Thủ kho hoặc Manager (PERFORM_RETURN_INSPECTION).
   if (path === '/inventory/return-inspections' || path.startsWith('/inventory/return-inspections/')) {
     const permissions = session?.permissions ?? []
-    if (permissions.includes('OPERATE_WAREHOUSE')) return true
-    return hasAnyRoleGroup(session?.roles ?? [], ['inventoryManager'])
-      && !hasAnyRoleGroup(session?.roles ?? [], ['admin', 'agencyManager'])
+    if (
+      permissions.includes('PERFORM_RETURN_INSPECTION')
+      || permissions.includes('OPERATE_WAREHOUSE')
+    ) {
+      return true
+    }
+    return hasAnyRoleGroup(session?.roles ?? [], ['inventoryManager', 'agencyManager'])
+      && !hasAnyRoleGroup(session?.roles ?? [], ['admin'])
   }
 
   // Live báo cáo cuối ngày: chỉ Thủ kho. Admin/Manager chỉ xem /submissions.
@@ -1315,10 +1320,13 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
   }
   if (module === 'inventory_returns') {
-    return 'Chỉ Thủ kho được kiểm tra hàng trả.'
+    return 'Chỉ Thủ kho hoặc Quản lý được kiểm tra hàng trả / trả hàng nhập.'
   }
-  if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
+  if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
+  }
+  if (module === 'system_activity_log') {
+    return 'Chỉ Admin hoặc Quản lý được xem nhật ký hệ thống.'
   }
   if (module === 'inventory_sync_monitor' || module === 'integrations') {
     return 'Chỉ Quản lý hoặc Admin được xem trang đồng bộ bán hàng sang kho.'

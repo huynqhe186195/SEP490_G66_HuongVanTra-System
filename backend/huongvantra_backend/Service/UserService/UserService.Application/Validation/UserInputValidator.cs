@@ -11,7 +11,9 @@ public static class UserInputValidator
     public const string UsernameTooLongMessage = "Tên đăng nhập không được dài hơn 50 ký tự";
     public const string EmptyPasswordMessage = "Mật khẩu không được để trống";
     public const string InvalidPasswordMessage = "Mật khẩu không hợp lệ";
-    public const int PasswordMinLength = 6;
+    public const int PasswordMinLength = 8;
+    public const string PasswordTooShortMessage = "Mật khẩu phải có ít nhất 8 ký tự.";
+    public const string NewPasswordTooShortMessage = "Mật khẩu mới phải có ít nhất 8 ký tự.";
     public const string EmptyFullNameMessage = "Họ và tên không được để trống";
     public const string InvalidFullNameMessage = "Họ và tên không hợp lệ";
     public const string EmptyRolesMessage = "Vui lòng chọn ít nhất một vai trò";
@@ -68,6 +70,9 @@ public static class UserInputValidator
         if (string.IsNullOrWhiteSpace(password))
             throw new UserValidationException(EmptyPasswordMessage);
 
+        if (password.Length < PasswordMinLength)
+            throw new UserValidationException(PasswordTooShortMessage);
+
         if (!PasswordRegex.IsMatch(password))
             throw new UserValidationException(InvalidPasswordMessage);
 
@@ -89,7 +94,7 @@ public static class UserInputValidator
     public static void ValidateNewPassword(string? password)
     {
         if (string.IsNullOrWhiteSpace(password) || password.Length < PasswordMinLength)
-            throw new UserValidationException("Mật khẩu mới không được ngắn hơn 6 ký tự");
+            throw new UserValidationException(NewPasswordTooShortMessage);
 
         if (!PasswordRegex.IsMatch(password))
             throw new UserValidationException("Mật khẩu mới không hợp lệ");
