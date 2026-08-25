@@ -59,4 +59,4 @@ jobs:
 
             echo "=== Deploy hoàn tất: $(date) ==="
             echo ""
-            echo "Truy cập: http://116.118.3.5:3000"
+            echo "Truy cập: https://huongvantra.info.vn"
