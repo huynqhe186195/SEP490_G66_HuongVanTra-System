@@ -791,6 +791,12 @@ public class OrderLogic(
                     customMaterialsPreview,
                     isPosCompletedOnCreate || order.OrderChannel == OrderChannel.COD);
             }
+            else if (isDepositCheckout)
+            {
+                // Gói custom dù đủ nguyên liệu vẫn phải chờ Thủ kho đóng gói nên tiền thu trước
+                // vẫn là cọc: phải lưu trên Order để hoàn/tịch thu và báo cáo cọc tính đúng.
+                ApplyDepositAmount(order, req);
+            }
         }
 
         // Gắn entity vào DbContext. Commit thật ở SaveChanges bên dưới (sau trừ tồn / Outbox).
@@ -3488,22 +3494,25 @@ public class OrderLogic(
         order.PickupNote = string.IsNullOrWhiteSpace(req.PickupNote) ? null : req.PickupNote.Trim();
         ApplyPickupContact(order, req);
 
-        if (order.OrderChannel == OrderChannel.POS
-            && req.DepositAmount.HasValue
-            && req.DepositAmount.Value > 0)
-        {
-            var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
-            if (req.DepositAmount.Value < minimumDeposit)
-            {
-                throw new OrderValidationException(
-                    $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
-            }
-
-            order.DepositAmount = req.DepositAmount.Value;
-        }
+        ApplyDepositAmount(order, req);
 
         if (setWaitingMaterials)
             order.OrderStatus = OrderStatus.WaitingMaterials;
+    }
+
+    private static void ApplyDepositAmount(Order order, CreateOrderRequest req)
+    {
+        if (order.OrderChannel != OrderChannel.POS || req.DepositAmount is not > 0)
+            return;
+
+        var minimumDeposit = Math.Round(order.FinalAmount * 0.5m, 0, MidpointRounding.AwayFromZero);
+        if (req.DepositAmount.Value < minimumDeposit)
+        {
+            throw new OrderValidationException(
+                $"Cọc tối thiểu 50% giá trị đơn hàng ({FormatVnd(minimumDeposit)}).");
+        }
+
+        order.DepositAmount = req.DepositAmount.Value;
     }
 
     private static OrderStatus PreferHeavierOrderStatus(OrderStatus current, OrderStatus candidate)

@@ -13,6 +13,13 @@ public static class PermissionNames
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
     public const string ManageCatalog = "MANAGE_CATALOG";
+
+    /// <summary>
+    /// Sửa danh mục tra cứu (nhãn/thương hiệu) — Manager, Thủ kho. Tách khỏi MANAGE_CATALOG
+    /// để Manager không đồng thời được CRUD sản phẩm/bảng giá và bỏ qua luồng duyệt yêu cầu.
+    /// </summary>
+    public const string ManageTaxonomy = "MANAGE_TAXONOMY";
+
     public const string ViewCatalog = "VIEW_CATALOG";
     public const string SyncCatalog = "SYNC_CATALOG";
     public const string ApprovePrice = "APPROVE_PRICE";
@@ -105,6 +112,9 @@ public static class PermissionNames
     /// <summary>Tạo/sửa/ngưng hạng thành viên — Admin (MANAGE_BUSINESS_POLICY) hoặc Manager (CREATE_CUSTOMER).</summary>
     public const string ManageMembershipTierAccess = "MANAGE_MEMBERSHIP_TIER_ACCESS";
 
+    /// <summary>Sửa danh mục nhãn — MANAGE_TAXONOMY (Manager) hoặc legacy MANAGE_CATALOG (Thủ kho).</summary>
+    public const string ManageTaxonomyAccess = "MANAGE_TAXONOMY_ACCESS";
+
     public static readonly string[] All =
     [
         CreateOrder,
@@ -118,6 +128,7 @@ public static class PermissionNames
         ManageUser,
         ManageRole,
         ManageCatalog,
+        ManageTaxonomy,
         ViewCatalog,
         SyncCatalog,
         ApprovePrice,

@@ -46,9 +46,12 @@ public class AuthPermissionUnionTests
         Assert.Equal(response.Permissions.Count, response.Permissions.Distinct().Count());
 
         var token = new JwtSecurityTokenHandler().ReadJwtToken(response.AccessToken);
+        // Token phát cả claim ngắn "role" (RoleClaimType cho [Authorize(Roles)]) lẫn ClaimTypes.Role
+        // (SystemActivityAuditMiddleware đọc), nên so sánh theo giá trị role chứ không theo số claim.
         var tokenRoles = token.Claims
             .Where(claim => claim.Type is "role" || claim.Type == ClaimTypes.Role)
             .Select(claim => claim.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         var tokenPermissions = token.Claims
             .Where(claim => claim.Type == "permission")

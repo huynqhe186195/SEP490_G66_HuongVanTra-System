@@ -91,6 +91,7 @@ public static class DataSeeder
             PermissionNames.ViewCost,
             PermissionNames.ViewCatalog,
             PermissionNames.SyncCatalog,
+            PermissionNames.ManageTaxonomy,
             PermissionNames.ViewProductRequest,
             PermissionNames.ApproveProductRequest,
             PermissionNames.CreateShelfReplenishment,

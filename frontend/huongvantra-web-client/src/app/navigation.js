@@ -99,6 +99,7 @@ export const navigationItems = [
   { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Nhãn sản phẩm', path: '/products/brands', module: 'products', icon: 'label', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
@@ -276,6 +277,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
     entries: [
       { path: '/inventory/products', label: 'Sản phẩm & Số lượng' },
       { path: '/products/categories', label: 'Danh mục sản phẩm' },
+      { path: '/products/brands', label: 'Nhãn sản phẩm' },
       { path: '/inventory/boms' },
       { path: '/inventory/product-approvals', label: 'Lịch sử tạo hàng hóa' },
     ],
@@ -517,6 +519,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
     ? [
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
+      ['/products/brands', 'Nhãn sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
@@ -527,6 +530,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
     : [
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
+      ['/products/brands', 'Nhãn sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
@@ -1015,6 +1019,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'customers', prefix: '/customers' },
   { module: 'product_creation_requests', prefix: '/inventory/product-approvals' },
   { module: 'products', prefix: '/products/categories' },
+  { module: 'products', prefix: '/products/brands' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_transfer_ops', prefix: '/inventory/stock-transfers' },
   { module: 'stock_transfer_ops', prefix: '/inventory/shelf-replenishment-suggestions' },

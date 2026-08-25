@@ -98,5 +98,5 @@ public class BrandLogic(IBrandRepository _brandRepository)
     }
 
     private static BrandResponse MapToResponse(Brand b) =>
-        new(b.Id, b.Name, b.IsActive, b.IsDeleted, b.CreatedAt);
+        new(b.Id, b.Name, b.IsActive, b.IsDeleted, b.CreatedAt, b.UpdatedAt);
 }

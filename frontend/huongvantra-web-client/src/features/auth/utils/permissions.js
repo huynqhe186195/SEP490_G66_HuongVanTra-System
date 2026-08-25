@@ -129,6 +129,12 @@ export function canManageCatalog(session) {
   return isWarehouseRole(session)
 }
 
+/** Nhãn (Brand): Quản lý qua MANAGE_TAXONOMY, Thủ kho qua MANAGE_CATALOG — khớp policy MANAGE_TAXONOMY_ACCESS. */
+export function canManageTaxonomy(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'MANAGE_TAXONOMY') || canManageCatalog(session)
+}
+
 /** Chỉ Thủ kho được tạo mới sản phẩm / danh mục / SKU. */
 export function canCreateCatalog(session) {
   return isWarehouseRole(session) && !isBusinessOpsBlocked(session)

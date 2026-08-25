@@ -23,7 +23,7 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
         Ok(await _brandLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ManageCatalog)]
+    [Authorize(Policy = PermissionNames.ManageTaxonomyAccess)]
     public async Task<IActionResult> Create([FromBody] CreateBrandRequest request)
     {
         var result = await _brandLogic.CreateAsync(request);
@@ -31,12 +31,12 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Policy = PermissionNames.ManageCatalog)]
+    [Authorize(Policy = PermissionNames.ManageTaxonomyAccess)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateBrandRequest request) =>
         Ok(await _brandLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = PermissionNames.ManageCatalog)]
+    [Authorize(Policy = PermissionNames.ManageTaxonomyAccess)]
     public async Task<IActionResult> Delete(int id)
     {
         await _brandLogic.DeleteAsync(id);
@@ -44,7 +44,7 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
     }
 
     [HttpPost("{id:int}/restore")]
-    [Authorize(Policy = PermissionNames.ManageCatalog)]
+    [Authorize(Policy = PermissionNames.ManageTaxonomyAccess)]
     public async Task<IActionResult> Restore(int id) =>
         Ok(await _brandLogic.RestoreAsync(id));
 }
