@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   canCompleteBackorderRefund,
   canCreateOrder,
+  canEditAccountingSalePrice,
   canReviewBackorderRefund,
   canUsePosCodMode,
   canUsePosCounterMode,
@@ -93,4 +94,14 @@ test('backorder refund separates approval from evidence recording', () => {
   assert.equal(canCompleteBackorderRefund(accountant), true)
   assert.equal(canReviewBackorderRefund(admin), false)
   assert.equal(canCompleteBackorderRefund(admin), false)
+})
+
+test('only Manager catalog permission can edit the direct retail sale price', () => {
+  const manager = { roles: ['Manager'], permissions: ['MANAGE_CATALOG', 'VIEW_COST'] }
+  const accountant = { roles: ['Accountant'], permissions: ['MANAGE_COST', 'VIEW_COST'] }
+  const admin = { roles: ['Admin'], permissions: ['MANAGE_CATALOG', 'VIEW_COST'] }
+
+  assert.equal(canEditAccountingSalePrice(manager), true)
+  assert.equal(canEditAccountingSalePrice(accountant), false)
+  assert.equal(canEditAccountingSalePrice(admin), false)
 })

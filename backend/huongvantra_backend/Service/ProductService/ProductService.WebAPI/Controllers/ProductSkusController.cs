@@ -57,12 +57,10 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     /// Internal catalog for DocumentService contract line items (SkuCode, ProductName, UnitName, RetailPrice).
     /// </summary>
     [HttpGet("contract-catalog")]
-    [AllowAnonymous]
-    [RequireInternalApiKey]
-    public async Task<IActionResult> GetContractCatalog(
+    public IActionResult GetContractCatalog(
         [FromQuery] List<Guid>? skuIds,
         CancellationToken ct) =>
-        Ok(await _skuLogic.GetContractCatalogBySkuIdsAsync(skuIds, ct));
+        NotFound();
 
     /// <summary>
     /// Live SKU search for lập hợp đồng B2B (ContractFormPage). Always uses Warehouse scope so
@@ -70,15 +68,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     /// Independent from GetCatalogViewScope() (role "Warehouse") since Kế toán/Manager create contracts.
     /// </summary>
     [HttpGet("contract-search")]
-    [Authorize(Policy = PermissionNames.ContractCatalogAccess)]
-    public async Task<IActionResult> ContractSearch(
+    public IActionResult ContractSearch(
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20) =>
-        Ok(await _skuLogic.GetPagedAsync(
-            new GetProductSkusRequest(search, null, isActive, page, pageSize),
-            CatalogViewScope.Warehouse));
+        NotFound();
 
     /// <summary>
     /// Internal catalog for InventoryService Supplier Receipt validation.
@@ -98,7 +93,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetAccountingCostProfitAsync(ct));
 
     [HttpPatch("{id:guid}/retail-price")]
-    [Authorize(Policy = PermissionNames.ManageCost)]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> UpdateRetailPrice(
         Guid id,
         [FromBody] UpdateProductVariantRetailPriceRequest request,

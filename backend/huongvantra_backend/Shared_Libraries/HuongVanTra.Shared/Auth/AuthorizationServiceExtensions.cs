@@ -31,6 +31,7 @@ public static class AuthorizationServiceExtensions
             options.AddPolicy(PermissionNames.EditCustomerProfile, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateCustomer,
+                    PermissionNames.CreateOrder,
                     PermissionNames.ManageCorporateCustomer)));
 
             options.AddPolicy(PermissionNames.CreateCustomerProfile, policy =>
@@ -73,10 +74,7 @@ public static class AuthorizationServiceExtensions
 
             options.AddPolicy(PermissionNames.ViewCatalogAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.ViewCatalog,
-                    PermissionNames.ViewInventory,
-                    PermissionNames.ManageCatalog,
-                    PermissionNames.ViewCost)));
+                    PermissionNames.ViewCatalog)));
 
             // Lập hợp đồng B2B cần thấy cả nguyên liệu/bao bì — không phụ thuộc role Thủ kho.
             options.AddPolicy(PermissionNames.ContractCatalogAccess, policy =>
@@ -100,9 +98,7 @@ public static class AuthorizationServiceExtensions
             options.AddPolicy(PermissionNames.CancelRetailPriceAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ApprovePrice,
-                    PermissionNames.ApproveRetailPriceChange,
-                    PermissionNames.ManageCost,
-                    PermissionNames.RequestRetailPriceChange)));
+                    PermissionNames.ManageCost)));
 
             options.AddPolicy(PermissionNames.ManageSupplierProductAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(

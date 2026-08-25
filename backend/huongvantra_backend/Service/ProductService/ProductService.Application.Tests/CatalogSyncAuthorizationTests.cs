@@ -10,7 +10,7 @@ namespace ProductService.Application.Tests;
 public class CatalogSyncAuthorizationTests
 {
     [Fact]
-    public void PendingAndSyncEndpoints_RequireSyncCatalogPermission()
+    public void PendingAndSyncEndpoints_RequireDedicatedSyncCatalogPermission()
     {
         AssertSyncCatalogPolicy(nameof(CatalogSyncController.GetPending));
         AssertSyncCatalogPolicy(nameof(CatalogSyncController.Sync));
@@ -18,13 +18,12 @@ public class CatalogSyncAuthorizationTests
 
     public static TheoryData<string, string[], bool> CatalogSyncActors => new()
     {
-        { "SalePos", [PermissionNames.SyncCatalog], true },
-        { "SalePos+SaleCod", [PermissionNames.SyncCatalog, PermissionNames.CreateCodOrder], true },
-        { "Sale", [PermissionNames.SyncCatalog], true },
+        { "SalePos", [PermissionNames.CreatePosOrder], false },
+        { "SalePos+SaleCod", [PermissionNames.CreatePosOrder, PermissionNames.CreateCodOrder], false },
+        { "Sale", [PermissionNames.CreatePosOrder], false },
         { "Manager", [PermissionNames.SyncCatalog], true },
-        { "Admin", PermissionNames.All, true },
+        { "Admin", [PermissionNames.SyncCatalog], true },
         { "SaleCod", [PermissionNames.CreateCodOrder, PermissionNames.VerifyCod], false },
-        { "SalePosLegacyCreatePosOnly", [PermissionNames.CreatePosOrder], false },
     };
 
     [Theory]

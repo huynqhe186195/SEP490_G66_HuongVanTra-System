@@ -160,6 +160,15 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
         EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
+        // Sale may correct ordinary profile data only. Customer group and tier
+        // are business-controlled values: group changes belong to Manager and
+        // tier changes are driven by the completed-order workflow.
+        if (!access.CanViewAllCustomers && input.CustomerGroup != customer.CustomerGroup)
+            throw new CustomerForbiddenException("Sale chỉ được cập nhật thông tin hồ sơ cơ bản của khách hàng.");
+
+        if (input.TierId.HasValue && input.TierId != customer.TierId)
+            throw new CustomerValidationException(["Không thể thay đổi hạng khách hàng từ cập nhật hồ sơ. Hạng được hệ thống tự động cập nhật theo đơn hoàn tất."]);
+
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, id, ct))
             throw new DuplicatePhoneNumberException(input.PhoneNumber);
 
@@ -2279,6 +2288,7 @@ public class CustomerLogic
     {
         var debtByOrder = openDebts.ToDictionary(d => d.OrderId);
         var results = new List<CustomerDebtAllocationResponse>();
+        var allocatedByOrder = new Dictionary<Guid, decimal>();
 
         foreach (var item in allocations)
         {
@@ -2287,11 +2297,14 @@ public class CustomerLogic
             if (!debtByOrder.TryGetValue(item.OrderId, out var debt))
                 throw new CustomerValidationException([$"Không tìm thấy đơn nợ {item.OrderId}."]);
 
-            if (item.Amount > debt.RemainingDebt)
+            var alreadyAllocated = allocatedByOrder.GetValueOrDefault(item.OrderId);
+            var remainingForThisRequest = debt.RemainingDebt - alreadyAllocated;
+            if (item.Amount > remainingForThisRequest)
                 throw new CustomerValidationException([
                     $"Số tiền trừ đơn {debt.OrderCode} vượt nợ còn lại ({debt.RemainingDebt:N0})."]);
 
-            var remainingAfter = debt.RemainingDebt - item.Amount;
+            allocatedByOrder[item.OrderId] = alreadyAllocated + item.Amount;
+            var remainingAfter = debt.RemainingDebt - allocatedByOrder[item.OrderId];
             results.Add(new CustomerDebtAllocationResponse(
                 debt.OrderId,
                 debt.OrderCode,

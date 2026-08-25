@@ -41,16 +41,12 @@ export function canWriteInventory(session) {
 /** Ngưỡng cảnh báo tồn Kho thuộc quyền Thủ kho. */
 export function canEditWarehouseThreshold(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'MANAGE_STOCK_THRESHOLD') && isWarehouseRole(session)) return true
   return isWarehouseRole(session)
 }
 
 /** Ngưỡng cảnh báo tồn Kệ Hàng thuộc quyền Quản lý. */
 export function canEditShelfThreshold(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'MANAGE_STOCK_THRESHOLD')) {
-    return isBranchManager(session) || isManagerRole(session)
-  }
   return isBranchManager(session) || isManagerRole(session)
 }
 
@@ -89,11 +85,12 @@ export function canCreateCustomer(session) {
   )
 }
 
-/** Sửa hồ sơ KH: Manager (CREATE_CUSTOMER) và Kế toán (MANAGE_CORPORATE_CUSTOMER). Admin chỉ xem. */
+/** Sửa hồ sơ cơ bản: Manager và Sale; server vẫn khóa tier/debt/group cho Sale. */
 export function canEditCustomer(session) {
   if (isBusinessOpsBlocked(session)) return false
   return (
     hasPermission(session, 'CREATE_CUSTOMER')
+    || hasPermission(session, 'CREATE_ORDER')
     || hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
   )
 }
@@ -125,8 +122,7 @@ export function canSimulateOrderCompleted(session) {
 
 export function canManageCatalog(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'MANAGE_CATALOG')) return true
-  return isWarehouseRole(session)
+  return hasPermission(session, 'MANAGE_CATALOG')
 }
 
 /** Nhãn (Brand): Quản lý qua MANAGE_TAXONOMY, Thủ kho qua MANAGE_CATALOG — khớp policy MANAGE_TAXONOMY_ACCESS. */
@@ -137,7 +133,7 @@ export function canManageTaxonomy(session) {
 
 /** Chỉ Thủ kho được tạo mới sản phẩm / danh mục / SKU. */
 export function canCreateCatalog(session) {
-  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
+  return canManageCatalog(session)
 }
 
 /** Chỉ Thủ kho được ẩn / kích hoạt lại sản phẩm, danh mục. */
@@ -146,7 +142,7 @@ export function canHideCatalog(session) {
 }
 
 export function canCreateProductDeletionRequest(session) {
-  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
+  return canManageCatalog(session)
 }
 
 export function canAccessWarehouseInventory(session) {
@@ -160,8 +156,7 @@ export function canManageProducts(session) {
 
 export function canSyncCatalog(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'SYNC_CATALOG')) return true
-  return !canCreateCatalog(session) && (canManageCatalog(session) || canAdjustStoreStock(session))
+  return hasPermission(session, 'SYNC_CATALOG')
 }
 
 export function canViewOrders(session) {
@@ -204,10 +199,9 @@ export function isAuditOnlyAdmin(session) {
   return hasAdminRole(session)
 }
 
-/** Trang Accounting: chỉ Kế toán được sửa Giá bán; Admin/Manager chỉ xem. */
+/** Trang Accounting: chỉ Manager có MANAGE_CATALOG được sửa Giá bán; Accountant/Admin chỉ xem. */
 export function canEditAccountingSalePrice(session) {
-  if (isBusinessOpsBlocked(session)) return false
-  return isAccountantRole(session)
+  return canManageCatalog(session)
 }
 
 export function isSalePosRole(session) {
@@ -253,7 +247,6 @@ export function canAdjustStoreStock(session) {
 export function canCreateStockReplenishmentRequest(session) {
   if (hasAdminRole(session)) return false
   if (isWarehouseRole(session)) return false
-  if (hasPermission(session, 'CREATE_SHELF_REPLENISHMENT')) return true
   return (
     isBranchManager(session)
     || isManagerRole(session)
@@ -299,9 +292,8 @@ export function canReviewStockReplenishmentRequest(session) {
  */
 export function canInspectReturn(session) {
   if (isBusinessOpsBlocked(session)) return false
-  if (hasPermission(session, 'PERFORM_RETURN_INSPECTION')) return true
   if (hasPermission(session, 'OPERATE_WAREHOUSE')) return true
-  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
+  return isWarehouseRole(session)
 }
 
 /** Xem danh sách kiểm tra hàng trả — cùng phạm vi Thủ kho. */
@@ -453,25 +445,19 @@ export function canCompleteBackorderRefund(session) {
   return isAccountantRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
-/** Manager / Thủ kho tạo-sửa NCC; Admin không thao tác nghiệp vụ. */
+/** Chỉ kế toán được tạo/sửa/ẩn/khôi phục nhà cung cấp và mặt hàng nhà cung cấp; Admin/thủ kho chỉ xem. */
 export function canManageSuppliers(session) {
-  if (isBusinessOpsBlocked(session)) return false
-  return hasPermission(session, 'MANAGE_SUPPLIERS')
+  return isAccountantRole(session)
 }
 
-/** Chỉ Manager ẩn/khôi phục nhà cung cấp (DELETE_SUPPLIER). */
 export function canDeleteSupplier(session) {
   if (isBusinessOpsBlocked(session)) return false
   return hasPermission(session, 'DELETE_SUPPLIER')
 }
 
-/** Manager / Thủ kho duy trì mapping mặt hàng NCC. */
 export function canManageSupplierProducts(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return (
-    hasPermission(session, 'MANAGE_SUPPLIER_PRODUCT')
-    || hasPermission(session, 'MANAGE_SUPPLIERS')
-  )
+  return hasPermission(session, 'MANAGE_SUPPLIER_PRODUCT') || hasPermission(session, 'MANAGE_SUPPLIERS')
 }
 
 /** Manager duyệt yêu cầu tạo/xóa hàng hóa; Admin chỉ theo dõi. */

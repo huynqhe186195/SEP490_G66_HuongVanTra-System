@@ -22,8 +22,7 @@ import {
   getProductsFromCache,
   getCustomerByPhone as getOfflineCustomerByPhone,
   searchCustomersFromCache,
-  enqueue,
-  saveDraftOrder,
+  enqueueOfflineCashPosOrder,
 } from '../../../lib/offlineDb.js'
 
 /** Ghép tên SP + quy cách; tránh "Trà Xanh 100g — Trà Xanh 100g" khi VariantName đã chứa tên SP. */
@@ -554,26 +553,24 @@ export async function createTakeawayVietQrOrder(
   return attachTransferQr(result, qrAmount)
 }
 
-// Tiền mặt quầy. Tên "Offline" lệch: checkout hiện bắt online; nhánh queue bên dưới không tới được từ nút Xác nhận.
+// Tiền mặt quầy. Khi mất mạng chỉ hàng hoá đã có tồn Kệ cache mới được enqueue.
 export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
     const cashAmount = getPaymentAllocationAmount(payload, (method) => method === 'CASH')
     const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-    const idempotencyKey = crypto.randomUUID()
+    const offlineIdempotencyKey = idempotencyKey || crypto.randomUUID()
     const orderPayload = buildOrderRequestFromPosPayload(payload, {
       orderChannel: 'POS',
       paymentMethod: 'Cash',
       paidAmount: cashAmount,
     })
 
-    await saveDraftOrder({
+    await enqueueOfflineCashPosOrder({
       tempId,
-      status: 'PENDING_SYNC',
       payload: orderPayload,
-      createdAt: Date.now(),
+      idempotencyKey: offlineIdempotencyKey,
     })
-    await enqueue('CREATE_ORDER', orderPayload, idempotencyKey)
 
     return {
       orderId: tempId,

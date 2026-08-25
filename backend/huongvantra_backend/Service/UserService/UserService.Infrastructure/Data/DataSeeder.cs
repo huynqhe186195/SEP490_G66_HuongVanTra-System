@@ -20,7 +20,7 @@ public static class DataSeeder
             PermissionNames.CreatePosOrder,
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
-            PermissionNames.SyncCatalog,
+            PermissionNames.ViewCatalog,
         ]),
         ("SaleCod", "Nhân viên bán / thu COD",
         [
@@ -29,6 +29,7 @@ public static class DataSeeder
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
             PermissionNames.VerifyCod,
+            PermissionNames.ViewCatalog,
         ]),
         ("Sale", "Nhân viên kinh doanh (legacy → dùng SalePos/SaleCod)",
         [
@@ -36,18 +37,16 @@ public static class DataSeeder
             PermissionNames.CreatePosOrder,
             PermissionNames.ViewOrder,
             PermissionNames.ViewCustomer,
-            PermissionNames.SyncCatalog,
+            PermissionNames.ViewCatalog,
         ]),
         ("Warehouse", "Thủ kho Kho tổng",
         [
             PermissionNames.ViewOrder,
-            PermissionNames.ManageCatalog,
             PermissionNames.ViewCatalog,
             PermissionNames.MonitorOutbox,
             PermissionNames.ViewInventory,
             PermissionNames.OperateWarehouse,
             PermissionNames.SubmitWarehouseReport,
-            PermissionNames.BroadcastNotification,
             PermissionNames.ViewProductRequest,
             PermissionNames.ViewCost,
             PermissionNames.ShipOrder,
@@ -65,7 +64,6 @@ public static class DataSeeder
             PermissionNames.ManageCost,
             PermissionNames.ViewCost,
             PermissionNames.ViewCatalog,
-            PermissionNames.RequestRetailPriceChange,
             PermissionNames.ViewCustomer,
             PermissionNames.CreateOrder,
             PermissionNames.ManageCorporateCustomer,
@@ -90,6 +88,7 @@ public static class DataSeeder
             PermissionNames.RejectStockDeduct,
             PermissionNames.ViewCost,
             PermissionNames.ViewCatalog,
+            PermissionNames.ManageCatalog,
             PermissionNames.SyncCatalog,
             PermissionNames.ManageTaxonomy,
             PermissionNames.ViewProductRequest,
@@ -291,7 +290,6 @@ public static class DataSeeder
                 PermissionNames.ViewAllCustomers,
                 PermissionNames.ViewCatalog,
                 PermissionNames.ApprovePrice,
-                PermissionNames.ApproveRetailPriceChange,
                 PermissionNames.ApproveContract,
                 PermissionNames.ManageBusinessPolicy,
                 PermissionNames.MonitorOutbox,
@@ -299,7 +297,10 @@ public static class DataSeeder
                 PermissionNames.RejectStockDeduct,
                 PermissionNames.ViewCost,
                 PermissionNames.ViewProductRequest,
-            ]);    }
+                PermissionNames.ApproveProductRequest,
+                PermissionNames.SyncCatalog,
+            ]);
+    }
 
     private static async Task<Role> SeedRoleAsync(
         UserDbContext context,

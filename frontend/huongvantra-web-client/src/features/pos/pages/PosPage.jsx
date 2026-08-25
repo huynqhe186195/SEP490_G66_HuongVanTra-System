@@ -63,7 +63,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canCreateCustomer, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canSyncCatalog as canRunCatalogSync, canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import { PERSONAL_PRODUCT_LABEL } from '../../orders/utils/personalProductLabels.js'
 import {
@@ -287,7 +287,7 @@ function PosPage() {
   const location = useLocation()
   const authSession = useAuthSession()
   const authUserId = authSession?.userId ? String(authSession.userId) : null
-  const canSyncCatalog = canUsePosCounterMode(authSession)
+  const canSyncCatalog = canRunCatalogSync(authSession)
   const allowedSalesModes = useMemo(() => {
     const allowCounter = canUsePosCounterMode(authSession)
     const allowCod = canUsePosCodMode(authSession)
@@ -577,11 +577,12 @@ function PosPage() {
   const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
   const isTransferTakeaway = isTakeaway && isTransferPayment
 
-  // Offline: quầy chỉ tiền mặt; Bán COD chỉ COD (ẩn CK / VietQR).
+  // Offline is deliberately restricted to counter CASH. COD and VietQR always
+  // require the server, so do not present an offline payment option for them.
   const paymentMethods = (isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS)
     .filter((m) => {
       if (isOnline) return true
-      if (isTakeaway) return m.id === 'COD'
+      if (isTakeaway) return false
       return m.id === 'CASH'
     })
 
@@ -1657,11 +1658,12 @@ function PosPage() {
     // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = !hasCorporateCustomer && (isTakeaway
         ? canPayTakeaway && Boolean(shelfOnDuty) && !isSubmitting
-        : cashSessionOpen
+          : cashSessionOpen
           && shelfOnDuty
           && !shelfDayStatus.dayEndDone
           && (isTransferPayment ? canPayTransfer : canPayCash)
-          && !isSubmitting);
+          && !isSubmitting)
+        && (isOnline || (!isTakeaway && paymentMethod === 'CASH'));
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -1963,7 +1965,7 @@ function PosPage() {
       // createPosOrderOffline → posApi.submitPosOrder → ordersApi.createOrder → POST /api/v1/orders
       const result = await createOrder(payload, { idempotencyKey })
 
-    if (method === 'CASH' && collectedNow > 0) {
+    if (!result.isOffline && method === 'CASH' && collectedNow > 0) {
       // Chỉ refresh quỹ trên UI. BE đã cộng CashSalesTotal trong RecordCashSaleAsync sau khi commit đơn.
       await recordCashSale()
     }
@@ -2576,10 +2578,14 @@ function PosPage() {
     const handleConfirmPayment = async () => {
         if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         if (!navigator.onLine) {
-            showError(
-                "Cần kết nối mạng để kiểm tra Kệ/Kho/BOM và xác nhận khách có đồng ý chờ hàng trước khi thu tiền.",
-            );
-            return;
+            if (isTakeaway || paymentMethod !== 'CASH') {
+                showError('Ngoại tuyến chỉ hỗ trợ bán tại quầy bằng tiền mặt. VietQR và COD cần kết nối mạng.');
+                return;
+            }
+            if (customBundles.length > 0 || appliedPromotion || debtSettlement || selectedCustomer) {
+                showError('Đơn offline chỉ hỗ trợ khách lẻ, không khuyến mãi, không công nợ và không combo/BOM. Kết nối mạng để dùng các nghiệp vụ này.');
+                return;
+            }
         }
         setIsSubmitting(true);
         try {

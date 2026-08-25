@@ -8,7 +8,7 @@ import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getCustomerSectionFromSearch, getCustomerSectionLabel, buildCustomerPath } from '../../../app/customerSections.js'
-import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerDebtDetailModal from '../components/CustomerDebtDetailModal.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
@@ -270,6 +270,7 @@ function CustomersPage() {
   const canCreateCustomers = canCreateCustomer(session)
   const canRemoveCustomers = canDeleteCustomer(session)
   const canManageCorporate = canManageCorporateCustomers(session)
+  const canExportCustomers = canViewAllCustomers(session)
   const isReadOnlyViewer = isReadOnlyCustomerViewer(session)
   const canEditCustomerRow = (row) =>
     isCorporateCustomerType(row?.customerType) ? canManageCorporate : canManageCustomers
@@ -700,15 +701,17 @@ function CustomersPage() {
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-60 sm:h-12 sm:px-5 sm:text-sm"
-              disabled={isExporting || isLoading}
-              onClick={handleExportCustomers}
-            >
-              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isExporting ? 'animate-spin' : ''}`}>ios_share</span>
-              <span className="truncate">Export Excel</span>
-            </button>
+            {canExportCustomers ? (
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-60 sm:h-12 sm:px-5 sm:text-sm"
+                disabled={isExporting || isLoading}
+                onClick={handleExportCustomers}
+              >
+                <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isExporting ? 'animate-spin' : ''}`}>ios_share</span>
+                <span className="truncate">Export Excel</span>
+              </button>
+            ) : null}
             <Link
               to="/customers/addresses"
               className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 sm:h-12 sm:px-5 sm:text-sm"

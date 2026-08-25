@@ -10,7 +10,6 @@ import { showError, showInfo, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTimeMinute, VIETNAM_TIME_ZONE } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canSubmitWarehouseDailyReport } from '../../auth/utils/permissions.js'
-import { broadcastNotification } from '../../products/services/notificationsApi.js'
 import {
   createWarehouseDailyReportSubmission,
   fetchWarehouseDailyReport,
@@ -401,9 +400,10 @@ export default function WarehouseDailyReportPage() {
     }
   }, [session, dateLabel, date])
 
-  const sendNotificationForSubmission = useCallback(async (submission, snapData, done) => {
-    await broadcastNotification(buildNotifyPayload(submission, snapData, done))
-  }, [buildNotifyPayload])
+  const sendNotificationForSubmission = useCallback(async () => {
+    // Business alerts are emitted by backend system events only. A Warehouse
+    // user submitting a report must never be able to broadcast directly.
+  }, [])
 
   const handleRetryNotify = useCallback(async () => {
     if (!notifyPendingSubmissionId || !report) return

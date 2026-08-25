@@ -1,6 +1,7 @@
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
+using OrderService.Domain.Exceptions;
 
 namespace OrderService.Application.UseCases;
 
@@ -13,6 +14,16 @@ public class ReportLogic(IReportRepository reportRepository) : IReportLogic
 
     public Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, Guid? employeeId = null, CancellationToken cancellationToken = default)
     {
+        if (topCount is < 1 or > 100)
+            throw new OrderValidationException("Số lượng sản phẩm top phải từ 1 đến 100.");
+        if (!string.Equals(sortBy, "revenue", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(sortBy, "quantity", StringComparison.OrdinalIgnoreCase))
+            throw new OrderValidationException("Kiểu sắp xếp phải là revenue hoặc quantity.");
+        if (quarter is < 1 or > 4)
+            throw new OrderValidationException("Quý phải từ 1 đến 4.");
+        if (month is < 1 or > 12)
+            throw new OrderValidationException("Tháng phải từ 1 đến 12.");
+
         return reportRepository.GetTopSellingProductsAsync(topCount, sortBy, quarter, month, year, employeeId, cancellationToken);
     }
 

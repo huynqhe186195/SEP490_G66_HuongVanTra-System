@@ -66,7 +66,7 @@ public sealed class CustomerCreatePermissionPolicyTests
     }
 
     [Fact]
-    public async Task Edit_customer_profile_still_excludes_sale()
+    public async Task Edit_customer_profile_allows_sale_for_basic_profile_fields()
     {
         var sale = UserWith(PermissionNames.ViewCustomer, PermissionNames.CreateOrder);
 
@@ -74,7 +74,7 @@ public sealed class CustomerCreatePermissionPolicyTests
         var manager = await AuthorizeAsync(
             UserWith(PermissionNames.CreateCustomer), PermissionNames.EditCustomerProfile);
 
-        Assert.False(edit.Succeeded);
+        Assert.True(edit.Succeeded);
         Assert.True(manager.Succeeded);
     }
 

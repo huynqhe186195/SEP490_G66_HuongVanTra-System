@@ -193,10 +193,10 @@ public sealed class InventoryNotificationIntegrationTests
 
         notificationMock.Verify(
             n => n.SendBroadcastAsync(
-                It.IsAny<string>(),
+                "Warehouse",
                 NotificationTypes.LowStockAlert,
                 It.IsAny<string>(),
-                It.IsAny<string>()),
-            Times.AtLeastOnce);
+                "/inventory/statistics"),
+            Times.Once);
     }
 }

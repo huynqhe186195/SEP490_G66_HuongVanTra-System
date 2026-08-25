@@ -19,6 +19,17 @@ db.version(2).stores({
   pos_workspaces: 'userId, updatedAt',
 })
 
+// v3 only adds queue metadata. Stock reservations live with the cached SKU so a
+// second offline checkout on this device cannot spend the same shelf quantity.
+db.version(3).stores({
+  products:       'skuId, skuCode, isActive, productType, cachedAt',
+  customers:      'customerId, phone, cachedAt',
+  sync_queue:     '++id, type, status, createdAt, tempId',
+  draft_orders:   'tempId, status, createdAt',
+  app_meta:       'key',
+  pos_workspaces: 'userId, updatedAt',
+})
+
 // ── app_meta helpers ────────────────────────────────────────────────────────
 
 export async function getMeta(key) {
@@ -34,8 +45,17 @@ export async function setMeta(key, value) {
 
 export async function cacheProducts(products) {
   const now = Date.now()
-  await db.products.bulkPut(products.map(p => ({ ...p, cachedAt: now })))
-  await setMeta('lastProductSync', now)
+  await db.transaction('rw', db.products, db.app_meta, async () => {
+    // A network refresh can race the reconnect queue. Preserve pending local
+    // reservations so a stale/partial refresh never makes stock sellable twice.
+    const cached = await db.products.bulkGet(products.map(p => p.skuId))
+    await db.products.bulkPut(products.map((p, index) => ({
+      ...p,
+      offlineReservedQuantity: Number(cached[index]?.offlineReservedQuantity ?? 0),
+      cachedAt: now,
+    })))
+    await db.app_meta.put({ key: 'lastProductSync', value: now })
+  })
 }
 
 export async function getProductsFromCache(search = '', limit = 80) {
@@ -93,6 +113,72 @@ export async function enqueue(type, payload, idempotencyKey) {
   const count = await db.sync_queue.where('status').anyOf(['PENDING', 'PROCESSING']).count()
   await setMeta('pendingSyncCount', count)
   window.dispatchEvent(new CustomEvent('hvt-sync-queue-changed', { detail: { remaining: count } }))
+}
+
+/**
+ * Persist an offline CASH POS order and reserve its cached Shelf stock in one
+ * IndexedDB transaction. This is intentionally narrow: it is not a generic
+ * offline queue for COD, VietQR, debt, promotion, or BOM/custom bundles.
+ */
+export async function enqueueOfflineCashPosOrder({ tempId, payload, idempotencyKey }) {
+  const requestedBySku = new Map()
+  for (const line of payload?.items ?? []) {
+    const skuId = String(line?.skuId ?? '')
+    const quantity = Number(line?.quantity ?? 0)
+    if (!skuId || !Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error('Đơn offline có dòng hàng không hợp lệ.')
+    }
+    requestedBySku.set(skuId, (requestedBySku.get(skuId) ?? 0) + quantity)
+  }
+  if (!requestedBySku.size) throw new Error('Đơn offline không có sản phẩm để kiểm tra tồn Kệ.')
+
+  await db.transaction('rw', db.products, db.sync_queue, db.draft_orders, db.app_meta, async () => {
+    for (const [skuId, requested] of requestedBySku) {
+      const product = await db.products.get(skuId)
+      const cachedQuantity = Number(product?.qtyOnHand)
+      const reservedQuantity = Number(product?.offlineReservedQuantity ?? 0)
+      const available = cachedQuantity - reservedQuantity
+      if (!product || !Number.isFinite(cachedQuantity) || requested > available) {
+        throw new Error(`Tồn Kệ offline không đủ hoặc chưa được tải cho SKU ${skuId}. Kết nối mạng để đồng bộ trước khi bán.`)
+      }
+      await db.products.update(skuId, { offlineReservedQuantity: reservedQuantity + requested })
+    }
+
+    const createdAt = Date.now()
+    await db.draft_orders.put({ tempId, status: 'PENDING_SYNC', payload, createdAt })
+    await db.sync_queue.add({
+      type: 'CREATE_ORDER',
+      payload,
+      idempotencyKey,
+      tempId,
+      status: 'PENDING',
+      createdAt,
+      retries: 0,
+      lastError: null,
+    })
+    const count = await db.sync_queue.where('status').anyOf(['PENDING', 'PROCESSING']).count()
+    await db.app_meta.put({ key: 'pendingSyncCount', value: count })
+  })
+
+  const count = await getPendingCount()
+  window.dispatchEvent(new CustomEvent('hvt-sync-queue-changed', { detail: { remaining: count } }))
+}
+
+/** Keep the cached shelf balance conservative after the server confirms a queued sale. */
+export async function commitOfflineCashPosStock(items = []) {
+  await db.transaction('rw', db.products, async () => {
+    for (const line of items) {
+      const skuId = String(line?.skuId ?? '')
+      const quantity = Number(line?.quantity ?? 0)
+      const product = skuId ? await db.products.get(skuId) : null
+      if (!product || !Number.isFinite(quantity) || quantity <= 0) continue
+      const reserved = Number(product.offlineReservedQuantity ?? 0)
+      await db.products.update(skuId, {
+        qtyOnHand: Math.max(0, Number(product.qtyOnHand ?? 0) - quantity),
+        offlineReservedQuantity: Math.max(0, reserved - quantity),
+      })
+    }
+  })
 }
 
 export async function getPendingQueue() {

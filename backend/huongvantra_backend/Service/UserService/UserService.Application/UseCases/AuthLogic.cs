@@ -183,7 +183,6 @@ public class AuthLogic(
             claims.Add(new Claim("name", user.Employee.FullName.Trim()));
         }
         claims.AddRange(roles.Select(r => new Claim("role", r)));
-        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
         claims.AddRange(permissions.Select(p => new Claim("permission", p)));
 
         var token = new JwtSecurityToken(

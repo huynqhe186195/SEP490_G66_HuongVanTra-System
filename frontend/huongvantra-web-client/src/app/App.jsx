@@ -103,6 +103,7 @@ function App() {
         <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
+        <Route path="/inventory/stocks" element={<Navigate to="/inventory/statistics" replace />} />
         <Route path="/inventory/warehouse-daily-report" element={<WarehouseDailyReportPage />} />
         <Route path="/inventory/warehouse-daily-report/submissions" element={<WarehouseDailyReportSubmissionsPage />} />
         <Route path="/inventory/warehouse-daily-report/submissions/:id" element={<WarehouseDailyReportSubmissionDetailPage />} />

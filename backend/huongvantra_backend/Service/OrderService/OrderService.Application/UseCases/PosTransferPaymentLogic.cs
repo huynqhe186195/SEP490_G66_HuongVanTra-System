@@ -504,11 +504,9 @@ public class PosTransferPaymentLogic(
 
         if (payment.PaymentStatus == PaymentStatus.Success)
         {
-            await orderLogic.CompleteAsync(
-                order.Id,
-                new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
-                actorName: "SePay Webhook Retry",
-                ct: ct);
+            logger.LogInformation(
+                "SePay webhook duplicate ignored: payment for order {OrderCode} is already successful.",
+                orderCode);
             return;
         }
 

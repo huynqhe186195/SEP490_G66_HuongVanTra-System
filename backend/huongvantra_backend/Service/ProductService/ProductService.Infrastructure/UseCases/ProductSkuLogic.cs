@@ -386,7 +386,7 @@ public class ProductSkuLogic(
                 if (oldRetailPrice != normalizedRetailPrice)
                 {
                     var changedAt = DateTime.UtcNow;
-                    // Accounting owns only RetailPrice. CostPrice is never copied
+                    // Manager owns only RetailPrice. CostPrice is never copied
                     // from the client and remains owned by the receipt consumer.
                     variant.RetailPrice = normalizedRetailPrice;
                     variant.UpdatedAt = changedAt;

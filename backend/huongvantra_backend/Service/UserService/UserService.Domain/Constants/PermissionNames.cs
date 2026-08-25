@@ -23,8 +23,6 @@ public static class PermissionNames
     public const string ViewCatalog = "VIEW_CATALOG";
     public const string SyncCatalog = "SYNC_CATALOG";
     public const string ApprovePrice = "APPROVE_PRICE";
-    public const string RequestRetailPriceChange = "REQUEST_RETAIL_PRICE_CHANGE";
-    public const string ApproveRetailPriceChange = "APPROVE_RETAIL_PRICE_CHANGE";
 
     /// <summary>Phán quyết hợp đồng khách doanh nghiệp (duyệt/từ chối) — Manager / Admin.</summary>
     public const string ApproveContract = "APPROVE_CONTRACT";
@@ -80,8 +78,6 @@ public static class PermissionNames
         ViewCatalog,
         SyncCatalog,
         ApprovePrice,
-        RequestRetailPriceChange,
-        ApproveRetailPriceChange,
         ApproveContract,
         ManageBusinessPolicy,
         VerifyCod,

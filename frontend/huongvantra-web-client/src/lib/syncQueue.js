@@ -1,4 +1,4 @@
-import { getPendingQueue, updateQueueItem, setMeta, getPendingCount } from './offlineDb.js'
+import { commitOfflineCashPosStock, getPendingQueue, updateDraftOrder, updateQueueItem, setMeta, getPendingCount } from './offlineDb.js'
 import { apiRequestAuth } from './apiClient.js'
 import { showSuccess, showError } from '../app/toast.js'
 
@@ -44,6 +44,10 @@ async function processQueueItem(item) {
   try {
     const result = await sendToServer(item)
     console.info('[sync-queue] DONE', item.type, item.id)
+    if (item.type === 'CREATE_ORDER') {
+      await commitOfflineCashPosStock(item.payload?.items)
+      if (item.tempId) await updateDraftOrder(item.tempId, { status: 'SYNCED', serverOrder: result, syncedAt: Date.now() })
+    }
     await updateQueueItem(item.id, { status: 'DONE', result })
     return true
   } catch (err) {
@@ -57,8 +61,20 @@ async function processQueueItem(item) {
       return false
     }
 
+    // A server validation/authorization failure needs human correction. Network
+    // failures stay pending so reconnecting later never silently strands cash
+    // collected for an offline order.
+    const isPermanentClientError = err?.statusCode >= 400
+      && err?.statusCode < 500
+      && err?.statusCode !== 408
+      && err?.statusCode !== 429
+    if (isPermanentClientError) {
+      await updateQueueItem(item.id, { status: 'CONFLICT', retries, lastError: err.message ?? 'Unknown error' })
+      return false
+    }
+
     if (retries >= MAX_RETRIES) {
-      await updateQueueItem(item.id, { status: 'FAILED', retries, lastError: err.message ?? 'Unknown error' })
+      await updateQueueItem(item.id, { status: 'PENDING', retries, lastError: err.message ?? 'Unknown error' })
       return false
     }
 
