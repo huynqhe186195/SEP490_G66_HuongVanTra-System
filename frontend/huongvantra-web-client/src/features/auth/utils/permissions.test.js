@@ -96,12 +96,12 @@ test('backorder refund separates approval from evidence recording', () => {
   assert.equal(canCompleteBackorderRefund(admin), false)
 })
 
-test('only Manager catalog permission can edit the direct retail sale price', () => {
+test('Manager catalog or Accountant cost permission can edit the direct retail sale price', () => {
   const manager = { roles: ['Manager'], permissions: ['MANAGE_CATALOG', 'VIEW_COST'] }
   const accountant = { roles: ['Accountant'], permissions: ['MANAGE_COST', 'VIEW_COST'] }
   const admin = { roles: ['Admin'], permissions: ['MANAGE_CATALOG', 'VIEW_COST'] }
 
   assert.equal(canEditAccountingSalePrice(manager), true)
-  assert.equal(canEditAccountingSalePrice(accountant), false)
+  assert.equal(canEditAccountingSalePrice(accountant), true)
   assert.equal(canEditAccountingSalePrice(admin), false)
 })

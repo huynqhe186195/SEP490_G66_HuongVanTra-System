@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   fetchNotificationSummary,
   fetchNotifications,
   markAllNotificationsRead,
-  markNotificationRead,
 } from '../services/notificationsApi.js'
 import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
 
@@ -16,7 +14,6 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const dropdownRef = useRef(null)
-  const navigate = useNavigate()
 
   useEffect(() => {
     let mounted = true
@@ -63,19 +60,6 @@ export default function NotificationBell() {
     const next = !open
     setOpen(next)
     if (next) void loadItems()
-  }
-
-  async function handleItemClick(notification) {
-    setOpen(false)
-    if (!notification.isRead) {
-      try {
-        await markNotificationRead(notification.id)
-        setUnreadCount((prev) => Math.max(0, prev - 1))
-      } catch {
-        /* vẫn điều hướng dù đánh dấu đọc thất bại */
-      }
-    }
-    if (notification.link) navigate(notification.link)
   }
 
   async function handleMarkAllRead() {
@@ -127,17 +111,15 @@ export default function NotificationBell() {
             ) : (
               items.map((notification) => (
                 <li key={notification.id}>
-                  <button
-                    type="button"
-                    className={`w-full px-4 py-3 text-left transition-colors hover:bg-[#f3f7f4] ${
+                  <div
+                    className={`w-full px-4 py-3 text-left ${
                       notification.isRead ? '' : 'bg-[#e8f0e9]/60'
                     }`}
-                    onClick={() => handleItemClick(notification)}
                   >
                     <p className="text-sm font-semibold leading-snug text-[#1b1c17]">{notification.title}</p>
                     <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#414942]">{notification.body}</p>
                     <p className="mt-1.5 text-[11px] text-[#717971]">{formatDateTimeVN(notification.createdAt)}</p>
-                  </button>
+                  </div>
                 </li>
               ))
             )}

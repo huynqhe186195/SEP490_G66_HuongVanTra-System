@@ -199,9 +199,10 @@ export function isAuditOnlyAdmin(session) {
   return hasAdminRole(session)
 }
 
-/** Trang Accounting: chỉ Manager có MANAGE_CATALOG được sửa Giá bán; Accountant/Admin chỉ xem. */
+/** Trang Accounting: Manager (MANAGE_CATALOG) hoặc Kế toán (MANAGE_COST) được sửa Giá bán; Admin chỉ xem. */
 export function canEditAccountingSalePrice(session) {
-  return canManageCatalog(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'MANAGE_CATALOG') || hasPermission(session, 'MANAGE_COST')
 }
 
 export function isSalePosRole(session) {

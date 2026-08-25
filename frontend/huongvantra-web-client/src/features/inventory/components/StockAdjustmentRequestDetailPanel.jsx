@@ -46,11 +46,8 @@ export default function StockAdjustmentRequestDetailPanel({
   currentUserId,
   activeTab,
   processingItemId,
-  isApproving,
   onProcessItem,
   onConfirmTransfer,
-  onApprove,
-  onReject,
   onCancel,
 }) {
   if (!request) {
@@ -63,14 +60,6 @@ export default function StockAdjustmentRequestDetailPanel({
   const showCancelAction = request.status === 'pending'
     && canCancel
     && (canCancelAny || isOwnRequest || activeTab === 'mine')
-  const showRequestApproveReject = request.status === 'pending'
-    && canReview
-    && !isOwnRequest
-  const allLinesUntouched = items.length > 0 && items.every((item) =>
-    item.status === 'pending'
-    && Number(item.approvedQuantity ?? 0) === 0
-    && Number(item.fulfilledQuantity ?? 0) === 0
-    && !item.autoProductionOrderId)
   const requestStatusPresentation = getAdjustmentRequestStatusPresentation(request)
 
   return (
@@ -89,33 +78,7 @@ export default function StockAdjustmentRequestDetailPanel({
 
       <div className="rounded-xl border border-[#cfe0d4] bg-[#f0f7f2] px-4 py-3 text-sm text-[#285239]">
         <p className="font-semibold">Duyệt toàn bộ khi đủ Thành phẩm; xử lý từng dòng khi cần sản xuất.</p>
-        <p className="mt-1 text-xs leading-5">
-          Nếu Kho đủ tất cả Thành phẩm, dùng Duyệt yêu cầu để điều chuyển atomic Kho → Kệ (FEFO).
-          Nếu thiếu Thành phẩm, xử lý từng dòng để tạo Lệnh sản xuất hoặc từ chối dòng đó.
-          Người tạo không được tự duyệt / tự từ chối.
-        </p>
       </div>
-
-      {showRequestApproveReject && allLinesUntouched ? (
-        <div className="flex flex-wrap justify-end gap-2 border-b border-slate-100 pb-4">
-          <button
-            type="button"
-            disabled={isApproving}
-            onClick={() => onReject?.(request)}
-            className="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-          >
-            Từ chối yêu cầu
-          </button>
-          <button
-            type="button"
-            disabled={isApproving}
-            onClick={() => onApprove?.(request)}
-            className="rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#285239] disabled:opacity-50"
-          >
-            {isApproving ? 'Đang duyệt...' : 'Duyệt & chuyển lên Kệ'}
-          </button>
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <DetailField label="Lý do gửi" value={request.reason} />

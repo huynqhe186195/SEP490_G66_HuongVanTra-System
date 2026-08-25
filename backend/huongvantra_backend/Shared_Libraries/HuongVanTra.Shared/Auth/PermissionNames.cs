@@ -113,6 +113,9 @@ public static class PermissionNames
     /// <summary>Sửa danh mục nhãn — MANAGE_TAXONOMY (Manager) hoặc legacy MANAGE_CATALOG (Thủ kho).</summary>
     public const string ManageTaxonomyAccess = "MANAGE_TAXONOMY_ACCESS";
 
+    /// <summary>Sửa giá bán trên trang kế toán — Manager (MANAGE_CATALOG) hoặc Kế toán (MANAGE_COST).</summary>
+    public const string UpdateAccountingRetailPriceAccess = "UPDATE_ACCOUNTING_RETAIL_PRICE_ACCESS";
+
     public static readonly string[] All =
     [
         CreateOrder,

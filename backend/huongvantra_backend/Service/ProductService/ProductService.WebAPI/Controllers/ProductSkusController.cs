@@ -93,7 +93,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetAccountingCostProfitAsync(ct));
 
     [HttpPatch("{id:guid}/retail-price")]
-    [Authorize(Policy = PermissionNames.ManageCatalog)]
+    [Authorize(Policy = PermissionNames.UpdateAccountingRetailPriceAccess)]
     public async Task<IActionResult> UpdateRetailPrice(
         Guid id,
         [FromBody] UpdateProductVariantRetailPriceRequest request,

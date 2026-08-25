@@ -147,6 +147,11 @@ public static class AuthorizationServiceExtensions
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ManageTaxonomy,
                     PermissionNames.ManageCatalog)));
+
+            options.AddPolicy(PermissionNames.UpdateAccountingRetailPriceAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageCatalog,
+                    PermissionNames.ManageCost)));
         });
 
         return services;

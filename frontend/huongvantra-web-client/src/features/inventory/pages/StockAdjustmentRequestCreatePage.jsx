@@ -9,6 +9,7 @@ import {
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { getInventoryUnitShortLabel, getInventoryUnitLabel } from '../../products/utils/productTypes.js'
 import { buildSkuSnapshotName } from '../../products/components/BatchStockAdjustmentModal.jsx'
 import { fetchSkus, fetchStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
@@ -62,6 +63,10 @@ function buildSearchTerms(search) {
   return [...new Set([raw, normalized, normalized.replace(/\s+/g, '-')].filter(Boolean))]
 }
 
+function toDisplayUnitName(unit) {
+  return getInventoryUnitShortLabel(unit) || getInventoryUnitLabel(unit) || '—'
+}
+
 function toCatalogOption(sku, stockBySkuId) {
   const stock = stockBySkuId.get(sku.id)
   return {
@@ -70,7 +75,7 @@ function toCatalogOption(sku, stockBySkuId) {
     productName: sku.productName ?? '',
     skuSnapshotName: buildSkuSnapshotName(sku, sku.productName ?? ''),
     categoryName: sku.categoryName ?? '',
-    unitName: sku.inventoryUnit || sku.unitName || '',
+    unitName: toDisplayUnitName(sku.inventoryUnit || sku.unitName),
     warehouseQuantityOnHand: Number(stock?.warehouseQuantityOnHand ?? 0),
     shelfQuantityOnHand: Number(stock?.quantityOnHand ?? 0),
   }

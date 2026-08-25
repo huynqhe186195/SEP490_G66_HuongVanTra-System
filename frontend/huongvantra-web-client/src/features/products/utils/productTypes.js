@@ -37,13 +37,15 @@ export const INVENTORY_UNIT_OPTIONS = [
 ]
 
 export function getInventoryUnitLabel(value) {
-  if (value === 'Gram') return 'GRAM'
-  if (value === 'Piece') return 'Cái'
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'gram' || key === 'g') return 'GRAM'
+  if (key === 'piece' || key === 'pcs' || key === 'cai' || key === 'cái') return 'Cái'
   return value || '—'
 }
 
 export function getInventoryUnitShortLabel(value) {
-  if (value === 'Gram') return 'g'
-  if (value === 'Piece') return 'cái'
+  const key = String(value ?? '').trim().toLowerCase()
+  if (key === 'gram' || key === 'g') return 'g'
+  if (key === 'piece' || key === 'pcs' || key === 'cai' || key === 'cái') return 'cái'
   return ''
 }
