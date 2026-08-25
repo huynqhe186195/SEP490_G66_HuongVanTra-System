@@ -1,10 +1,11 @@
 import { apiRequestAuth } from '../../../lib/apiClient.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 
 export async function previewPosStockHandling(items) {
   const data = await apiRequestAuth('/api/v1/inventory/pos-stock-handling', {
     method: 'POST',
     body: JSON.stringify({
-      orderId: crypto.randomUUID(),
+      orderId: safeRandomUUID(),
       orderCode: `POS-PREVIEW-${Date.now()}`,
       orderStatus: 'pendingpayment',
       totalAmount: 0,

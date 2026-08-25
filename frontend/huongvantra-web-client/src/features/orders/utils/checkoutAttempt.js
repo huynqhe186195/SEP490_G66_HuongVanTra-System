@@ -1,3 +1,5 @@
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
+
 function stableSerialize(value) {
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value)
@@ -14,7 +16,7 @@ function stableSerialize(value) {
   return `{${entries.join(',')}}`
 }
 
-export function createCheckoutAttemptManager(uuidFactory = () => crypto.randomUUID()) {
+export function createCheckoutAttemptManager(uuidFactory = () => safeRandomUUID()) {
   let attempt = null
   let activePromise = null
 

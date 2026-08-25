@@ -19,6 +19,7 @@ import { loadPosSeller } from '../utils/posSeller.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 
 const TABS = [
   { id: 'profile', label: 'Thông tin khách hàng' },
@@ -191,7 +192,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
       if (debtPaymentAttemptRef.current?.signature !== attemptSignature) {
         debtPaymentAttemptRef.current = {
           signature: attemptSignature,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: safeRandomUUID(),
         }
       }
       const payment = await applyCustomerDebtPayment(customer.customerId, {

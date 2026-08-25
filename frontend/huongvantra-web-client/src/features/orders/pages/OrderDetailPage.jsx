@@ -82,6 +82,7 @@ import { fetchCustomerById } from '../../customers/services/customersApi.js'
 import { PERSONAL_PRODUCT_LABEL } from '../utils/personalProductLabels.js'
 import { isUsableShippingAddress } from '../../customers/utils/shippingAddress.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 function OrderDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -476,7 +477,7 @@ function OrderDetailPage() {
     try {
       setIsReprinting(true)
       const result = await reprintReceipt(order.id, reason, {
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: safeRandomUUID(),
       })
       const receipt = result?.receipt
       if (!receipt) throw new Error('Không nhận được dữ liệu hóa đơn để in lại.')

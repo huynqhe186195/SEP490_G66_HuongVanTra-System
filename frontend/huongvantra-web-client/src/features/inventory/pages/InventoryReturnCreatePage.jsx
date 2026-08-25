@@ -4,6 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateSupplierReturn } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -32,15 +33,6 @@ const RECEIPT_GRID = 'grid grid-cols-[1.1fr_1.3fr_1.1fr_auto] items-center gap-2
 /** Cột cố định để mọi dòng Hàng trả thẳng hàng với nhau. */
 const RETURN_LINE_GRID =
   'grid grid-cols-[minmax(11rem,1.4fr)_4.75rem_4.75rem_7.25rem_2.25rem] items-center gap-2'
-
-function newOperationId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
-}
 
 /**
  * Chỉ cho trả đúng lô đã nhập theo phiếu NCC gốc: ghép từng dòng phiếu nhập với lô tồn Kho
@@ -324,7 +316,7 @@ export default function InventoryReturnCreatePage() {
       return
     }
 
-    if (!operationIdRef.current) operationIdRef.current = newOperationId()
+    if (!operationIdRef.current) operationIdRef.current = safeRandomUUID()
     setConfirmDraft({
       lines,
       totalQuantity,

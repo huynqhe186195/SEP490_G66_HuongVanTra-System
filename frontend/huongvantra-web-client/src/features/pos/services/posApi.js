@@ -18,6 +18,7 @@ import {
 import { mapPromotion } from '../utils/posPromotionUtils.js'
 import { normalizePosBaseQuantity } from '../utils/posQuantity.js'
 import { buildPosCustomerSearchQuery } from '../utils/posCustomerSearch.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 import {
   getProductsFromCache,
   getCustomerByPhone as getOfflineCustomerByPhone,
@@ -559,7 +560,7 @@ export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   if (!navigator.onLine) {
     const cashAmount = getPaymentAllocationAmount(payload, (method) => method === 'CASH')
     const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-    const offlineIdempotencyKey = idempotencyKey || crypto.randomUUID()
+    const offlineIdempotencyKey = idempotencyKey || safeRandomUUID()
     const orderPayload = buildOrderRequestFromPosPayload(payload, {
       orderChannel: 'POS',
       paymentMethod: 'Cash',

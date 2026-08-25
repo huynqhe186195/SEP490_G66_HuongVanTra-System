@@ -40,9 +40,10 @@ import {
   fetchStockTransfers,
   updateStockTransfer,
 } from '../services/stockTransferApi.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 
 const EMPTY_LINE = () => ({
-  key: crypto.randomUUID(),
+  key: safeRandomUUID(),
   skuId: '',
   quantity: 1,
 })
@@ -93,7 +94,7 @@ function TransferFormModal({
   const [lines, setLines] = useState(() => {
     if (transfer?.lines?.length) {
       return transfer.lines.map((line) => ({
-        key: line.id || crypto.randomUUID(),
+        key: line.id || safeRandomUUID(),
         skuId: line.skuId,
         skuCode: line.skuCode,
         skuName: line.skuNameSnapshot,

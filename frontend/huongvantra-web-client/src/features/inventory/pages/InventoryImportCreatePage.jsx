@@ -27,6 +27,7 @@ import {
   TT200_TEMPLATE_URL,
 } from '../utils/supplierReceiptTt200Excel.js'
 import { toVietnamDateInputValue } from '../../../utils/vietnamDateTime.js'
+import { safeRandomUUID } from '../../../utils/safeUuid.js'
 
 const LOT_CODE_REGEX = /^[A-Za-z0-9\-_]{1,50}$/
 
@@ -45,7 +46,7 @@ const EMPTY_HEADER = {
 
 function emptyLine() {
   return {
-    key: crypto.randomUUID(),
+    key: safeRandomUUID(),
     skuId: '',
     documentQuantity: '',
     actualQuantity: '',
@@ -577,7 +578,7 @@ function InventoryImportCreatePage() {
           note: receipt.note || '',
         })
         const editLines = receipt.items.map((item) => ({
-          key: crypto.randomUUID(),
+          key: safeRandomUUID(),
           skuId: item.skuId,
           documentQuantity: String(item.documentQuantity ?? item.actualQuantity ?? item.submittedQuantity ?? ''),
           actualQuantity: String(item.actualQuantity ?? item.submittedQuantity ?? ''),
@@ -727,7 +728,7 @@ function InventoryImportCreatePage() {
       }
 
       return {
-        key: crypto.randomUUID(),
+        key: safeRandomUUID(),
         skuId: sku?.id ?? '',
         documentQuantity,
         actualQuantity,
