@@ -26,6 +26,42 @@ function guidFromKey(key) {
 }
 
 /**
+ * Nguyên liệu dụng cụ trà — do fix-tool-product-boms-with-nl.sql tạo ProductVariants.
+ * Phase B DELETE mọi lô HVT-LOT-%, nên phải seed lại ở đây nếu không tồn NL sẽ bị xoá trắng.
+ */
+function toolNlSkus() {
+  const SUP_XUC = 'HTX Thủ công dụng cụ trà'
+  const SUP_TONG = 'Xưởng gốm sứ Bát Tràng'
+  return [
+    { seq: 5, code: 'NL-XUC-TRE', name: 'Xúc trà tre (NL)', cost: 20000, wh: 200, sup: SUP_XUC },
+    { seq: 6, code: 'NL-XUC-DONG-GO', name: 'Xúc trà đồng cán gỗ (NL)', cost: 25000, wh: 150, sup: SUP_XUC },
+    { seq: 7, code: 'NL-XUC-GO-NAU', name: 'Xúc trà gỗ nâu (NL)', cost: 45000, wh: 120, sup: SUP_XUC },
+    { seq: 8, code: 'NL-XUC-VANG-DEN', name: 'Xúc trà vàng chuôi đen (NL)', cost: 120000, wh: 80, sup: SUP_XUC },
+    { seq: 9, code: 'NL-XUC-CHUOI-RONG', name: 'Xúc trà chuôi rồng (NL)', cost: 55000, wh: 100, sup: SUP_XUC },
+    { seq: 10, code: 'NL-TONG-THUY-TINH', name: 'Tống thủy tinh trong (NL)', cost: 250000, wh: 60, sup: SUP_TONG },
+    { seq: 11, code: 'NL-TONG-NAU-DO', name: 'Tống nâu đỏ (NL)', cost: 60000, wh: 80, sup: SUP_TONG },
+    { seq: 12, code: 'NL-TONG-QUAI-GO', name: 'Tống quai gỗ to (NL)', cost: 180000, wh: 50, sup: SUP_TONG },
+  ].map((s) => ({
+    code: s.code,
+    type: 'NL',
+    name: s.name,
+    cost: s.cost,
+    weightG: 0,
+    shelf: 0,
+    wh: s.wh,
+    fixed: {
+      bid: `c10000${String(s.seq).padStart(2, '0')}-0000-4000-8000-${String(s.seq).padStart(12, '0')}`,
+      iid: `d10000${String(s.seq).padStart(2, '0')}-0000-4000-8000-${String(s.seq).padStart(12, '0')}`,
+      lot: `HVT-LOT-${s.code}-1`,
+      sup: s.sup,
+      exp: '2028-08-28 00:00:00',
+      note: 'Phase B seed — NL dụng cụ trà',
+      qty: s.wh,
+    },
+  }))
+}
+
+/**
  * Catalog Excel Hương Vân (Phase A) — chỉ các SkuCode trong file mẫu.
  * type: FG = thành phẩm (có tồn kệ), NL = nguyên liệu, BB = bao bì.
  */
@@ -35,6 +71,9 @@ const seedSkus = [
   { code: 'NL-HONG-TRA-G', type: 'NL', name: 'Hồng trà thô Hương Vân', cost: 220, weightG: 1, shelf: 0, wh: 30000 },
   { code: 'NL-HOA-BUOI-G', type: 'NL', name: 'Hoa bưởi sấy', cost: 900, weightG: 1, shelf: 0, wh: 8000 },
   { code: 'NL-HOA-SEN-G', type: 'NL', name: 'Hoa sen sấy', cost: 1200, weightG: 1, shelf: 0, wh: 8000 },
+  // Nguyên liệu dụng cụ trà (đếm theo cái, không theo Gram) — do fix-tool-product-boms-with-nl.sql tạo.
+  // fixed = 1 lô Kho duy nhất, GUID cố định, không dùng công thức chia 2 lô của NL dạng Gram.
+  ...toolNlSkus(),
   // Bao bì
   { code: 'BB-TUI-TRA', type: 'BB', name: 'Túi trà thực phẩm', cost: 1500, weightG: 0, shelf: 0, wh: 2000 },
   { code: 'BB-HOP-GIAY-HVT', type: 'BB', name: 'Hộp giấy Hương Vân', cost: 5000, weightG: 0, shelf: 0, wh: 1200 },
@@ -98,6 +137,16 @@ const items = []
 let bi = 0
 
 for (const s of seedSkus) {
+  if (s.fixed) {
+    const f = s.fixed
+    batches.push({
+      bid: f.bid, lot: f.lot, code: s.code, type: s.type,
+      sup: f.sup, exp: f.exp, loc: 'Warehouse', note: f.note,
+    })
+    items.push({ iid: f.iid, bid: f.bid, code: s.code, name: s.name, qty: f.qty, cost: s.cost })
+    continue
+  }
+
   // 2 lô Kho
   for (let b = 1; b <= 2; b++) {
     bi++
@@ -193,17 +242,19 @@ SELECT COUNT(*) INTO @phase_b_missing_count FROM _phase_b_missing;
 SELECT GROUP_CONCAT(SkuCode ORDER BY SkuCode SEPARATOR ', ') INTO @phase_b_missing_list
 FROM _phase_b_missing;
 
+-- MESSAGE_TEXT cua SIGNAL toi da 128 ky tu, nen in danh sach thieu ra result set truoc khi abort.
+SELECT SkuCode AS MissingSkuCode FROM _phase_b_missing;
+
 DROP PROCEDURE IF EXISTS sp_phase_b_require_catalog;
 DELIMITER $$
 CREATE PROCEDURE sp_phase_b_require_catalog()
 BEGIN
-  DECLARE msg VARCHAR(512);
+  DECLARE msg VARCHAR(128);
   IF IFNULL(@phase_b_missing_count, 0) > 0 THEN
-    SET msg = CONCAT(
+    SET msg = LEFT(CONCAT(
       'Phase B aborted: missing ', @phase_b_missing_count,
-      ' SkuCode(s). Import/approve Excel catalog first. Missing: ',
-      LEFT(IFNULL(@phase_b_missing_list, ''), 380)
-    );
+      ' SkuCode(s) - xem danh sach MissingSkuCode o tren.'
+    ), 128);
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;
   END IF;
 END$$

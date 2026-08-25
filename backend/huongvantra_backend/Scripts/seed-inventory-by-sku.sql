@@ -103,17 +103,19 @@ SELECT COUNT(*) INTO @phase_b_missing_count FROM _phase_b_missing;
 SELECT GROUP_CONCAT(SkuCode ORDER BY SkuCode SEPARATOR ', ') INTO @phase_b_missing_list
 FROM _phase_b_missing;
 
+-- MESSAGE_TEXT cua SIGNAL toi da 128 ky tu, nen in danh sach thieu ra result set truoc khi abort.
+SELECT SkuCode AS MissingSkuCode FROM _phase_b_missing;
+
 DROP PROCEDURE IF EXISTS sp_phase_b_require_catalog;
 DELIMITER $$
 CREATE PROCEDURE sp_phase_b_require_catalog()
 BEGIN
-  DECLARE msg VARCHAR(512);
+  DECLARE msg VARCHAR(128);
   IF IFNULL(@phase_b_missing_count, 0) > 0 THEN
-    SET msg = CONCAT(
+    SET msg = LEFT(CONCAT(
       'Phase B aborted: missing ', @phase_b_missing_count,
-      ' SkuCode(s). Import/approve Excel catalog first. Missing: ',
-      LEFT(IFNULL(@phase_b_missing_list, ''), 380)
-    );
+      ' SkuCode(s) - xem danh sach MissingSkuCode o tren.'
+    ), 128);
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;
   END IF;
 END$$
@@ -577,4 +579,4 @@ SELECT
   @phase_b_batch_count AS SeedBatches,
   @phase_b_item_count AS SeedBatchItems;
 
--- Done. ExpectedSkus=48, PlannedBatches=135, PlannedItems=135
+-- Done. ExpectedSkus=56, PlannedBatches=143, PlannedItems=143
