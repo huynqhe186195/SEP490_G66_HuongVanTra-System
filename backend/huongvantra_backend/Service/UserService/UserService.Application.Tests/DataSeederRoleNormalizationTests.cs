@@ -148,7 +148,8 @@ public class DataSeederRoleNormalizationTests
         Assert.Contains(PermissionNames.ViewCatalog, managerPermissions);
         Assert.Contains(PermissionNames.ManageCatalog, managerPermissions);
         Assert.Contains(PermissionNames.ViewCatalog, warehousePermissions);
-        Assert.DoesNotContain(PermissionNames.ManageCatalog, warehousePermissions);
+        Assert.Contains(PermissionNames.ManageCatalog, warehousePermissions);
+        Assert.DoesNotContain(PermissionNames.ApproveProductRequest, warehousePermissions);
     }
 
     [Fact]

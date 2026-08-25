@@ -43,6 +43,9 @@ public static class DataSeeder
         [
             PermissionNames.ViewOrder,
             PermissionNames.ViewCatalog,
+            // Thủ kho lập yêu cầu tạo hàng hóa (POST/PUT/submit product-creation-requests
+            // đều gác bằng policy này); Manager giữ ApproveProductRequest để duyệt.
+            PermissionNames.ManageCatalog,
             PermissionNames.MonitorOutbox,
             PermissionNames.ViewInventory,
             PermissionNames.OperateWarehouse,
