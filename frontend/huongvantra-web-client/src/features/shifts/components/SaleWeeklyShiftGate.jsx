@@ -186,9 +186,31 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
         if (!mountedRef.current) return
         setStatus(week)
         setOnDuty(duty)
+        try {
+          sessionStorage.setItem(
+            'hvt-sale-last-week-gate',
+            JSON.stringify({ week, duty }),
+          )
+        } catch {
+          // ignore
+        }
       })
       .catch((err) => {
         if (!mountedRef.current) return
+        if (!navigator.onLine) {
+          try {
+            const raw = sessionStorage.getItem('hvt-sale-last-week-gate')
+            const cached = raw ? JSON.parse(raw) : null
+            if (cached?.week) {
+              setStatus(cached.week)
+              setOnDuty(cached.duty ?? null)
+              setError('')
+              return
+            }
+          } catch {
+            // fall through
+          }
+        }
         setStatus(null)
         setOnDuty(null)
         setError(err?.message || 'Không kiểm tra được ca làm việc.')

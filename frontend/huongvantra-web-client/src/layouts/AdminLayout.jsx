@@ -91,6 +91,8 @@ function AdminLayout() {
     let cancelled = false
     const kickIfSuperseded = async () => {
       if (cancelled || document.visibilityState === 'hidden' || isAuthLoggingOut()) return
+      // Offline: không gọi server — tránh false-positive "đăng nhập thiết bị khác".
+      if (!navigator.onLine) return
       const active = await checkAuthSessionActive()
       if (cancelled || active || isAuthLoggingOut()) return
       showError('Tài khoản đã đăng nhập ở thiết bị khác. Bạn đã bị đăng xuất.')

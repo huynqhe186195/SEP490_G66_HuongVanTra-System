@@ -153,8 +153,29 @@ export default function PosShiftDutyGate({
       .then((duty) => {
         setOnDuty(duty)
         onDutyChange?.(duty)
+        try {
+          if (duty) sessionStorage.setItem('hvt-pos-last-shelf-duty', JSON.stringify(duty))
+          else sessionStorage.removeItem('hvt-pos-last-shelf-duty')
+        } catch {
+          // ignore storage errors
+        }
       })
       .catch((err) => {
+        // Offline: reuse last known duty from this browser session so POS stays usable.
+        if (!navigator.onLine) {
+          try {
+            const raw = sessionStorage.getItem('hvt-pos-last-shelf-duty')
+            const cached = raw ? JSON.parse(raw) : null
+            if (cached) {
+              setOnDuty(cached)
+              onDutyChange?.(cached)
+              setError('')
+              return
+            }
+          } catch {
+            // fall through
+          }
+        }
         setOnDuty(null)
         onDutyChange?.(null)
         setError(err?.message || 'Không kiểm tra được ca làm việc.')
@@ -190,9 +211,35 @@ export default function PosShiftDutyGate({
       .then((status) => {
         if (cancelled) return
         applyDayStatus(status)
+        try {
+          sessionStorage.setItem('hvt-pos-last-shelf-day-status', JSON.stringify(status))
+        } catch {
+          // ignore
+        }
       })
       .catch((err) => {
         if (cancelled) return
+        if (!navigator.onLine) {
+          try {
+            const raw = sessionStorage.getItem('hvt-pos-last-shelf-day-status')
+            const cached = raw ? JSON.parse(raw) : null
+            if (cached) {
+              applyDayStatus(cached)
+              setError('')
+              return
+            }
+          } catch {
+            // fall through
+          }
+          // Assume day-start already done so offline CASH is not blocked solely by status fetch.
+          applyDayStatus({
+            date: vietnamTodayDateInput(),
+            dayStartDone: true,
+            dayEndDone: false,
+          })
+          setError('')
+          return
+        }
         setError(err?.message || 'Không kiểm tra được trạng thái kiểm kê ngày.')
       })
       .finally(() => {
