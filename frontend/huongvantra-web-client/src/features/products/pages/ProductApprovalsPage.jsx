@@ -3099,7 +3099,7 @@ export default function ProductApprovalsPage() {
         showSuccess('Đã export bản nháp theo file mẫu chính thức.')
       }
     } catch (error) {
-      showError(error.message || 'Không thể export file Excel.')
+      showError(error.message || 'Không thể xuất file Excel.')
     } finally {
       setIsExporting(false)
     }
@@ -3231,8 +3231,8 @@ export default function ProductApprovalsPage() {
               <input ref={fileInputRef} type="file" accept=".xlsx,.zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip" className="hidden" onChange={handleImportFile} />
               <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadTemplate}>{isTemplateGenerating ? 'Đang tạo...' : 'Tải file mẫu'}</button>
               <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadSampleWithData}>{isTemplateGenerating ? 'Đang tạo...' : 'Tải file có dữ liệu mẫu'}</button>
-              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Import Excel / ZIP'}</button>
-              <button type="button" disabled={isExporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={exportCurrentDraft}>{isExporting ? 'Đang export...' : 'Export Excel'}</button>
+              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Nhập Excel / ZIP'}</button>
+              <button type="button" disabled={isExporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={exportCurrentDraft}>{isExporting ? 'Đang xuất...' : 'Xuất Excel'}</button>
               {activeRequestId ? <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={resetForm}>Tạo yêu cầu khác</button> : null}
             </div>
           </div>

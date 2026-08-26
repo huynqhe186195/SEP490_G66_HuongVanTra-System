@@ -1734,7 +1734,7 @@ export async function parseOfficialProductCreationFile(file, context) {
       sourceFilename: filename || 'Không rõ tên file',
       sheetName: '',
       rows: [],
-      errors: ['File import phải có định dạng .xlsx.'],
+      errors: ['File nhập phải có định dạng .xlsx.'],
       warnings: [],
       counts: { products: 0, skus: 0, attributes: 0, manualBomLines: 0 },
     }

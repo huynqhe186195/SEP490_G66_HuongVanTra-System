@@ -184,9 +184,9 @@ function CodOrdersPage() {
         },
         'Don_Hang_COD',
       )
-      showSuccess('Đã tải file export đơn COD.')
+      showSuccess('Đã tải file xuất đơn COD.')
     } catch (error) {
-      showError(error.message || 'Export đơn COD thất bại.')
+      showError(error.message || 'Xuất file đơn COD thất bại.')
     } finally {
       setIsExporting(false)
     }

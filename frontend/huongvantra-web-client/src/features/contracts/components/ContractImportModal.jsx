@@ -54,7 +54,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
       setResult(data)
 
       if (data.success) {
-        showSuccess(`Import thành công! Hợp đồng ${data.contractCode} đã được tạo ở trạng thái Nháp.`)
+        showSuccess(`Nhập file thành công! Hợp đồng ${data.contractCode} đã được tạo ở trạng thái Nháp.`)
         if (onSuccess) onSuccess()
       }
     } catch (err) {
@@ -236,7 +236,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
                   <span className="material-symbols-outlined text-2xl text-[#166534]">check_circle</span>
                   <div>
                     <p className="font-medium text-[#166534]">
-                      Import thành công!
+                      Nhập file thành công!
                     </p>
                     <p className="mt-1 text-sm text-[#166534]">
                       Hợp đồng <span className="font-semibold">{result.contractCode}</span> đã được tạo ở trạng thái Nháp.
@@ -277,7 +277,7 @@ export default function ContractImportModal({ isOpen, onClose, onSuccess }) {
                 {isUploading && (
                   <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
                 )}
-                {isUploading ? 'Đang import...' : 'Import'}
+                {isUploading ? 'Đang nhập...' : 'Nhập file'}
               </button>
             </>
           )}

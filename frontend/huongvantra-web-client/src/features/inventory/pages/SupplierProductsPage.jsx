@@ -688,7 +688,7 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
         showError('Không có dòng nào được thêm. Xem chi tiết lỗi bên dưới.')
       }
     } catch (err) {
-      showError(err?.message ?? 'Import thất bại.')
+      showError(err?.message ?? 'Nhập file thất bại.')
     } finally {
       setIsImporting(false)
     }
@@ -830,7 +830,7 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
             disabled={isImporting || parsedRows.length === 0}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#356647] px-5 py-2 text-sm font-bold text-white hover:bg-[#2a5238] disabled:cursor-not-allowed disabled:opacity-50">
             <span className={`material-symbols-outlined text-[18px] ${isImporting ? 'animate-spin' : ''}`}>upload_file</span>
-            {isImporting ? 'Đang import...' : 'Import Excel'}
+            {isImporting ? 'Đang nhập...' : 'Nhập Excel'}
           </button>
         </div>
       </div>

@@ -147,9 +147,9 @@ function OrdersPage() {
         fromDate: toLocalDayStartIso(filters.fromDate),
         toDate: toLocalDayEndIso(filters.toDate),
       })
-      showSuccess('Đã tải file export đơn hàng.')
+      showSuccess('Đã tải file xuất đơn hàng.')
     } catch (error) {
-      showError(error.message || 'Export đơn hàng thất bại.')
+      showError(error.message || 'Xuất file đơn hàng thất bại.')
     } finally {
       setIsExporting(false)
     }

@@ -154,7 +154,7 @@ function ExchangeOrdersPage() {
           },
           codOnly ? 'Phieu_Tra_Hang_COD' : 'Phieu_Tra_Hang',
         )
-        showSuccess('Đã tải file export phiếu trả hàng.')
+        showSuccess('Đã tải file xuất phiếu trả hàng.')
         return
       }
 
@@ -167,9 +167,9 @@ function ExchangeOrdersPage() {
         },
         codOnly ? 'Don_Doi_COD' : 'Don_Doi',
       )
-      showSuccess('Đã tải file export đơn đổi.')
+      showSuccess('Đã tải file xuất đơn đổi.')
     } catch (error) {
-      showError(error.message || 'Export thất bại.')
+      showError(error.message || 'Xuất file thất bại.')
     } finally {
       setIsExporting(false)
     }

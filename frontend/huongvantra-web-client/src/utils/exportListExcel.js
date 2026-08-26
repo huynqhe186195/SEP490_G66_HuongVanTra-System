@@ -88,7 +88,7 @@ export async function exportFormattedListExcel({
   titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }
 
   const subtitleText = subtitle
-    || `Export lúc ${formatVietnamDateTime(new Date().toISOString())} · Tổng ${rows.length} dòng (tối đa 10.000 theo bộ lọc hiện tại)`
+    || `Xuất lúc ${formatVietnamDateTime(new Date().toISOString())} · Tổng ${rows.length} dòng (tối đa 10.000 theo bộ lọc hiện tại)`
   const subtitleRow = ws.addRow([subtitleText])
   ws.mergeCells(subtitleRow.number, 1, subtitleRow.number, colCount)
   subtitleRow.getCell(1).font = cellFont({ italic: true, color: MUTED })

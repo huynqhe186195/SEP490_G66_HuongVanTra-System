@@ -404,7 +404,7 @@ function CustomersPage() {
     }
 
     if (!importFile.name.toLowerCase().endsWith('.xlsx')) {
-      showError('Chỉ hỗ trợ import file Excel định dạng .xlsx.')
+      showError('Chỉ hỗ trợ nhập file Excel định dạng .xlsx.')
       return
     }
 
@@ -416,9 +416,9 @@ function CustomersPage() {
         setPage(1)
         await Promise.all([reload(), loadStatistics()])
       }
-      showSuccess(`Import hoàn tất: ${result.successCount} thành công, ${result.failedCount} lỗi.`)
+      showSuccess(`Nhập file hoàn tất: ${result.successCount} thành công, ${result.failedCount} lỗi.`)
     } catch (error) {
-      showError(error.message || 'Import khách hàng thất bại.')
+      showError(error.message || 'Nhập file khách hàng thất bại.')
     } finally {
       setIsImporting(false)
     }
@@ -446,9 +446,9 @@ function CustomersPage() {
             ? undefined
             : sortBy || (activeTab === 'debts' ? 'debt' : undefined),
       })
-      showSuccess('Đã tải file export khách hàng.')
+      showSuccess('Đã tải file xuất khách hàng.')
     } catch (error) {
-      showError(error.message || 'Export khách hàng thất bại.')
+      showError(error.message || 'Xuất file khách hàng thất bại.')
     } finally {
       setIsExporting(false)
     }
@@ -1587,7 +1587,7 @@ function CustomersPage() {
                     onClick={handleImportCustomers}
                   >
                     <span className={`material-symbols-outlined text-[18px] ${isImporting ? 'animate-spin' : ''}`}>upload_file</span>
-                    {isImporting ? 'Đang import...' : 'Import Excel'}
+                    {isImporting ? 'Đang nhập...' : 'Nhập Excel'}
                   </button>
                 </div>
               </div>
