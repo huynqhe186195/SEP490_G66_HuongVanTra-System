@@ -51,7 +51,11 @@ export async function refreshCashSession() {
   try {
     cachedOpenSession = await fetchCurrentCashSession()
   } catch {
-    cachedOpenSession = null
+    // Offline / network blip: keep last known open session so counter CASH
+    // sales are not blocked after a successful open earlier in the day.
+    if (navigator.onLine || !cachedOpenSession) {
+      cachedOpenSession = null
+    }
   }
   bootstrapped = true
   notifyCashSessionChanged()

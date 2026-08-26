@@ -82,14 +82,27 @@ export function getUserIdFromToken(accessToken) {
 }
 
 async function refreshSession(session) {
-  const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh-token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: session.refreshToken }),
-  })
+  let response
+  try {
+    response = await fetch(`${getApiBaseUrl()}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    })
+  } catch (error) {
+    const networkError = new Error(
+      isLikelyNetworkError(error)
+        ? 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.'
+        : (error?.message || 'Không làm mới được phiên đăng nhập.'),
+    )
+    networkError.isNetworkError = true
+    throw networkError
+  }
 
   if (!response.ok) {
-    throw new Error(await parseResponseError(response))
+    const err = new Error(await parseResponseError(response))
+    err.statusCode = response.status
+    throw err
   }
 
   const data = await response.json()
@@ -159,6 +172,19 @@ export async function apiRequest(path, options = {}) {
   return response.text()
 }
 
+function isLikelyNetworkError(error) {
+  if (!error) return false
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true
+  const message = String(error.message || error || '').toLowerCase()
+  return (
+    error.name === 'TypeError'
+    || message.includes('failed to fetch')
+    || message.includes('networkerror')
+    || message.includes('network request failed')
+    || message.includes('load failed')
+  )
+}
+
 // Mọi API sau login (kể cả tạo đơn POS). Gắn Bearer, 401 thì refresh rồi retry một lần.
 export async function apiRequestAuth(path, options = {}, retry = true) {
   const silentAuthErrors = Boolean(options.silentAuthErrors)
@@ -179,11 +205,22 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
     Authorization: `Bearer ${session.accessToken}`,
   }
 
-  // path ví dụ /api/v1/orders → http://localhost:5000/api/v1/orders (YARP → OrderService).
-  let response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...fetchOptions,
-    headers,
-  })
+  let response
+  try {
+    // path ví dụ /api/v1/orders → http://localhost:5000/api/v1/orders (YARP → OrderService).
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...fetchOptions,
+      headers,
+    })
+  } catch (error) {
+    const networkError = new Error(
+      isLikelyNetworkError(error)
+        ? 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.'
+        : (error?.message || 'Không gửi được yêu cầu.'),
+    )
+    networkError.isNetworkError = true
+    throw networkError
+  }
 
   if (response.status === 401 && retry && session.refreshToken) {
     try {
@@ -195,11 +232,19 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
           Authorization: `Bearer ${session.accessToken}`,
         },
       })
-    } catch {
+    } catch (refreshError) {
+      // Mất mạng khi refresh: giữ session local — không kick về login.
+      if (isLikelyNetworkError(refreshError) || refreshError?.isNetworkError) {
+        const networkError = new Error('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.')
+        networkError.isNetworkError = true
+        throw networkError
+      }
       if (!silentAuthErrors) {
         handleAuthFailure('Phiên đăng nhập đã hết hạn.', 401)
       }
-      throw new Error('Phiên đăng nhập đã hết hạn.')
+      const expired = new Error('Phiên đăng nhập đã hết hạn.')
+      expired.statusCode = 401
+      throw expired
     }
   }
 

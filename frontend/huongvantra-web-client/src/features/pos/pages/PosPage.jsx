@@ -2399,6 +2399,14 @@ function PosPage() {
     // Đủ kệ → return false → mở popup xác nhận thanh toán bình thường.
     const previewSellFirstBeforePayment = async () => {
         if (cartItems.length === 0) return false;
+        // Offline CASH counter: IndexedDB shelf check happens in enqueueOfflineCashPosOrder.
+        // HTTP preview is unavailable without network — skip so checkout can continue.
+        if (!navigator.onLine) {
+            if (isTakeaway || paymentMethod !== 'CASH') {
+                throw new Error('Ngoại tuyến chỉ hỗ trợ bán tại quầy bằng tiền mặt.');
+            }
+            return false;
+        }
         const preview = await previewPosStockHandling(cartItems.map((item) => ({
             skuId: item.productId,
             skuSnapshotName: item.name || item.productName || item.sku,

@@ -1042,7 +1042,10 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       productName: p.name,
       packagingType: p.unit,
       price: p.price,
-      stockQuantity: p.qtyOnHand ?? 0,
+      stockQuantity: Math.max(
+        0,
+        Number(p.qtyOnHand ?? 0) - Number(p.offlineReservedQuantity ?? 0),
+      ),
       imageUrl: p.imageUrl ?? '',
       categoryId: p.categoryId ?? null,
       productType: p.productType ?? '',

@@ -169,13 +169,23 @@ export async function me(accessToken) {
   }
 }
 
-/** false nếu phiên bị thay bởi đăng nhập ở thiết bị khác / đã thu hồi. */
+/** false nếu phiên bị thay bởi đăng nhập ở thiết bị khác / đã thu hồi.
+ *  Mất mạng hoặc lỗi server không được coi là phiên hết hạn — tránh kick POS offline.
+ */
 export async function checkAuthSessionActive() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true
+  }
   try {
     await apiRequestAuth('/api/auth/session', { method: 'GET', silentAuthErrors: true })
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return true
+    const status = Number(error?.statusCode)
+    // Chỉ kick khi server xác nhận phiên không còn hợp lệ.
+    if (status === 401) return false
+    // Network / 5xx / timeout: giữ phiên local.
+    return true
   }
 }
 
