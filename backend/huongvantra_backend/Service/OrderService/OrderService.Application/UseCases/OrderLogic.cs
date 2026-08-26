@@ -1540,6 +1540,8 @@ public class OrderLogic(
         if (isDepositOrder)
             description += $" Giữ lại tiền cọc {FormatVnd(order.DepositAmount!.Value)}, không hoàn lại.";
 
+        CancelPendingCustomBundles(order);
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Cancelled,
@@ -1771,6 +1773,8 @@ public class OrderLogic(
         order.RefundedByName = NormalizeActorName(actorName);
         order.UpdatedAt = now;
 
+        CancelPendingCustomBundles(order);
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Cancelled,
@@ -1859,6 +1863,8 @@ public class OrderLogic(
             payment.PaidAt = null;
             payment.UpdatedAt = DateTime.UtcNow;
         }
+
+        CancelPendingCustomBundles(order);
 
         await RecordActivityAsync(
             order.Id,
@@ -2147,6 +2153,8 @@ public class OrderLogic(
         order.CancellationRequestedBy = actorId;
         order.CancellationRequestedByName = NormalizeActorName(actorName);
         order.UpdatedAt = now;
+
+        CancelPendingCustomBundles(order);
 
         await RecordActivityAsync(
             order.Id,
@@ -3549,6 +3557,22 @@ public class OrderLogic(
         }
     }
 
+    /// <summary>Đánh dấu gói cá nhân Pending → Cancelled khi hủy đơn (tránh Thủ kho vẫn đóng gói/trừ NL).</summary>
+    private static void CancelPendingCustomBundles(Order order)
+    {
+        if (order.CustomBundles is null || order.CustomBundles.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        foreach (var bundle in order.CustomBundles)
+        {
+            if (bundle.PackingStatus != PackingStatus.Pending)
+                continue;
+            bundle.PackingStatus = PackingStatus.Cancelled;
+            bundle.UpdatedAt = now;
+        }
+    }
+
     private async Task TryFreezeLinkedStockQueuesAsync(Guid orderId, string reason, CancellationToken ct)
     {
         try
@@ -3949,6 +3973,18 @@ public class OrderLogic(
         var bundle = await _customBundleRepo.GetByIdAsync(bundleId, ct)
             ?? throw new OrderNotFoundException(bundleId);
 
+        if (bundle.PackingStatus == PackingStatus.Cancelled)
+            throw new OrderValidationException("Gói sản phẩm cá nhân đã hủy theo đơn — không thể đóng gói / trừ nguyên liệu.");
+
+        var orderForGuard = bundle.Order
+            ?? (bundle.OrderId != Guid.Empty ? await _orderRepo.GetByIdAsync(bundle.OrderId, ct) : null);
+        if (orderForGuard is not null
+            && orderForGuard.OrderStatus is OrderStatus.Cancelled or OrderStatus.CancellationRequested)
+        {
+            throw new OrderValidationException(
+                "Đơn đã hủy hoặc đang chờ duyệt hủy — không thể đóng gói sản phẩm cá nhân.");
+        }
+
         if (bundle.PackingStatus == PackingStatus.Packed)
         {
             // Đơn đã đóng gói trước khi có bước advance trạng thái — tự sửa khi mở lại.
@@ -4041,7 +4077,10 @@ public class OrderLogic(
         var bundles = order.CustomBundles ?? [];
         if (bundles.Count == 0)
             return false;
-        if (bundles.Any(b => b.PackingStatus != PackingStatus.Packed))
+        // Gói đã hủy theo đơn không chặn; chỉ cần không còn Pending và có ít nhất 1 Packed.
+        if (bundles.Any(b => b.PackingStatus == PackingStatus.Pending))
+            return false;
+        if (!bundles.Any(b => b.PackingStatus == PackingStatus.Packed))
             return false;
 
         // Thành phẩm còn queue BOM / điều chuyển / backorder → chưa ReadyToDeliver.

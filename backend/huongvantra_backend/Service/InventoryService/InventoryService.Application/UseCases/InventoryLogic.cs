@@ -929,6 +929,17 @@ public class InventoryLogic(
 
     private const string OrderStockStatusCancellationRequested = "cancellation_requested";
 
+    private static bool IsCancelledOrderSnapshot(StockDeductQueue queue)
+    {
+        if (string.Equals(queue.OrderPaymentStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(queue.OrderStockStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(queue.OrderStockStatus, "cancelled_after_shipping", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
     /// <summary>
     /// POS-04 (H5, quyết định #7/#8): đơn COD bàn giao giao hàng → trừ tồn vật lý Kệ Hàng
     /// đúng một lần (tiêu thụ reservation qua ConfirmQueueAsync). Idempotent hai tầng:
@@ -1131,10 +1142,15 @@ public class InventoryLogic(
             await _queueRepo.SaveChangesAsync(ct);
 
         var previewItems = await BuildPreviewItemsAsync(queue, ct);
-        var canDeduct = previewItems.All(i => i.ShortageQuantity <= 0);
-        var orderStockStatus = canDeduct
-            ? queue.OrderStockStatus
-            : IsBomReconciliationQueue(queue) ? "waiting_materials" : "waiting_stock";
+        var canDeduct = !IsCancelledOrderSnapshot(queue)
+            && queue.QueueStatus is QueueStatus.Waiting or QueueStatus.Insufficient
+            && !string.Equals(queue.OrderStockStatus, OrderStockStatusCancellationRequested, StringComparison.OrdinalIgnoreCase)
+            && previewItems.All(i => i.ShortageQuantity <= 0);
+        var orderStockStatus = IsCancelledOrderSnapshot(queue)
+            ? "cancelled"
+            : canDeduct
+                ? queue.OrderStockStatus
+                : IsBomReconciliationQueue(queue) ? "waiting_materials" : "waiting_stock";
 
         return new StockDeductPreviewResponse(
             queue.Id, queue.OrderId, queue.OrderCode,
@@ -1499,8 +1515,27 @@ public class InventoryLogic(
                 "Đơn đang chờ duyệt hủy/hoàn tiền — không được xác nhận trừ kho. Chờ hoàn tất hủy đơn hoặc Manager từ chối yêu cầu hủy.");
         }
 
+        if (IsCancelledOrderSnapshot(queue))
+        {
+            throw new InventoryValidationException(
+                "Đơn đã hủy — không được xác nhận trừ kho. Làm mới danh sách chờ đóng gói.");
+        }
+
         var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
+            // Re-read trong transaction: tránh race hủy đơn giữa lúc preview và confirm.
+            var live = await _queueRepo.GetByIdAsync(queueId, innerCt)
+                ?? throw new InventoryNotFoundException($"Queue '{queueId}' not found.");
+            if (live.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
+                throw new InventoryValidationException("Chỉ có thể trừ tồn cho queue đang chờ xử lý hoặc chờ hàng.");
+            if (string.Equals(live.OrderStockStatus, OrderStockStatusCancellationRequested, StringComparison.OrdinalIgnoreCase)
+                || IsCancelledOrderSnapshot(live))
+            {
+                throw new InventoryValidationException(
+                    "Đơn đã hủy hoặc đang chờ duyệt hủy — không được xác nhận trừ kho.");
+            }
+            queue = live;
+
             var now = DateTime.UtcNow;
             var shortages = new List<StockShortage>();
             var stockBySkuId = new Dictionary<Guid, SkuStock>();

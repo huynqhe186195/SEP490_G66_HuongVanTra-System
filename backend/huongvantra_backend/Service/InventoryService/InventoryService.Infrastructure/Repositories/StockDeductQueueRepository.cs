@@ -13,10 +13,21 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
             .Include(q => q.Items)
             .FirstOrDefaultAsync(q => q.Id == id, ct);
 
-    public Task<StockDeductQueue?> GetByOrderIdAsync(Guid orderId, CancellationToken ct = default) =>
-        _db.StockDeductQueues
+    public async Task<StockDeductQueue?> GetByOrderIdAsync(Guid orderId, CancellationToken ct = default)
+    {
+        var queues = await _db.StockDeductQueues
             .Include(q => q.Items)
-            .FirstOrDefaultAsync(q => q.OrderId == orderId, ct);
+            .Where(q => q.OrderId == orderId)
+            .OrderByDescending(q => q.CreatedAt)
+            .ToListAsync(ct);
+        if (queues.Count == 0)
+            return null;
+
+        // Ưu tiên lệnh còn mở (Waiting/Insufficient) khi hủy/confirm — tránh dính bản Confirmed/Cancelled cũ.
+        return queues.FirstOrDefault(q =>
+                q.QueueStatus is QueueStatus.Waiting or QueueStatus.Insufficient)
+            ?? queues[0];
+    }
 
     public async Task<List<StockDeductQueue>> GetWaitingAsync(string? status, string? search, CancellationToken ct = default)
     {

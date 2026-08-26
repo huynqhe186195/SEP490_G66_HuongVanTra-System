@@ -57,8 +57,12 @@ function readCount(statusCounts, key) {
   return found ? Number(found[1]) || 0 : 0
 }
 
-function mapCustomBundleToQueueRow(bundle, { packed = false } = {}) {
+function mapCustomBundleToQueueRow(bundle, { packed = false, cancelled = false } = {}) {
   const orderStatus = String(bundle.orderStatus || bundle.OrderStatus || '')
+  const packing = String(bundle.packingStatus || bundle.PackingStatus || '').toLowerCase()
+  const isCancelled = cancelled
+    || packing === 'cancelled'
+    || ['cancelled', 'cancellationrequested'].includes(orderStatus.toLowerCase())
   const orderId = bundle.orderId ?? bundle.OrderId ?? ''
   const orderCode = String(bundle.orderCode ?? bundle.OrderCode ?? '').trim()
   return {
@@ -68,12 +72,16 @@ function mapCustomBundleToQueueRow(bundle, { packed = false } = {}) {
     orderId,
     // Hiển thị: dùng mã đơn thật; thiếu thì rút gọn orderId (readOrderCode bỏ qua 8 hex → gộp bằng orderId).
     orderCode: orderCode || (orderId ? String(orderId).replace(/-/g, '').slice(0, 8) : '—'),
-    queueStatus: packed ? 'Confirmed' : 'Waiting',
-    orderStockStatus: packed ? 'custom_packed' : 'pending_custom_pack',
-    orderPaymentStatus: orderStatus || 'WaitingProduction',
+    queueStatus: isCancelled ? 'Cancelled' : packed ? 'Confirmed' : 'Waiting',
+    orderStockStatus: isCancelled
+      ? 'custom_cancelled'
+      : packed
+        ? 'custom_packed'
+        : 'pending_custom_pack',
+    orderPaymentStatus: orderStatus || (isCancelled ? 'Cancelled' : 'WaitingProduction'),
     createdAt: packed
       ? (bundle.packedAt || bundle.PackedAt || bundle.createdAt || bundle.CreatedAt)
-      : (bundle.createdAt || bundle.CreatedAt),
+      : (bundle.updatedAt || bundle.UpdatedAt || bundle.createdAt || bundle.CreatedAt),
     totalAmount: Number(bundle.totalPrice ?? bundle.TotalPrice ?? 0),
     isReserved: false,
     label: bundle.label ?? bundle.Label,
@@ -84,7 +92,7 @@ function mapCustomBundleToQueueRow(bundle, { packed = false } = {}) {
       skuName: ing.materialSnapshotName ?? ing.MaterialSnapshotName,
       orderedQuantity: ing.quantity ?? ing.Quantity,
       finishedDeductedQuantity: packed ? (ing.quantity ?? ing.Quantity) : 0,
-      pendingBomQuantity: packed ? 0 : (ing.quantity ?? ing.Quantity),
+      pendingBomQuantity: packed || isCancelled ? 0 : (ing.quantity ?? ing.Quantity),
     })),
   }
 }
@@ -215,14 +223,16 @@ function mergeCatalogAndCustomRows(catalogRows, customRows) {
       return row.customBundles[0]
     }
     const catalogStatus = String(row.catalog?.queueStatus || '').toLowerCase()
-    const customPending = (row.customBundles || []).some((bundle) =>
-      String(bundle.queueStatus || '').toLowerCase() !== 'confirmed',
+    const customStatuses = (row.customBundles || []).map((bundle) =>
+      String(bundle.queueStatus || '').toLowerCase(),
     )
-    const customAllPacked = hasCustom && !customPending
+    const customPending = customStatuses.some((status) => status === 'waiting' || status === 'insufficient')
+    const customAllCancelled = hasCustom && customStatuses.every((status) => status === 'cancelled')
+    const customAllPacked = hasCustom && customStatuses.every((status) => status === 'confirmed')
     return {
       ...row,
       queueStatus:
-        catalogStatus === 'cancelled'
+        catalogStatus === 'cancelled' || (customAllCancelled && (!hasCatalog || catalogStatus === 'cancelled'))
           ? 'Cancelled'
           : catalogStatus === 'insufficient'
             ? 'Insufficient'
@@ -230,7 +240,9 @@ function mergeCatalogAndCustomRows(catalogRows, customRows) {
               ? 'Waiting'
               : catalogStatus === 'confirmed' && customAllPacked
                 ? 'Confirmed'
-                : row.queueStatus,
+                : customAllCancelled
+                  ? 'Cancelled'
+                  : row.queueStatus,
     }
   })
 }
@@ -307,8 +319,9 @@ function StockDeductQueuePage() {
       const tab = TABS.find((t) => t.value === activeTab)
       const includePendingCustom = activeTab === 'waiting' || activeTab === 'insufficient' || activeTab === 'all'
       const includePackedCustom = activeTab === 'confirmed' || activeTab === 'all'
+      const includeCancelledCustom = true // luôn tải để badge «Đã hủy» gồm gói cá nhân
       const siblingStatus = activeTab === 'waiting' ? 'insufficient' : activeTab === 'insufficient' ? 'waiting' : null
-      const [queuePage, siblingQueuePage, customPendingPage, customPackedPage] = await Promise.all([
+      const [queuePage, siblingQueuePage, customPendingPage, customPackedPage, customCancelledPage] = await Promise.all([
         fetchPendingStockDeductQueues({
           status: tab?.status,
           search: searchValue.trim() || undefined,
@@ -329,25 +342,37 @@ function StockDeductQueuePage() {
         includePackedCustom
           ? fetchCustomBundles({ page: 1, pageSize: 100, packingStatus: 'Packed' }).catch(() => ({ items: [], totalCount: 0 }))
           : Promise.resolve({ items: [], totalCount: 0 }),
+        includeCancelledCustom
+          ? fetchCustomBundles({ page: 1, pageSize: 100, packingStatus: 'Cancelled' }).catch(() => ({ items: [], totalCount: 0 }))
+          : Promise.resolve({ items: [], totalCount: 0 }),
       ])
 
       const search = searchValue.trim().toLowerCase()
-      const pendingCustomItems = customPendingPage.items || customPendingPage.items || []
-      const packedCustomItems = customPackedPage.items || customPackedPage.items || []
+      const isActiveOrder = (bundle) => {
+        const status = String(bundle.orderStatus || bundle.OrderStatus || '').toLowerCase()
+        return status !== 'cancelled' && status !== 'cancellationrequested'
+      }
+      const pendingCustomItems = (customPendingPage.items || []).filter(isActiveOrder)
+      const packedCustomItems = customPackedPage.items || []
+      const cancelledCustomItems = customCancelledPage.items || []
       let customRows = pendingCustomItems.map((b) => mapCustomBundleToQueueRow(b))
       let packedCustomRows = packedCustomItems.map((b) => mapCustomBundleToQueueRow(b, { packed: true }))
+      let cancelledCustomRows = cancelledCustomItems.map((b) => mapCustomBundleToQueueRow(b, { cancelled: true }))
       if (search) {
         const match = (row) =>
           String(row.orderCode || '').toLowerCase().includes(search)
           || String(row.label || '').toLowerCase().includes(search)
         customRows = customRows.filter(match)
         packedCustomRows = packedCustomRows.filter(match)
+        cancelledCustomRows = cancelledCustomRows.filter(match)
       }
       const customForTab = activeTab === 'confirmed'
         ? packedCustomRows
-        : activeTab === 'all'
-          ? [...customRows, ...packedCustomRows]
-          : customRows
+        : activeTab === 'cancelled'
+          ? cancelledCustomRows
+          : activeTab === 'all'
+            ? [...customRows, ...packedCustomRows, ...cancelledCustomRows]
+            : customRows
       const catalogSource = [
         ...(queuePage.items || queuePage.items || []),
         ...(siblingQueuePage.items || siblingQueuePage.items || []),
@@ -380,6 +405,7 @@ function StockDeductQueuePage() {
 
       const customWaitingStandalone = customRows.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
       const packedStandalone = packedCustomRows.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
+      const cancelledStandalone = cancelledCustomRows.filter((row) => !rowMatchesCatalogKeys(row, catalogKeys)).length
       const baseCounts = { ...(queuePage.statusCounts || queuePage.StatusCounts || {}) }
       const bump = (key, delta) => {
         const found = Object.keys(baseCounts).find((k) => k.toLowerCase() === key.toLowerCase())
@@ -388,6 +414,7 @@ function StockDeductQueuePage() {
       }
       bump('Waiting', customWaitingStandalone)
       bump('Confirmed', packedStandalone)
+      bump('Cancelled', cancelledStandalone)
       setStatusCounts(baseCounts)
     } catch (error) {
       setQueues([])
@@ -600,9 +627,9 @@ function StockDeductQueuePage() {
                       && String(catalogRow.queueStatus || '').toLowerCase() !== 'confirmed',
                     )
                     const pendingCustom = customParts.filter((bundle) =>
-                      String(bundle.queueStatus || '').toLowerCase() !== 'confirmed',
+                      String(bundle.queueStatus || '').toLowerCase() === 'waiting',
                     )
-                    const customCanConfirm = canExecuteDeduct && pendingCustom.length > 0
+                    const customCanConfirm = canExecuteDeduct && !isCancelledQueue && pendingCustom.length > 0
                     const orderStatusMeta = resolveStockDeductOrderStatusMeta(
                       row.orderPaymentStatus || catalogRow?.orderPaymentStatus,
                       catalogRow?.orderStockStatus || row.orderStockStatus,
