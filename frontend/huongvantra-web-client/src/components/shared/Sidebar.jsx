@@ -62,20 +62,24 @@ function Sidebar({
 
   // Drag-to-resize (desktop only, not in compact/collapsed mode)
   const dragStartRef = useRef(null)
+  const [isResizing, setIsResizing] = useState(false)
   const handleDragMouseDown = useCallback(
     (e) => {
-      if (isCompact) return
+      if (isCompact || !onWidthChange) return
       e.preventDefault()
+      e.stopPropagation()
       dragStartRef.current = { x: e.clientX, startWidth: width ?? 256 }
+      setIsResizing(true)
 
       const onMouseMove = (ev) => {
         if (!dragStartRef.current) return
         const delta = ev.clientX - dragStartRef.current.x
         const next = Math.min(400, Math.max(180, dragStartRef.current.startWidth + delta))
-        onWidthChange?.(next)
+        onWidthChange(next)
       }
       const onMouseUp = () => {
         dragStartRef.current = null
+        setIsResizing(false)
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
         document.body.style.cursor = ''
@@ -273,13 +277,16 @@ function Sidebar({
     ) : null}
     <aside
       className={[
-        'z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[padding] duration-300 ease-out',
+        'relative z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[padding] duration-300 ease-out',
         useMobileOverlay || useMobileRail
           ? 'fixed inset-y-0 left-0 rounded-none'
-          : 'relative lg:static lg:z-auto lg:m-4 lg:rounded-[32px]',
+          : 'lg:z-auto lg:m-4 lg:rounded-[32px]',
         isCompact
           ? 'w-[5.25rem] p-3'
-          : 'w-[min(100vw-2rem,17rem)] max-w-[85vw] p-4 lg:p-5',
+          : width && isDesktopNav
+            ? 'max-w-[85vw] p-4 lg:p-5'
+            : 'w-[min(100vw-2rem,17rem)] max-w-[85vw] p-4 lg:p-5',
+        isResizing ? 'select-none' : '',
       ].join(' ')}
       style={isDesktopNav && !isCompact && width ? { width: `${width}px` } : undefined}
       aria-expanded={!isCompact}
@@ -617,16 +624,20 @@ function Sidebar({
       </div>
 
       {/* Drag-to-resize handle — desktop only, hidden in compact mode */}
-      {!isCompact && onWidthChange ? (
+      {isDesktopNav && !isCompact && onWidthChange ? (
         <div
-          aria-hidden="true"
-          onMouseDown={handleDragMouseDown}
-          className="absolute inset-y-0 right-0 hidden w-1.5 cursor-col-resize lg:block"
-          style={{ background: 'transparent' }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Kéo để thay đổi độ rộng menu"
           title="Kéo để thay đổi độ rộng"
-        >
-          <div className="absolute inset-y-4 right-px w-px rounded-full bg-white/20 opacity-0 transition-opacity duration-150 hover:opacity-100" />
-        </div>
+          onMouseDown={handleDragMouseDown}
+          className={[
+            'absolute inset-y-0 right-0 z-20 hidden w-2 cursor-col-resize touch-none lg:block',
+            "before:pointer-events-none before:absolute before:inset-y-6 before:right-0.5 before:w-0.5 before:rounded-full before:bg-white/30 before:content-[''] before:opacity-40 before:transition-opacity before:duration-150",
+            'hover:before:opacity-100',
+            isResizing ? 'before:opacity-100 before:bg-white/70' : '',
+          ].join(' ')}
+        />
       ) : null}
     </aside>
     </>
