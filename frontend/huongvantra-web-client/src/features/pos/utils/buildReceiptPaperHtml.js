@@ -126,7 +126,7 @@ export function buildReceiptPaperHtml(receipt) {
         }</span>
       </div>
       <div class="receipt-row">
-        <span class="receipt-label">TT</span>
+        <span class="receipt-label">Thanh toán</span>
         <span class="receipt-value receipt-highlight">${escapeHtml(receipt.paymentMethodLabel)}</span>
       </div>
       <div class="receipt-divider"></div>

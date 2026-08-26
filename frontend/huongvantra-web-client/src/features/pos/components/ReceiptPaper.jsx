@@ -50,7 +50,7 @@ const ReceiptPaper = forwardRef(function ReceiptPaper({ receipt }, ref) {
         </span>
       </div>
       <div className="receipt-row">
-        <span className="receipt-label">TT</span>
+        <span className="receipt-label">Thanh toán</span>
         <span className="receipt-value receipt-highlight">{receipt.paymentMethodLabel}</span>
       </div>
 
