@@ -63,6 +63,24 @@ export function fetchLegacySaleReview() {
   return apiRequestAuth('/api/users/legacy-sale-review', { method: 'GET' })
 }
 
+/** Vai trò chỉ cho phép 1 người đang hoạt động (Quản lý chi nhánh, Kế toán, Thủ kho). */
+export function fetchSingleHolderRoles() {
+  return apiRequestAuth('/api/users/single-holder-roles', { method: 'GET' })
+}
+
+export function mapSingleHolderRole(item) {
+  if (!item || typeof item !== 'object') return null
+  const roleName = item.roleName ?? item.RoleName ?? ''
+  if (!roleName) return null
+  return {
+    roleName,
+    label: item.label ?? item.Label ?? roleName,
+    isTaken: item.isTaken ?? item.IsTaken ?? false,
+    holderUserId: item.holderUserId ?? item.HolderUserId ?? null,
+    holderName: item.holderName ?? item.HolderName ?? null,
+  }
+}
+
 export function createUser(payload) {
   return apiRequestAuth('/api/users', {
     method: 'POST',

@@ -103,6 +103,27 @@ public class UserRepository(UserDbContext context) : IUserRepository
         return await query.AnyAsync();
     }
 
+    public async Task<User?> FindActiveHolderOfRoleAsync(string roleName, Guid? exceptUserId = null)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+            return null;
+
+        var query = context.Users
+            .AsNoTracking()
+            .Include(u => u.Employee)
+            .Where(u =>
+                !u.IsDeleted
+                && u.IsActive
+                && u.UserRoles.Any(ur => !ur.Role.IsDeleted && ur.Role.RoleName == roleName));
+
+        if (exceptUserId.HasValue)
+            query = query.Where(u => u.Id != exceptUserId.Value);
+
+        return await query
+            .OrderBy(u => u.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<(IEnumerable<User> Items, int TotalCount)> GetAllAsync(int page, int pageSize, bool onlyDeleted = false)
     {
         var query = context.Users

@@ -93,6 +93,18 @@ public static class StaffManagementScope
         }
     }
 
+    /// <summary>
+    /// Không tạo thêm tài khoản Quản trị viên qua IAM thường.
+    /// </summary>
+    public static void EnsureAdminRoleNotCreated(IEnumerable<string> roleNames)
+    {
+        if (HasAdminRole(roleNames))
+        {
+            throw new UserValidationException(
+                "Không thể tạo tài khoản Quản trị viên trên trang này. Vai trò Quản trị viên thuộc quy trình vận hành riêng.");
+        }
+    }
+
     public static bool IsSystemAdmin(IEnumerable<string> permissions) =>
         permissions.Contains(PermissionNames.ManageRole, StringComparer.Ordinal);
 

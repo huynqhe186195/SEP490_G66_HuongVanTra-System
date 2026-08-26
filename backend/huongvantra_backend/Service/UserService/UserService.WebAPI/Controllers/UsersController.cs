@@ -35,6 +35,13 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     public async Task<IActionResult> GetLegacySaleReview() =>
         Ok(await userLogic.GetLegacySaleReviewAsync());
 
+    [HttpGet("single-holder-roles")]
+    public async Task<IActionResult> GetSingleHolderRoles()
+    {
+        if (!CanManageStaffAccounts()) return Forbid();
+        return Ok(await userLogic.GetSingleHolderRoleStatusAsync());
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {

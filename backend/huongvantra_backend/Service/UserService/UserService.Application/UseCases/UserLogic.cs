@@ -43,6 +43,12 @@ public class UserLogic(
         }
         RoleAssignmentRules.Replace(user, assignedRoles);
 
+        StaffManagementScope.EnsureAdminRoleNotCreated(assignedRoles.Select(r => r.RoleName));
+
+        await UniqueRoleRules.EnsureSingleHolderAsync(
+            userRepo,
+            assignedRoles.Select(r => r.RoleName));
+
         await userRepo.AddAsync(user);
 
         var employee = new Employee
@@ -184,6 +190,9 @@ public class UserLogic(
             currentRoles,
             nextRoleNames);
 
+        if (request.IsActive)
+            await UniqueRoleRules.EnsureSingleHolderAsync(userRepo, nextRoleNames, user.Id);
+
         if (request.Username is not null)
         {
             var username = UserInputValidator.NormalizeAndValidateUsername(request.Username);
@@ -241,6 +250,12 @@ public class UserLogic(
         EnforceStaffScopeIfNeeded(
             actorPermissions,
             user.UserRoles.Select(ur => ur.Role.RoleName));
+
+        await UniqueRoleRules.EnsureSingleHolderAsync(
+            userRepo,
+            user.UserRoles.Select(ur => ur.Role.RoleName),
+            user.Id);
+
         user.IsActive = true;
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
@@ -260,8 +275,14 @@ public class UserLogic(
 
     public async Task RestoreAsync(Guid id)
     {
-        _ = await userRepo.GetByIdIncludingDeletedAsync(id)
+        var user = await userRepo.GetByIdIncludingDeletedAsync(id)
             ?? throw new UserNotFoundException(id);
+
+        await UniqueRoleRules.EnsureSingleHolderAsync(
+            userRepo,
+            user.UserRoles.Select(ur => ur.Role.RoleName),
+            user.Id);
+
         await userRepo.RestoreAsync(id);
     }
 
@@ -314,6 +335,11 @@ public class UserLogic(
             assignedRoles.Select(r => r.RoleName));
 
         RoleAssignmentRules.Replace(user, existingRoles);
+
+        await UniqueRoleRules.EnsureSingleHolderAsync(
+            userRepo,
+            existingRoles.Select(r => r.RoleName),
+            user.Id);
 
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
@@ -370,6 +396,9 @@ public class UserLogic(
                 "Không đủ dữ liệu để xác định tài khoản này phải là SalePos hay SaleCod; giữ quyền Sale legacy an toàn tương đương SalePos và cần quản trị viên xác nhận."))
             .ToList();
     }
+
+    public Task<IReadOnlyList<SingleHolderRoleStatusResponse>> GetSingleHolderRoleStatusAsync() =>
+        UniqueRoleRules.GetStatusAsync(userRepo);
 
     private static void EnforceStaffScopeIfNeeded(
         IReadOnlyList<string>? actorPermissions,

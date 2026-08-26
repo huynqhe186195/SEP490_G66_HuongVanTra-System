@@ -37,6 +37,12 @@ public class EmployeeLogic(
         if (actorPermissions is not null)
             StaffManagementScope.EnsureCanAssignRoles(actorPermissions, assignedRoles.Select(r => r.RoleName));
 
+        StaffManagementScope.EnsureAdminRoleNotCreated(assignedRoles.Select(r => r.RoleName));
+
+        await UniqueRoleRules.EnsureSingleHolderAsync(
+            userRepo,
+            assignedRoles.Select(r => r.RoleName));
+
         var user = new User
         {
             Id = Guid.NewGuid(),

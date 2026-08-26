@@ -2,7 +2,7 @@
 
 export const ROLE_LABELS = {
   Admin: 'Quản trị viên',
-  Manager: 'Quản lý',
+  Manager: 'Quản lý chi nhánh',
   Sale: 'Sale (cũ — nên chuyển SalePos/SaleCod)',
   SalePos: 'Nhân viên bán hàng quầy',
   SaleCod: 'Nhân viên bán/thu COD',

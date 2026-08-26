@@ -12,8 +12,10 @@ import { fetchRoles, mapRole } from '../services/rolesApi.js'
 import {
   createUser,
   fetchLegacySaleReview,
+  fetchSingleHolderRoles,
   fetchUsers,
   lockUser,
+  mapSingleHolderRole,
   mapUser,
   restoreUser,
   softDeleteUser,
@@ -102,6 +104,7 @@ function UsersPage() {
   const [deletedUsers, setDeletedUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [legacySaleReview, setLegacySaleReview] = useState([])
+  const [singleHolderRoles, setSingleHolderRoles] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -125,16 +128,20 @@ function UsersPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [rolesData, usersData, deletedData, legacyReviewData] = await Promise.all([
+      const [rolesData, usersData, deletedData, legacyReviewData, singleHolderData] = await Promise.all([
         fetchRoles(),
         fetchUsers({ page, pageSize, search: search.trim() || undefined }),
         fetchUsers({ page: 1, pageSize: 100, onlyDeleted: true }),
         fetchLegacySaleReview(),
+        fetchSingleHolderRoles(),
       ])
       setRoles((Array.isArray(rolesData) ? rolesData : []).map(mapRole).filter(Boolean))
       setUsers((usersData.items || []).map(mapUser).filter(Boolean))
       setDeletedUsers((deletedData.items || []).map(mapUser).filter(Boolean))
       setLegacySaleReview(Array.isArray(legacyReviewData) ? legacyReviewData : [])
+      setSingleHolderRoles(
+        (Array.isArray(singleHolderData) ? singleHolderData : []).map(mapSingleHolderRole).filter(Boolean),
+      )
       setTotalCount(usersData.totalCount || 0)
     } catch (error) {
       setUsers([])
@@ -176,8 +183,17 @@ function UsersPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const assignableRoles = useMemo(
-    () => roles.filter((role) => role.roleName !== 'Sale' && role.roleName !== 'CooperativeOwner'),
+    () => roles.filter(
+      (role) => role.roleName !== 'Sale'
+        && role.roleName !== 'CooperativeOwner'
+        && role.roleName !== 'Admin',
+    ),
     [roles],
+  )
+
+  const takenRoleNames = useMemo(
+    () => new Set(singleHolderRoles.filter((r) => r.isTaken).map((r) => r.roleName)),
+    [singleHolderRoles],
   )
 
   const openCreate = () => {
@@ -209,6 +225,8 @@ function UsersPage() {
   const toggleCreateRoleId = (roleId) => {
     const id = Number(roleId)
     if (!Number.isFinite(id)) return
+    const role = assignableRoles.find((item) => item.id === id)
+    if (role && takenRoleNames.has(role.roleName)) return
     setCreateForm((current) => ({
       ...current,
       roleIds: current.roleIds.includes(id)
@@ -587,22 +605,39 @@ function UsersPage() {
               <fieldset>
                 <legend className="text-base font-bold text-[#1b1c17]">Chọn một hoặc nhiều vai trò</legend>
                 <div className="mt-3 space-y-2">
-                  {assignableRoles.map((role) => (
-                    <label
-                      key={role.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 ${
-                        createForm.roleIds.includes(role.id) ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 accent-[#356647]"
-                        checked={createForm.roleIds.includes(role.id)}
-                        onChange={() => toggleCreateRoleId(role.id)}
-                      />
-                      <span className="text-base font-semibold">{formatRoleName(role.roleName)}</span>
-                    </label>
-                  ))}
+                  {assignableRoles.map((role) => {
+                    const isTaken = takenRoleNames.has(role.roleName)
+                    const isChecked = createForm.roleIds.includes(role.id)
+                    const takenInfo = isTaken
+                      ? singleHolderRoles.find((r) => r.roleName === role.roleName)
+                      : null
+                    return (
+                      <label
+                        key={role.id}
+                        className={`flex items-center gap-3 rounded-2xl border-2 p-4 ${
+                          isTaken
+                            ? 'cursor-not-allowed border-[#c1c9c0]/40 bg-[#f3f3f3] opacity-60'
+                            : isChecked
+                              ? 'cursor-pointer border-[#356647] bg-[#356647]/5'
+                              : 'cursor-pointer border-[#c1c9c0]/60'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-[#356647] disabled:cursor-not-allowed"
+                          checked={isChecked}
+                          disabled={isTaken}
+                          onChange={() => toggleCreateRoleId(role.id)}
+                        />
+                        <span className="flex-1 text-base font-semibold">{formatRoleName(role.roleName)}</span>
+                        {isTaken ? (
+                          <span className="text-sm text-[#717971]">
+                            {takenInfo?.holderName ? `Đã có: ${takenInfo.holderName}` : 'Đã có người giữ'}
+                          </span>
+                        ) : null}
+                      </label>
+                    )
+                  })}
                 </div>
                 {createFieldErrors.roleIds ? (
                   <p className="mt-2 text-sm text-[#ba1a1a]">{createFieldErrors.roleIds}</p>
