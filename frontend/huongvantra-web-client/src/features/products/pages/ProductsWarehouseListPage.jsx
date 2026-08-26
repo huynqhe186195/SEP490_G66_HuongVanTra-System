@@ -40,6 +40,7 @@ import {
 import { getProductTypeLabel, PRODUCT_TYPE, PRODUCT_TYPE_OPTIONS } from '../utils/productTypes.js'
 import { flattenCategoryTreeForSelect } from '../utils/categoryTreeUtils.js'
 import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
+import { exportWarehouseProductsListExcel } from '../utils/exportProductsListExcel.js'
 
 // ─── Sidebar filter ──────────────────────────────────────────────────────────
 
@@ -276,6 +277,7 @@ export default function ProductsWarehouseListPage() {
   const [storeStockBySkuId, setStoreStockBySkuId] = useState(() => new Map())
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
   const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
   const [skuModalProduct, setSkuModalProduct] = useState(null)
@@ -448,6 +450,28 @@ export default function ProductsWarehouseListPage() {
     }
   }
 
+  async function handleExportExcel() {
+    if (isExporting || isLoading) return
+    if (!filteredSkuRows.length) {
+      showError('Không có dữ liệu để xuất theo bộ lọc hiện tại.')
+      return
+    }
+    try {
+      setIsExporting(true)
+      await exportWarehouseProductsListExcel({
+        rows: filteredSkuRows,
+        warehouseStockBySkuId: stockBySkuId,
+        storeStockBySkuId,
+        filename: 'San_Pham_Kho',
+      })
+      showSuccess(`Đã xuất ${Math.min(filteredSkuRows.length, 10000)} dòng Excel.`)
+    } catch (error) {
+      showError(error.message || 'Xuất Excel thất bại.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   async function handleHide(product) {
     if (!canHide || product.isDeleted) return
     const reason = await promptDialog({
@@ -558,6 +582,19 @@ export default function ProductsWarehouseListPage() {
                 >
                   <span className="material-symbols-outlined text-[18px]">filter_list</span>
                   Lọc
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExporting || isLoading || filteredSkuRows.length === 0}
+                  onClick={handleExportExcel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  title="Xuất Excel theo bộ lọc hiện tại"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+                    ios_share
+                  </span>
+                  Export Excel
                 </button>
 
                 {canCreate ? (

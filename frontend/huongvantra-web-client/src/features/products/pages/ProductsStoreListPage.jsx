@@ -23,6 +23,7 @@ import InventorySimulationBanner from '../../inventory/components/InventorySimul
 import { fetchInventorySettings } from '../../inventory/services/inventoryStockApi.js'
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import { formatProductPrice, formatStockQuantity } from '../utils/productDisplay.js'
+import { exportStoreProductsListExcel } from '../utils/exportProductsListExcel.js'
 
 // v2: now keyed by productId instead of skuId
 const FAVORITES_KEY = 'hvt_product_favorites_store_v2'
@@ -71,6 +72,7 @@ export default function ProductsStoreListPage() {
   const canEditThreshold = canEditShelfThreshold(session)
 
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [expandedProductId, setExpandedProductId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -256,6 +258,29 @@ export default function ProductsStoreListPage() {
       showError(error.message)
     } finally {
       setIsSyncing(false)
+    }
+  }
+
+  async function handleExportExcel() {
+    if (isExporting || isLoading) return
+    if (!filteredSkus.length) {
+      showError('Không có dữ liệu để xuất theo bộ lọc hiện tại.')
+      return
+    }
+    try {
+      setIsExporting(true)
+      await exportStoreProductsListExcel({
+        skus: filteredSkus,
+        stockBySkuId,
+        reservedBySkuId,
+        shelfThresholdBySkuId,
+        filename: 'Hang_Hoa_Cua_Hang',
+      })
+      showSuccess(`Đã xuất ${Math.min(filteredSkus.length, 10000)} dòng Excel.`)
+    } catch (error) {
+      showError(error.message || 'Xuất Excel thất bại.')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -476,6 +501,19 @@ export default function ProductsStoreListPage() {
                 >
                   <span className="material-symbols-outlined text-[18px]">filter_list</span>
                   Lọc
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExporting || isLoading || filteredSkus.length === 0}
+                  onClick={handleExportExcel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  title="Xuất Excel theo bộ lọc hiện tại"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+                    ios_share
+                  </span>
+                  Export Excel
                 </button>
 
                 {canSync ? (
