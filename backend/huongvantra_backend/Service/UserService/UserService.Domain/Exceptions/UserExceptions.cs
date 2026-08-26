@@ -13,7 +13,7 @@ public class UserAlreadyLockedByIdException(Guid id)
     : Exception($"Người dùng với ID '{id}' đã bị khoá");
 
 public class InvalidCredentialsException()
-    : Exception("Username or password is incorrect.");
+    : Exception("Tên đăng nhập hoặc mật khẩu không chính xác.");
 
 public class UserDeactivatedException()
     : Exception("Tài khoản đã được cho ngừng hoạt động.");

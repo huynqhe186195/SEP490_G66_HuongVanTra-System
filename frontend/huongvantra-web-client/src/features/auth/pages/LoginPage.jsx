@@ -190,7 +190,7 @@ function LoginPage() {
         <div className="mt-6 flex items-center justify-center gap-4 text-sm text-[#414942]/70">
           <span>© 2026 Hương Vân Trà</span>
           <span className="h-1 w-1 rounded-full bg-[#717971]/50" />
-          <span>v2.4.0</span>
+          <span>v1.0</span>
         </div>
       </div>
     </div>
